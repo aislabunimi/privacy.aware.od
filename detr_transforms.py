@@ -83,6 +83,10 @@ def hflip(image, target):
     flipped_image = F.hflip(image)
 
     w, h = image.size
+    
+    #Aggiunto io per renderlo compatibile con l'assenza di target del dataset disturbed
+    if target is None:
+        return flipped_image, None
 
     target = target.copy()
     if "boxes" in target:
