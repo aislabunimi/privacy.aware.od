@@ -187,6 +187,12 @@ def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss,
 		orig_imgs, _ = orig_imgs.decompose()
 		orig_imgs = orig_imgs.to(device)
 		
+		import random
+		scales = [200, 150, 100, 80, 120, 140]
+		random_size = random.choice(scales)
+		trans = transforms.Resize((random_size, random_size), antialias=False)
+		disturbed_imgs = trans(disturbed_imgs)
+		
 		"""For testing
 		import matplotlib.pyplot as plt
 		import matplotlib.image as mpimg
@@ -205,6 +211,14 @@ def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss,
 		reconstructed = model(disturbed_imgs)
 		trans = transforms.Resize((reconstructed[0].shape[1], reconstructed[0].shape[2]), antialias=False)
 		orig_imgs = trans(orig_imgs)
+		
+		"""
+		plt.imshow(orig_imgs[1].cpu().permute(1, 2, 0))
+		plt.title('orig_imgs')
+		plt.axis('off')
+		plt.show()
+		"""
+		
 		true_loss = loss_fn(reconstructed, orig_imgs)
 		
 		model_optimizer.zero_grad(set_to_none=True) #pulisco i gradienti prima del backpropagation step
@@ -231,24 +245,31 @@ def val_model_on_disturbed_images(val_dataloader, epoch, device, val_loss, model
 			orig_imgs, _ = orig_imgs.decompose()
 			orig_imgs = orig_imgs.to(device)
 			
-			""" For testing
+			# For testing
+			"""
 			import matplotlib.pyplot as plt
 			import matplotlib.image as mpimg
 			plt.imshow(disturbed_imgs[1].cpu().permute(1, 2, 0))
-			plt.title(disturbed_imgs)
+			plt.title('disturbed_imgs')
 			plt.axis('off')
 			plt.show()
 			
 			plt.imshow(orig_imgs[1].cpu().permute(1, 2, 0))
-			plt.title(disturbed_imgs)
+			plt.title('orig_imgs')
 			plt.axis('off')
 			plt.show()
 			"""
 			
 			reconstructed = model(disturbed_imgs)
-			print(reconstructed[0].shape[1], reconstructed[0].shape[2])
+			#print(reconstructed[0].shape[1], reconstructed[0].shape[2])
 			trans = transforms.Resize((reconstructed[0].shape[1], reconstructed[0].shape[2]), antialias=False)
 			orig_imgs = trans(orig_imgs)
+			"""
+			plt.imshow(orig_imgs[1].cpu().permute(1, 2, 0))
+			plt.title('orig_imgs')
+			plt.axis('off')
+			plt.show()
+			"""
 			true_loss = loss_fn(reconstructed, orig_imgs)
 			running_loss += true_loss.item()		
 	running_loss /= batch_size #calcolo la loss media
