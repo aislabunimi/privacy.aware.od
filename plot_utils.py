@@ -159,3 +159,4 @@ def compare_two_results_unet(unet, tasknet, device, img_file_path, name_path_sav
 	plot_results(out_to_plot, nms_pred_recon['scores'], nms_pred_recon['boxes'])
 	
 	plt.savefig(name_path_save, format='png', bbox_inches='tight')
+	plt.clf()

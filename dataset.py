@@ -140,14 +140,15 @@ def make_coco_transforms(image_set):
         
     if image_set == 'disturbed_train':
         return Compose([
-            RandomHorizontalFlip(),
-            RandomResize(scales, max_size=None),
+            #RandomHorizontalFlip(), #L'alternativa è spostare la randomresize nella func nested_tensor DOPO
+            #il padding cosi sarei sicuro che tutte le img del batch abbiano la stessa proporzione di 
+            #padding rispetto all'immagine originale. Oppure fare il randomresize in training nel train loop
+            #RandomResize(scales, max_size=None),
             ToTensor(),
         ])
 
     if image_set == 'disturbed_val':
         return Compose([
-            RandomResize(scales, max_size=None),
             ToTensor(),
         ])
 
