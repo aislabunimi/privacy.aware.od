@@ -87,7 +87,6 @@ unet_scheduler = torch.optim.lr_scheduler.StepLR(unet_optimizer,
 train_loss = [] # Lista che conserva la training loss. Mi serve se voglio vedere l'andamento della loss
 val_loss = [] #Lista che conversa la test loss
 log = {'TRAIN_LOSS': [], 'VAL_LOSS': []}
-save_disturbed_dataset_last_epoch=False
 
 if save_disturbed_dataset:
 	train_dataloader_gen_disturbed, val_dataloader_gen_disturbed = load_dataset_for_generating_disturbed_set(train_img_folder, train_ann_file, val_img_folder, val_ann_file)
@@ -131,7 +130,7 @@ elif (not train_backward_on_disturbed_sets):
     		unet_scheduler.step()
     		log['VAL_LOSS'].append(val_model(val_dataloader, epoch, device, val_loss, unet, unet_save_path, tasknet, unet_optimizer, unet_scheduler, ap_log_path))
     		if((num_epochs-epoch)==0 and save_disturbed_dataset): #serve se sono arrivato all'ultima epoca e voglio salvare il dataset disturbato
-    			generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, epoch, device, unet)
+    			generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, epoch, device, unet, disturbed_train_img_folder, disturbed_train_ann, disturbed_val_img_folder, disturbed_val_ann)
     		print(f'EPOCH {epoch} SUMMARY: ' + ', '.join([f'{k}: {v[epoch-1]}' for k, v in log.items()]))
     		with open(loss_log_path, 'a') as file:
     			loss_log_append = f"{epoch} {log['TRAIN_LOSS'][epoch-1]} {log['VAL_LOSS'][epoch-1]}\n"

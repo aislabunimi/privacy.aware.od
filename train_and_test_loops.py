@@ -39,7 +39,7 @@ def train_model(train_dataloader, epoch, device, train_loss, model, tasknet, mod
 	return running_loss
 
 import torchvision.transforms as transforms
-def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, epoch, device, model): #funzione che si occupa di generare il dataset disturbato
+def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, epoch, device, model, train_img_folder, train_ann, val_img_folder, val_ann): #funzione che si occupa di generare il dataset disturbato
 	model.eval()
 	#Prima genero il disturbed training
 	batch_size = len(train_dataloader_gen_disturbed) #recupero la batch size
@@ -57,13 +57,12 @@ def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_ge
 				#orig_size = image['orig_size'].tolist()
 				#trans = transforms.Resize(orig_size, antialias=False)
 				#recons = trans(recons)
-				save_image(recons, f'disturbed_dataset/train/{path}')
+				save_image(recons, os.path.join(train_img_folder, path))
 				disturbed_list.append({
 					"coco_image_path": path,
 					"coco_image_id": coco_image_id
 				})
-	disturbed_dataset_anno = "disturbed_dataset/train.json"
-	with open(disturbed_dataset_anno, 'w') as json_file:
+	with open(train_ann, 'w') as json_file:
 		json.dump(disturbed_list, json_file, indent=2)
 	#Ora genero il disturbed val
 	batch_size = len(val_dataloader_gen_disturbed) #recupero la batch size
@@ -80,13 +79,12 @@ def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_ge
 				#orig_size = image['orig_size'].tolist()
 				#trans = transforms.Resize(orig_size, antialias=False)
 				#recons = trans(recons)
-				save_image(recons, f'disturbed_dataset/val/{path}')
+				save_image(recons, os.path.join(val_img_folder, path))
 				disturbed_list.append({
 					"coco_image_path": path,
 					"coco_image_id": coco_image_id
 				})
-	disturbed_dataset_anno = "disturbed_dataset/val.json"
-	with open(disturbed_dataset_anno, 'w') as json_file:
+	with open(val_ann, 'w') as json_file:
 		json.dump(disturbed_list, json_file, indent=2)
 	model.train()
 
