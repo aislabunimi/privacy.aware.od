@@ -185,13 +185,13 @@ def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss,
 		orig_imgs, _ = orig_imgs.decompose()
 		orig_imgs = orig_imgs.to(device)
 		
-		import random
-		scales = [200, 150, 100, 80, 120, 140]
-		random_size = random.choice(scales)
-		trans = transforms.Resize((random_size, random_size), antialias=False)
-		disturbed_imgs = trans(disturbed_imgs)
+		#import random
+		#scales = [200, 150, 100, 80, 120, 140]
+		#random_size = random.choice(scales)
+		#trans = transforms.Resize((random_size, random_size), antialias=False)
+		#disturbed_imgs = trans(disturbed_imgs)
 		
-		"""For testing
+		"""#For testing
 		import matplotlib.pyplot as plt
 		import matplotlib.image as mpimg
 		plt.imshow(disturbed_imgs[0].cpu().permute(1, 2, 0))
@@ -200,7 +200,7 @@ def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss,
 		plt.show()
 		
 		plt.imshow(orig_imgs[0].cpu().permute(1, 2, 0))
-		plt.title(disturbed_imgs)
+		plt.title(orig_imgs)
 		plt.axis('off')
 		plt.show()
 		"""
@@ -247,6 +247,16 @@ def val_model_on_disturbed_images(val_dataloader, epoch, device, val_loss, model
 			"""
 			import matplotlib.pyplot as plt
 			import matplotlib.image as mpimg
+			plt.imshow(disturbed_imgs[0].cpu().permute(1, 2, 0))
+			plt.title('disturbed_imgs')
+			plt.axis('off')
+			plt.show()
+			
+			plt.imshow(orig_imgs[0].cpu().permute(1, 2, 0))
+			plt.title('orig_imgs')
+			plt.axis('off')
+			plt.show()
+			
 			plt.imshow(disturbed_imgs[1].cpu().permute(1, 2, 0))
 			plt.title('disturbed_imgs')
 			plt.axis('off')

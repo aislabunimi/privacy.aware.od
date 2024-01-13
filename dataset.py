@@ -239,12 +239,31 @@ class DisturbedDataset(torch.utils.data.Dataset):
     	orig_image= Image.open(orig_img_path).convert("RGB")
 
     	if self.transform:
+        	
+        	#Faccio il horizontal split qui così sia disturbed che il target originale sono specchiate
+        	p_flip = random.random()
+        	if(p_flip>0.5):
+        		flip_trans = RandomHorizontalFlip(p=1) #inizializzo oggetto flip in modo da farlo sempre
+        		disturbed_image, _ = flip_trans(disturbed_image, target=None)
+        		orig_image, _ = flip_trans(orig_image, target=None)
+        	#se non supero quella soglia, non eseguo il flip
+        		
+        	#Faccio il resize qui così viene scelto lo stesso valore per entrambi e il resize è fatto allo stesso modo
+        	scales = [200, 300, 400, 500, 600]
+        	random_size = random.choice(scales)
+        	random_size = [random_size]
+        	resize = RandomResize(random_size, max_size=None)
+        	disturbed_image, _ = resize(disturbed_image, target=None)
+        	orig_image, _ = resize(orig_image, target=None)
+        	
+        	#Per ultime le transform "normali", cioè a tensore e poi normalize per il target (le orig image)
         	disturbed_image, _ = self.transform(disturbed_image, target=None)
         	normalize = Compose([
         		ToTensor(),
         		Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         	])
         	orig_image, _ = normalize(orig_image, target=None )
+        	
     	return disturbed_image, orig_image
 
     def __len__(self):
