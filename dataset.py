@@ -227,11 +227,12 @@ import json
 import os
 from PIL import Image
 class DisturbedDataset(torch.utils.data.Dataset):
-    def __init__(self, json_file, disturbed_path, orig_path, transform=None):
+    def __init__(self, json_file, disturbed_path, orig_path, transform=None, is_training=False):
         self.data = json.load(open(json_file))
         self.transform = transform
         self.disturbed_path = disturbed_path
         self.orig_path = orig_path
+        self.is_training=is_training
 
     def __getitem__(self, index):
     	x = self.data[index]['coco_image_path']
@@ -242,24 +243,26 @@ class DisturbedDataset(torch.utils.data.Dataset):
 
     	if self.transform:
         	
-        	#Faccio il horizontal split qui così sia disturbed che il target originale sono specchiate
-        	p_flip = random.random()
-        	if(p_flip>0.5):
-        		flip_trans = RandomHorizontalFlip(p=1) #inizializzo oggetto flip in modo da farlo sempre
-        		disturbed_image, _ = flip_trans(disturbed_image, target=None)
-        		orig_image, _ = flip_trans(orig_image, target=None)
-        	#se non supero quella soglia, non eseguo il flip
+        	#Faccio il horizontal split qui così sia disturbed che il target originale sono specchiati
+        	if self.is_training:
         		
-        	#Faccio il resize qui così viene scelto lo stesso valore per entrambi e il resize è fatto allo stesso modo
-        	#rimuovo il 200 da scales perché potrebbe dare problemi con msssim
-        	scales = [300, 400, 500, 600]
-        	random_size = random.choice(scales)
-        	random_size = [random_size]
-        	resize = RandomResize(random_size, max_size=None)
-        	disturbed_image, _ = resize(disturbed_image, target=None)
-        	orig_image, _ = resize(orig_image, target=None)
+        		p_flip = random.random()
+        		if(p_flip>0.5):
+        			flip_trans = RandomHorizontalFlip(p=1) #inizializzo oggetto flip in modo da farlo sempre
+        			disturbed_image, _ = flip_trans(disturbed_image, target=None)
+        			orig_image, _ = flip_trans(orig_image, target=None)
+        		#se non supero quella soglia, non eseguo il flip
+        		
+        		#Faccio il resize qui così viene scelto lo stesso valore per entrambi e il resize è fatto allo stesso modo
+        		#rimuovo il 200 da scales perché potrebbe dare problemi con msssim
+        		scales = [300, 400, 500, 600]
+        		random_size = random.choice(scales)
+        		random_size = [random_size]
+        		resize = RandomResize(random_size, max_size=None)
+        		disturbed_image, _ = resize(disturbed_image, target=None)
+        		orig_image, _ = resize(orig_image, target=None)
         	
-        	#Per ultime le transform "normali", cioè a tensore e poi normalize per il target (le orig image)
+        		#Per ultime le transform "normali", cioè a tensore e poi normalize per il target (le orig image)
         	disturbed_image, _ = self.transform(disturbed_image, target=None)
         	#normalize = Compose([
         	#	ToTensor(),
