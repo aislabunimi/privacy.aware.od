@@ -144,12 +144,14 @@ def make_coco_transforms(image_set):
             #il padding cosi sarei sicuro che tutte le img del batch abbiano la stessa proporzione di 
             #padding rispetto all'immagine originale. Oppure fare il randomresize in training nel train loop
             #RandomResize(scales, max_size=None),
-            ToTensor(),
+            #ToTensor(),
+            normalize,
         ])
 
     if image_set == 'disturbed_val':
         return Compose([
-            ToTensor(),
+            normalize,
+            #ToTensor(),
         ])
 
     raise ValueError(f'unknown {image_set}')
@@ -249,7 +251,8 @@ class DisturbedDataset(torch.utils.data.Dataset):
         	#se non supero quella soglia, non eseguo il flip
         		
         	#Faccio il resize qui così viene scelto lo stesso valore per entrambi e il resize è fatto allo stesso modo
-        	scales = [200, 300, 400, 500, 600]
+        	#rimuovo il 200 da scales perché potrebbe dare problemi con msssim
+        	scales = [300, 400, 500, 600]
         	random_size = random.choice(scales)
         	random_size = [random_size]
         	resize = RandomResize(random_size, max_size=None)
@@ -258,11 +261,12 @@ class DisturbedDataset(torch.utils.data.Dataset):
         	
         	#Per ultime le transform "normali", cioè a tensore e poi normalize per il target (le orig image)
         	disturbed_image, _ = self.transform(disturbed_image, target=None)
-        	normalize = Compose([
-        		ToTensor(),
-        		Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        	])
-        	orig_image, _ = normalize(orig_image, target=None )
+        	#normalize = Compose([
+        	#	ToTensor(),
+        	#	Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        	#])
+        	#orig_image, _ = normalize(orig_image, target=None)
+        	orig_image, _ = self.transform(orig_image, target=None )
         	
     	return disturbed_image, orig_image
 

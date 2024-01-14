@@ -155,8 +155,18 @@ print("Done!")
 #compare_two_results_unet(unet, tasknet, device, 'plot/val.jpg', 'plot/reconstructed_person.png', unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler)
 
 #image_name_list=['val', 'cat', 'lenna', 'people']
-
-#for img in image_name_list:
-#	image_path=f'plot/{img}.jpg'
-#	image_save_name=f'plot/test_{img}_faster_plain.png'
-#	compare_two_results_unet(unet, tasknet, device, image_path, image_save_name, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler)
+#image_name_list=['disturbed_val', 'disturbed_cat', 'disturbed_lenna', 'disturbed_people']
+"""
+for img in image_name_list:
+	#image_path=f'plot/{img}.jpg'
+	image_path=f'plot/{img}.png'
+	image_save_name=f'plot/test_{img}_disturbed_recons.png'
+	compare_two_results_unet(unet, tasknet, device, image_path, image_save_name, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler)
+"""
+"""
+load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler)
+for img in image_name_list:
+	image_path=f'plot/{img}.jpg'
+	image_save_name=f'plot/disturbed_{img}.png'
+	save_disturbed_pred(unet, device, image_path, image_save_name)
+"""

@@ -45,6 +45,9 @@ def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_ge
 	batch_size = len(train_dataloader_gen_disturbed) #recupero la batch size
 	coco = get_coco_api_from_dataset(train_dataloader_gen_disturbed.dataset)
 	disturbed_list = []
+	mean = torch.tensor([0.485, 0.456, 0.406])
+	std = torch.tensor([0.229, 0.224, 0.225])
+	unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
 	with torch.no_grad():
 		for imgs, targets in tqdm(train_dataloader_gen_disturbed, desc=f'Epoch {epoch} - Generating disturbed train images from dataset'):
 			imgs, _ = imgs.decompose()
@@ -57,6 +60,7 @@ def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_ge
 				#orig_size = image['orig_size'].tolist()
 				#trans = transforms.Resize(orig_size, antialias=False)
 				#recons = trans(recons)
+				recons = unnormalize(recons)
 				save_image(recons, os.path.join(train_img_folder, path))
 				disturbed_list.append({
 					"coco_image_path": path,
@@ -79,6 +83,7 @@ def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_ge
 				#orig_size = image['orig_size'].tolist()
 				#trans = transforms.Resize(orig_size, antialias=False)
 				#recons = trans(recons)
+				recons = unnormalize(recons)
 				save_image(recons, os.path.join(val_img_folder, path))
 				disturbed_list.append({
 					"coco_image_path": path,
@@ -173,12 +178,16 @@ def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, t
 	return running_loss
 
 
-
+from pytorch_msssim import ms_ssim, MS_SSIM
 def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss, model, model_optimizer): #funzione che si occupa del training
 	model.train()
-	loss_fn = torch.nn.MSELoss() # Mean squared loss which computes difference between two images.
+	#loss_fn = torch.nn.MSELoss() # Mean squared loss which computes difference between two images.
 	batch_size = len(train_dataloader) #recupero la batch size
 	running_loss = 0 # Iniziallizzo la variabile per la loss
+	mean = torch.tensor([0.485, 0.456, 0.406])
+	std = torch.tensor([0.229, 0.224, 0.225])
+	unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
+	ms_ssim_module = MS_SSIM(data_range=1, size_average=True, channel=3)
 	for disturbed_imgs, orig_imgs in tqdm(train_dataloader, desc=f'Epoch {epoch} - Train model'):
 		disturbed_imgs, _ = disturbed_imgs.decompose()
 		disturbed_imgs = disturbed_imgs.to(device)
@@ -217,7 +226,10 @@ def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss,
 		plt.show()
 		"""
 		
-		true_loss = loss_fn(reconstructed, orig_imgs)
+		reconstructed=unnormalize(reconstructed)
+		orig_imgs=unnormalize(orig_imgs)	
+		true_loss = 1 - ms_ssim_module(reconstructed, orig_imgs)
+		#true_loss = loss_fn(reconstructed, orig_imgs)
 		
 		model_optimizer.zero_grad(set_to_none=True) #pulisco i gradienti prima del backpropagation step
 		
@@ -231,11 +243,13 @@ def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss,
 
 def val_model_on_disturbed_images(val_dataloader, epoch, device, val_loss, model, model_save_path, model_optimizer, model_scheduler): #funzione che si occupa del test
 	model.eval()
-	loss_fn = torch.nn.MSELoss() # Mean squared loss which computes difference between two images.
+	#loss_fn = torch.nn.MSELoss() # Mean squared loss which computes difference between two images.
 	batch_size = len(val_dataloader) #recupero la batch size
 	running_loss = 0 # Initializing variable for storing  loss 
-	res={}
-	filtered_results = {}
+	mean = torch.tensor([0.485, 0.456, 0.406])
+	std = torch.tensor([0.229, 0.224, 0.225])
+	unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
+	ms_ssim_module = MS_SSIM(data_range=1, size_average=True, channel=3)
 	with torch.no_grad(): #non calcolo il gradiente, sto testando e bassa
 		for disturbed_imgs, orig_imgs in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):
 			disturbed_imgs, _ = disturbed_imgs.decompose()
@@ -278,7 +292,10 @@ def val_model_on_disturbed_images(val_dataloader, epoch, device, val_loss, model
 			plt.axis('off')
 			plt.show()
 			"""
-			true_loss = loss_fn(reconstructed, orig_imgs)
+			reconstructed=unnormalize(reconstructed)
+			orig_imgs=unnormalize(orig_imgs)	
+			true_loss = 1 - ms_ssim_module(reconstructed, orig_imgs)
+			#true_loss = loss_fn(reconstructed, orig_imgs)
 			running_loss += true_loss.item()		
 	running_loss /= batch_size #calcolo la loss media
 	val_loss.append(running_loss)

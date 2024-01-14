@@ -160,3 +160,17 @@ def compare_two_results_unet(unet, tasknet, device, img_file_path, name_path_sav
 	
 	plt.savefig(name_path_save, format='png', bbox_inches='tight')
 	plt.clf()
+	
+from torchvision.utils import save_image
+def save_disturbed_pred(unet, device, img_file_path, name_path_save):
+	image = Image.open(img_file_path).convert("RGB")
+	eval_transform = transforms.Compose([ transforms.PILToTensor(), transforms.ConvertImageDtype(torch.float)])
+	img = eval_transform(image)
+	img = img.to(device)
+	img = img.unsqueeze(0)
+	recons = unet(img)
+	mean = torch.tensor([0.485, 0.456, 0.406])
+	std = torch.tensor([0.229, 0.224, 0.225])
+	unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
+	recons = unnormalize(recons)
+	save_image(recons, name_path_save)
