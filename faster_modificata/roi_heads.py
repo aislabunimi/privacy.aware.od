@@ -692,6 +692,7 @@ class RoIHeads(nn.Module):
         regression_targets = self.box_coder.encode(matched_gt_boxes, proposals)
         return proposals, matched_idxs, labels, regression_targets
 
+    #Funzione qui sotto usata solo in testing
     def postprocess_detections(
         self,
         class_logits,  # type: Tensor

@@ -30,8 +30,8 @@ plt.plot(epochs, recall, linestyle='-', color='r', label='Recall', marker='x')
 #plt.axhline(y=0.547, color='r', linestyle='-.', label='Tasknet Recall')
 #plt.title('(IoU=0.50:0.95, area=all, maxDets=100) AP and Recall Over Epochs')
 #Area Large
-plt.axhline(y=1, color='b', linestyle='-.', label='Unet AP')
-plt.axhline(y=0.533, color='r', linestyle='-.', label='Unet Recall')
+plt.axhline(y=0.757, color='b', linestyle='-.', label='Unet AP')
+plt.axhline(y=0.585, color='r', linestyle='-.', label='Unet Recall')
 plt.title('(IoU=0.50, area=all, maxDets=100) AP and Recall Over Epochs')
 
 ax = plt.gca()

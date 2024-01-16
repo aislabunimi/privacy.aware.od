@@ -90,6 +90,7 @@ class FasterRCNN(GeneralizedRCNN):
         box_batch_size_per_image=512, #int, numero di proposals che sono campionate (sampled) durante il training della classification head.
         box_positive_fraction=0.25, #float, rapporto di proposals positive in un mini-batch durante training of the RPN
         bbox_reg_weights=None, #(Tuple[float, float, float, float]), pesi per l'encoding/decoding delle bbox
+        use_custom_filter_proposals=False, #per usare il filter proposal custom
         **kwargs,
     ):
 
@@ -140,6 +141,7 @@ class FasterRCNN(GeneralizedRCNN):
             rpn_post_nms_top_n,
             rpn_nms_thresh,
             score_thresh=rpn_score_thresh,
+            use_custom_filter_proposals=use_custom_filter_proposals,
         )
 
         #SETTING vari per l'head della faster

@@ -4,6 +4,11 @@ import random
 import os
 import numpy as np
 
+#import per la funzione compute_ap
+from coco_eval import *
+from coco_eval import _get_iou_types
+import sys
+
 def seed_everything(seed):
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
@@ -12,6 +17,60 @@ def seed_everything(seed):
     torch.cuda.manual_seed(seed)
     torch.backends.cudnn.deterministic = True  
    # torch.backends.cudnn.benchmark = True
+
+def compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, ap_log_path, my_ap_log_path, res):
+	coco = get_coco_api_from_dataset(val_dataloader.dataset)
+	iou_types = _get_iou_types(tasknet)
+	coco_evaluator = CocoEvaluator(coco, iou_types)
+	my_ap_evaluator = CocoEvaluator(coco, iou_types)
+	new_interpolation = np.linspace(.0, (1-ap_score_threshold), int(np.round(((1-ap_score_threshold) - .0) / .01)) + 1, endpoint=True)
+	my_ap_evaluator.coco_eval['bbox'].params.recThrs = new_interpolation #necessaria visto che devo prendere i punti solo fino allo ap_score_threshold
+	coco_evaluator.update(res)
+	coco_evaluator.synchronize_between_processes()
+	coco_evaluator.coco_eval['bbox'].evaluate()
+	coco_evaluator.accumulate()
+	
+	orig_stdout = sys.stdout
+	f = open(ap_log_path, 'a')
+	sys.stdout = f
+	print(f'AP for Epoch {epoch}')
+	coco_evaluator.summarize()
+	
+	sys.stdout = orig_stdout
+	f.close()
+	
+	#per filtrare solo le pred con score pari a ap_score_threshold o superiore
+	for image_id, pred in res.items():
+		filtered_boxes = []
+		filtered_scores = []
+		filtered_labels = []
+		for box, score, label in zip(pred['boxes'], pred['scores'], pred['labels']):
+			if score >= ap_score_threshold:
+				filtered_boxes.append(box)
+				filtered_scores.append(score)
+				filtered_labels.append(label)
+		# Se ci sono box filtrate aggiorna res dell'immagine con quelle, se no tensore vuoto
+		if filtered_boxes:
+			res[image_id] = {'boxes': torch.stack(filtered_boxes),
+                                         'labels': torch.tensor(filtered_labels),
+                                         'scores': torch.tensor(filtered_scores)}
+		else:
+                	res[image_id] = {'boxes': torch.empty((0,4)).to(device),
+                			 'labels': torch.empty((0,)).to(device),
+                			 'scores': torch.empty((0,)).to(device)}
+	my_ap_evaluator.update(res)
+	my_ap_evaluator.synchronize_between_processes()
+	my_ap_evaluator.coco_eval['bbox'].evaluate()
+	my_ap_evaluator.accumulate()
+	
+	orig_stdout = sys.stdout
+	f = open(my_ap_log_path, 'a')
+	sys.stdout = f
+	print(f'AP for Epoch {epoch} for only predictions with score above {ap_score_threshold}')
+	my_ap_evaluator.summarize()
+	
+	sys.stdout = orig_stdout
+	f.close()
 
 def create_checkpoint(model, optimizer, current_epoch, current_loss, scheduler, model_save_path):
 	torch.save({

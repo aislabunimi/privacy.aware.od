@@ -1,17 +1,14 @@
 import torch
 from tqdm import tqdm
-import sys
 
-from model_utils_and_functions import create_checkpoint
-
-#from plot_utils import *
-
-from coco_eval import *
-from coco_eval import _get_iou_types
+from model_utils_and_functions import create_checkpoint, compute_ap
 
 #import per salvare dataset versione disturbata
 from torchvision.utils import save_image
 import json
+import torchvision.transforms as transforms
+from coco_eval import get_coco_api_from_dataset
+import os
 
 def train_model(train_dataloader, epoch, device, train_loss, model, tasknet, model_optimizer): #funzione che si occupa del training
 	model.train()
@@ -38,7 +35,37 @@ def train_model(train_dataloader, epoch, device, train_loss, model, tasknet, mod
 	train_loss.append(running_loss)
 	return running_loss
 
-import torchvision.transforms as transforms
+def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_log_path, ap_score_threshold, my_ap_log_path): #funzione che si occupa del test
+	model.eval()
+	batch_size = len(val_dataloader) #recupero la batch size
+	running_loss = 0 # Initializing variable for storing  loss 
+	res={}
+	with torch.no_grad(): #non calcolo il gradiente, sto testando e bassa
+		for imgs, targets in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):
+			imgs, _ = imgs.decompose()
+			imgs = imgs.to(device)
+			new_targets = [{k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in t.items()} for t in targets]
+			reconstructed = model(imgs)
+			tasknet.train()
+			reconstructed_loss_dict = tasknet(reconstructed, new_targets)
+			reconstructed_losses = sum(loss for loss in reconstructed_loss_dict.values())
+					
+			tasknet.eval()
+			outputs = tasknet(reconstructed)
+			outputs = [{k: v.to(device) for k, v in t.items()} for t in outputs]
+			res.update({target["image_id"].item(): output for target, output in zip(targets, outputs)})
+			
+			true_loss=reconstructed_losses
+			running_loss += true_loss.item()		
+	
+	running_loss /= batch_size #calcolo la loss media
+	
+	compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, ap_log_path, my_ap_log_path, res)	
+	val_loss.append(running_loss)
+	model_save_path = f'{model_save_path}_{epoch}.pt'   
+	#create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
+	return running_loss
+
 def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, epoch, device, model, train_img_folder, train_ann, val_img_folder, val_ann): #funzione che si occupa di generare il dataset disturbato
 	model.eval()
 	#Prima genero il disturbed training
@@ -92,91 +119,6 @@ def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_ge
 	with open(val_ann, 'w') as json_file:
 		json.dump(disturbed_list, json_file, indent=2)
 	model.train()
-
-def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_log_path): #funzione che si occupa del test
-	model.eval()
-	coco = get_coco_api_from_dataset(val_dataloader.dataset)
-	iou_types = _get_iou_types(tasknet)
-	coco_evaluator = CocoEvaluator(coco, iou_types)
-	#print(coco_evaluator.coco_eval['bbox'].params.recThrs)
-	#new_interpolation = np.linspace(.75, 1.00, int(np.round((1.00 - .75) / .01)) + 1, endpoint=True)
-	#coco_evaluator.coco_eval['bbox'].params.recThrs = new_interpolation #necessaria visto che tengo solo gli score da 0.75 compreso in poi
-	#print(coco_evaluator.coco_eval['bbox'].params.recThrs)
-	batch_size = len(val_dataloader) #recupero la batch size
-	running_loss = 0 # Initializing variable for storing  loss 
-	res={}
-	filtered_results = {}
-	#disturbed_list = []
-	with torch.no_grad(): #non calcolo il gradiente, sto testando e bassa
-		for imgs, targets in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):
-			imgs, _ = imgs.decompose()
-			imgs = imgs.to(device)
-			new_targets = [{k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in t.items()} for t in targets]
-			reconstructed = model(imgs)
-			tasknet.train()
-			reconstructed_loss_dict = tasknet(reconstructed, new_targets)
-			reconstructed_losses = sum(loss for loss in reconstructed_loss_dict.values())
-					
-			tasknet.eval()
-			outputs = tasknet(reconstructed)
-			outputs = [{k: v.to(device) for k, v in t.items()} for t in outputs]
-			res.update({target["image_id"].item(): output for target, output in zip(targets, outputs)})
-			#res = {target["image_id"].item(): output for target, output in zip(targets, outputs)}
-
-			#coco_evaluator.update(res)
-			
-			#This is done for evaluating the model only on the 0.75 or greater score predictions
-			#for target, output in zip(targets, outputs):
-				
-			#	filtered_boxes = output['boxes'][output['scores'] > 0.74]
-			#	filtered_labels = output['labels'][output['scores'] > 0.74]
-			#	filtered_scores = output['scores'][output['scores'] > 0.74]
-			#	if any(filtered_scores):
-			#		filtered_results.update({target["image_id"].item(): {
-			#			'boxes': filtered_boxes,
-			#			'labels': filtered_labels,
-			#			'scores': filtered_scores
-			#		}})
-					#coco_evaluator.update(filtered_results)
-					#print("Trovata predizione con score>0.74")
-				#else:
-				#	filtered_results.update({target["image_id"].item():{
-				#		'boxes': target['boxes'],
-				#		'labels': torch.ones(len(target['boxes'])),
-				#		'scores': torch.ones(len(target['boxes']))
-				#		'scores': torch.full((1,) * len(target['boxes']), 1)
-				#	}})
-					#coco_evaluator.update(filtered_results)
-				#	print("Nessuna predizione trovata")
-					#filtered_results={}
-					
-			#in our context AP is for the robot to recognize the presence of a person, not general AP
-
-			true_loss=reconstructed_losses
-			running_loss += true_loss.item()		
-	running_loss /= batch_size #calcolo la loss media
-	
-	coco_evaluator.update(res)
-	#coco_evaluator.update(filtered_results)
-	coco_evaluator.synchronize_between_processes()
-	coco_evaluator.coco_eval['bbox'].evaluate()
-	coco_evaluator.accumulate()
-	
-	orig_stdout = sys.stdout
-	f = open(ap_log_path, 'a')
-	sys.stdout = f
-	print(f'AP for Epoch {epoch}')
-	coco_evaluator.summarize()
-	
-	sys.stdout = orig_stdout
-	f.close()
-	
-	coco_evaluator.summarize()
-	val_loss.append(running_loss)
-	model_save_path = f'{model_save_path}_{epoch}.pt'   
-	create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
-	return running_loss
-
 
 from pytorch_msssim import ms_ssim, MS_SSIM
 def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss, model, model_optimizer): #funzione che si occupa del training
@@ -324,13 +266,9 @@ def train_tasknet(train_dataloader, epoch, device, train_loss, tasknet_save_path
 	train_loss.append(running_loss)
 	return running_loss
 
-def val_tasknet(val_dataloader, epoch, device, val_loss, tasknet_save_path, tasknet, tasknet_optimizer, tasknet_scheduler, ap_log_path): #funzione che si occupa del test
+def val_tasknet(val_dataloader, epoch, device, val_loss, tasknet_save_path, tasknet, tasknet_optimizer, tasknet_scheduler, ap_log_path, ap_score_threshold, my_ap_log_path): #funzione che si occupa del test
 	for param in tasknet.parameters():
 		param.requires_grad = False
-	coco = get_coco_api_from_dataset(val_dataloader.dataset)
-	iou_types = _get_iou_types(tasknet)
-	coco_evaluator = CocoEvaluator(coco, iou_types)
-	
 	res={}	
 	batch_size = len(val_dataloader) #recupero la batch size
 	running_loss = 0 # Initializing variable for storing  loss 
@@ -347,24 +285,9 @@ def val_tasknet(val_dataloader, epoch, device, val_loss, tasknet_save_path, task
 			outputs = [{k: v.to(device) for k, v in t.items()} for t in outputs]
 			
 			res.update({target["image_id"].item(): output for target, output in zip(targets, outputs)})
-			#res = {target["image_id"].item(): output for target, output in zip(targets, outputs)}
 			
 	running_loss /= batch_size #calcolo la loss media
-	coco_evaluator.update(res)
-	#coco_evaluator.update(filtered_results)
-	coco_evaluator.synchronize_between_processes()
-	coco_evaluator.coco_eval['bbox'].evaluate()
-	coco_evaluator.accumulate()
-	
-	orig_stdout = sys.stdout
-	f = open(ap_log_path, 'a')
-	sys.stdout = f
-	print(f'AP for Epoch {epoch}')
-	coco_evaluator.summarize()
-	
-	sys.stdout = orig_stdout
-	f.close()
-	
+	compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, ap_log_path, my_ap_log_path, res)	
 	val_loss.append(running_loss)
 	tasknet_save_path = f'{tasknet_save_path}_{epoch}.pt' 
 	create_checkpoint(tasknet, tasknet_optimizer, epoch, running_loss, tasknet_scheduler, tasknet_save_path)

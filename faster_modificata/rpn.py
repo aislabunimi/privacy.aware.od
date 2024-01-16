@@ -140,6 +140,7 @@ class RegionProposalNetwork(torch.nn.Module):
         post_nms_top_n: Dict[str, int],
         nms_thresh: float,
         score_thresh: float = 0.0,
+        use_custom_filter_proposals: bool=False,
     ) -> None:
         super().__init__()
         self.anchor_generator = anchor_generator
@@ -154,6 +155,13 @@ class RegionProposalNetwork(torch.nn.Module):
             bg_iou_thresh,
             allow_low_quality_matches=True,
         )
+        
+        #se voglio usare il mio filter proposals sarà a true
+        
+        self.use_custom_filter_proposals = use_custom_filter_proposals
+        if use_custom_filter_proposals:
+        	#i valori sono fg_iou_thresh e bg_iou_thresh delle roi head
+        	self.proposal_matcher_gt = det_utils.Matcher(0.5, 0.5, allow_low_quality_matches=False)
 
         self.fg_bg_sampler = det_utils.BalancedPositiveNegativeSampler(batch_size_per_image, positive_fraction) # This class samples batches, ensuring that they contain a fixed proportion of positives
         # estrae casualmente un numero di sample positivi (con oggetto) e negativi (senza) che rispettano la proporzione
@@ -164,6 +172,7 @@ class RegionProposalNetwork(torch.nn.Module):
         self.nms_thresh = nms_thresh
         self.score_thresh = score_thresh
         self.min_size = 1e-3
+        
 
     #Due funzioni solo per passare il parametro giusto
     def pre_nms_top_n(self) -> int:
@@ -365,15 +374,14 @@ class RegionProposalNetwork(torch.nn.Module):
         objectness_loss = F.binary_cross_entropy_with_logits(objectness[sampled_inds], labels[sampled_inds])
 
         return objectness_loss, box_loss
-
     
-    def filter_proposals_mio(
+    def filter_proposals_custom(
         self,
         proposals: Tensor,
         objectness: Tensor,
         image_shapes: List[Tuple[int, int]],
         num_anchors_per_level: List[int],
-        targets
+        targets: Optional[List[Dict[str, Tensor]]] = None
     ) -> Tuple[List[Tensor], List[Tensor]]:
 
         num_images = proposals.shape[0]
@@ -385,32 +393,20 @@ class RegionProposalNetwork(torch.nn.Module):
         levels = [
             torch.full((n,), idx, dtype=torch.int64, device=device) for idx, n in enumerate(num_anchors_per_level)
         ]
+        
         #qui levels è un tensor ([0, ..., 0], [1, ..., 1],  [2, ..., 2],  [3, ..., 3],  [4, ..., 4])
         levels = torch.cat(levels, 0) #concateno i levels su prima dimensione
         #ottengo tensor([[0, 0, 0,  ..., 4, 4, 4]])
         levels = levels.reshape(1, -1).expand_as(objectness)
-        
-        #LA MIA IDEA è: vedo il numero n di persone dal GT. Salvo solo le n migliori proposals.
-        if self.training and targets is not None:
-        	nms_faster_list = []
-        	for elem in targets:
-        		nms_faster_list.append(len(elem['boxes']))
-        	temp = max(nms_faster_list)
-        	if(temp==1):
-        		self._pre_nms_top_n["training"] = 2
-        	else:
-        		self._pre_nms_top_n["training"] =  temp
-        	#self._pre_nms_top_n["testing"] =  max(nms_faster_list) 
-        	#self._post_nms_top_n["testing"] = max(nms_faster_list)
-        	#print(self._pre_nms_top_n["training"])    
 
         # select top_n boxes independently per level before applying nms
         top_n_idx = self._get_top_n_idx(objectness, num_anchors_per_level)
-        #Attenzione! queste sono per anchor level. Anchor level è 0, 1, 2, 3, 4
-        #quindi se _pre_nms_top_n["training"]=2, mi ritornerà 10 indici
-        #tensor([ 46207,  45295, 219284, 218828, 235243, 236526, 241420, 241198, 242683, 242737])
-
-        #bottom_n_idx = self._get_bottom_n_idx(objectness, num_anchors_per_level)
+        #es output:
+        #Se prenms = 2 --> 
+        #tensor([[ 35069,  81989,  65828,  65825, 157592, 157589, 157292, 156992, 178550, 178400])
+        #	     0  ,    1  ,    2  ,    3  ,    4  ,    0  ,    1  ,    2  ,    3  ,    4
+        #queste sono le top bbox per ogni ancora di varia dimensione e ratio
+        #es (32,), (64,), (128,), (256,), (512,) -> [139200, 34800, 8700, 2175, 585]
 
         image_range = torch.arange(num_images, device=device)
         batch_idx = image_range[:, None]
@@ -418,130 +414,60 @@ class RegionProposalNetwork(torch.nn.Module):
 
         #Seleziono objectness, levels e proposals delle migliori bbox delle img di tutto il batch
         objectness = objectness[batch_idx, top_n_idx]
-        levels = levels[batch_idx, top_n_idx]
+        levels = levels[batch_idx, top_n_idx]     
         proposals = proposals[batch_idx, top_n_idx]
         
-        """
-        mask = levels != 4
-        filtered_tensor = levels[mask]
-        # Reshape per mantenere la shape originale
-        filtered_tensor = filtered_tensor.reshape(levels.size(0), -1)
-        levels=filtered_tensor
-        print(filtered_tensor)
-        """
-
         objectness_prob = torch.sigmoid(objectness) #calcolo le prob
 
         # i risultati delle proposals
         final_boxes = []
         final_scores = []
-        if self.training and targets is not None:
-        	for boxes, scores, lvl, img_shape, elem in zip(proposals, objectness_prob, levels, image_shapes, targets):
-            		boxes = box_ops.clip_boxes_to_image(boxes, img_shape)
+        for boxes, scores, lvl, img_shape, gt in zip(proposals, objectness_prob, levels, image_shapes, targets):
+            boxes = box_ops.clip_boxes_to_image(boxes, img_shape)
 
-            		# remove small boxes
-            		keep = box_ops.remove_small_boxes(boxes, self.min_size)
-            		boxes, scores, lvl = boxes[keep], scores[keep], lvl[keep]
+            # remove small boxes
+            keep = box_ops.remove_small_boxes(boxes, self.min_size)
+            boxes, scores, lvl = boxes[keep], scores[keep], lvl[keep]
 
-            		# remove low scoring boxes
-            		# use >= for Backwards compatibility
-            		#print(f"Boxes: {boxes} Scores: {scores} \n")
-            		keep = torch.where(scores >= self.score_thresh)[0]
-            		boxes, scores, lvl = boxes[keep], scores[keep], lvl[keep]
+            # remove low scoring boxes
+            # use >= for Backwards compatibility
+            keep = torch.where(scores >= self.score_thresh)[0]
+            boxes, scores, lvl = boxes[keep], scores[keep], lvl[keep]
 
-            		# non-maximum suppression, independently done per level
-            		keep = box_ops.batched_nms(boxes, scores, lvl, self.nms_thresh)
+            # non-maximum suppression, independently done per level
+            keep = box_ops.batched_nms(boxes, scores, lvl, self.nms_thresh)
             
-            		# IDEA: tengo solo le migliori n boxes quante sono le n persone nel GT
-            		temp = len(elem['boxes'])
-            		if(temp==1):
-            			self._post_nms_top_n["training"]=2
-            		else:
-            			self._post_nms_top_n["training"] = temp
-
-            		#keep only topk scoring predictions
-            		keep = keep[: self.post_nms_top_n()]
-            		boxes, scores = boxes[keep], scores[keep]
-            		#print(f"Boxes: {boxes} Scores: {scores} \n")
+            #QUI in keep ho gli indici delle proposals sopravvissute alle bbox, ordinate in modo decrescente, quindi i primi risultati nel tensore saranno le best prediction
+            prop = boxes[keep]
+            best_det_for_each_gt = assign_targets_to_proposals_gt(self, prop, gt['boxes'], gt['labels'])
             
-            		final_boxes.append(boxes)
-            		final_scores.append(scores)
-        else:
-        	for boxes, scores, lvl, img_shape in zip(proposals, objectness_prob, levels, image_shapes):
-            		boxes = box_ops.clip_boxes_to_image(boxes, img_shape)
+            matched_det_boxes_to_keep = [prop[i] for i in best_det_for_each_gt]
+            #keep = keep[: self.post_nms_top_n()]
+            index_list=[]
+            for det_to_keep in matched_det_boxes_to_keep:
+            	index = torch.where(torch.all(det_to_keep == boxes, dim=1))[0]
+            	index = index[0].item()
+            	index_list.append(index)
+            
+            #l'ordine delle box e score non è importante, tanto:
+            #1: lo score viene droppato da questa funzione e non usato poi dal ROI
+            #2: il ROI effettua nuovamente l'assegnamento di ogni proposal al GT
+            boxes = [boxes[i] for i in index_list]
+            scores = [scores[i] for i in index_list]
+            if(len(boxes)>0):
+            	boxes = torch.stack(boxes)
+            	scores = torch.stack(scores)
+            else:
+            	device = prop.device
+            	boxes=torch.empty((0,)).to(device)
+            	scores=torch.empty((0,)).to(device)
 
-            		# remove small boxes
-            		keep = box_ops.remove_small_boxes(boxes, self.min_size)
-            		boxes, scores, lvl = boxes[keep], scores[keep], lvl[keep]
+            #boxes, scores = boxes[keep], scores[keep]
 
-            		# remove low scoring boxes
-            		# use >= for Backwards compatibility
-            		keep = torch.where(scores >= self.score_thresh)[0]
-            		boxes, scores, lvl = boxes[keep], scores[keep], lvl[keep]
-
-            		# non-maximum suppression, independently done per level
-            		keep = box_ops.batched_nms(boxes, scores, lvl, self.nms_thresh)
-
-            		# keep only topk scoring predictions
-            		keep = keep[: self.post_nms_top_n()]
-            		boxes, scores = boxes[keep], scores[keep]
-
-            		final_boxes.append(boxes)
-            		final_scores.append(scores)
-        return final_boxes, final_scores, keep
-    
-    
-    def compute_loss_mio(
-        self, objectness: Tensor, pred_bbox_deltas: Tensor, labels: List[Tensor], regression_targets: List[Tensor], proposals, objectns, img_size, num_anchors_per_level
-    ) -> Tuple[Tensor, Tensor]:
-        """Args:
-        objectness (Tensor)
-        pred_bbox_deltas (Tensor)
-        labels (List[Tensor])
-        regression_targets (List[Tensor])
-
-        Returns:
-        objectness_loss (Tensor)
-        box_loss (Tensor)
-        """
-
-        _, _, keep = self.filter_proposals_mio(proposals, objectns, img_size, num_anchors_per_level)
-        
-        #come prima cosa estrae un numero di sample positivi e negativi su cui calcolare la loss
-        sampled_pos_inds, sampled_neg_inds = self.fg_bg_sampler(labels)
-        sampled_pos_inds = torch.where(torch.cat(sampled_pos_inds, dim=0))[0]
-        #sampled_pos_inds = keep
-        sampled_neg_inds = torch.where(torch.cat(sampled_neg_inds, dim=0))[0]
-
-        sampled_inds = torch.cat([sampled_pos_inds, sampled_neg_inds], dim=0)
-
-        objectness = objectness.flatten()
-
-        labels = torch.cat(labels, dim=0)
-        regression_targets = torch.cat(regression_targets, dim=0)
-
-        box_loss = F.smooth_l1_loss(
-            pred_bbox_deltas[sampled_pos_inds],
-            regression_targets[sampled_pos_inds],
-            beta=1 / 9,
-            reduction="sum",
-        ) / (sampled_inds.numel())
-
-        objectness_loss = F.binary_cross_entropy_with_logits(objectness[sampled_inds], labels[sampled_inds])
-
-        #print(f"Objectness:  {objectness_loss}  Box:  {box_loss} \n")
-        return objectness_loss, box_loss
-    
-    def _get_bottom_n_idx(self, objectness: Tensor, num_anchors_per_level: List[int]) -> Tensor:
-        r = []
-        offset = 0
-        for ob in objectness.split(num_anchors_per_level, 1):
-            num_anchors = ob.shape[1]
-            pre_nms_top_n = det_utils._topk_min(ob, self.pre_nms_top_n(), 1)
-            _, top_n_idx = ob.topk(pre_nms_top_n, dim=1, largest=False)
-            r.append(top_n_idx + offset)
-            offset += num_anchors
-        return torch.cat(r, dim=1)
+            final_boxes.append(boxes)
+            final_scores.append(scores)
+        #print(final_scores)
+        return final_boxes, final_scores
     
     def forward(
         self,
@@ -591,12 +517,19 @@ class RegionProposalNetwork(torch.nn.Module):
         proposals = proposals.view(num_images, -1, 4)
         #Qui proposals è ancora uguale al numero di anchors!
         
+        #boxes, scores = self.filter_proposals(proposals, objectness, images.image_sizes, num_anchors_per_level)
+        
         #PASSO 2: qui vado a prendere tutte le anchor boxes del generatore per livello (es 185460) e vado
         #a eliminare quelle che non soddisfano certe condizioni: seleziono solo le migliori box per livello
         #rimuovo le bbox piccole e con score basso; applico nms e infine tengo solo le predizioni migliori
-        boxes, scores = self.filter_proposals(proposals, objectness, images.image_sizes, num_anchors_per_level)
-             
-        #boxes, scores, _ = self.filter_proposals_mio(proposals, objectness, images.image_sizes, num_anchors_per_level, targets)
+        #boxes, scores, _ = self.filter_proposals_mia(proposals, objectness, images.image_sizes, num_anchors_per_level, targets)
+        if self.use_custom_filter_proposals:
+        	if self.training:
+        		boxes, scores = self.filter_proposals_custom(proposals, objectness, images.image_sizes, num_anchors_per_level, targets)
+        	else:
+        		boxes, scores = self.filter_proposals(proposals, objectness, images.image_sizes, num_anchors_per_level)
+        else:
+        	boxes, scores = self.filter_proposals(proposals, objectness, images.image_sizes, num_anchors_per_level)
         
         """
         import matplotlib.pyplot as plt
@@ -605,7 +538,7 @@ class RegionProposalNetwork(torch.nn.Module):
         mean = torch.tensor([0.485, 0.456, 0.406])
         std = torch.tensor([0.229, 0.224, 0.225])
         unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
-        """ 
+        """
         """
         for box, img in zip(proposals, images.tensors):
         	ax = plt.gca()
@@ -624,9 +557,9 @@ class RegionProposalNetwork(torch.nn.Module):
         			break
         	plt.show()
         	plt.clf()
+        """
         
         """
-        """	
         for box, score, img in zip(boxes, scores, images.tensors):
         	ax = plt.gca()
         	img = unnormalize(img)
@@ -669,3 +602,83 @@ class RegionProposalNetwork(torch.nn.Module):
                 "loss_rpn_box_reg": loss_rpn_box_reg,
             }
         return boxes, losses
+
+
+def assign_targets_to_proposals_gt(self, proposals_in_image, gt_boxes_in_image, gt_labels_in_image):
+        # type: (List[Tensor], List[Tensor], List[Tensor]) -> Tuple[List[Tensor], List[Tensor]]
+        #2 liste vuote. La label qui conterrà le label dell'oggetto preso dalla GT.
+        #matched_idxs = []
+        #labels = []
+        if gt_boxes_in_image.numel() == 0:
+                # Background image
+                #img vuota sensa oggetti se dal GT vedo che non ci sono box. Allora tensore tutto a 0
+                device = proposals_in_image.device
+                clamped_matched_idxs_in_image = torch.zeros(
+                    (proposals_in_image.shape[0],), dtype=torch.int64, device=device
+                )
+                labels_in_image = torch.zeros((proposals_in_image.shape[0],), dtype=torch.int64, device=device)
+        else:
+                
+                match_quality_matrix = box_ops.box_iou(gt_boxes_in_image, proposals_in_image)
+                matched_idxs_in_image = self.proposal_matcher_gt(match_quality_matrix)
+                #print(matched_idxs_in_image) #tensor([ 0, -1, -1,  0,  1,  2], device='cuda:0')
+                # get the targets corresponding GT for each proposal.
+                #da quello che ho capito questo tensore lungo n (es 6) funziona così:
+                #ogni n-esima proposals, mi chiedo a quale delle bbox del tensore delle GT somiglia di più
+                #estraggo gli id
+
+                clamped_matched_idxs_in_image = matched_idxs_in_image.clamp(min=0)
+                #print(clamped_matched_idxs_in_image) #tensor([0, 0, 0, 0, 1, 2], device='cuda:0')
+                #il clamping viene fatto per evitare l'errore
+
+                labels_in_image = gt_labels_in_image[clamped_matched_idxs_in_image]
+                labels_in_image = labels_in_image.to(dtype=torch.int64)
+                #print(labels_in_image) #tensor([1, 1, 1, 1, 1, 1], device='cuda:0')
+
+                # Label background (below the low threshold)
+                bg_inds = matched_idxs_in_image == self.proposal_matcher_gt.BELOW_LOW_THRESHOLD
+                labels_in_image[bg_inds] = 0
+
+                # Label ignore proposals (between low and high thresholds)
+                ignore_inds = matched_idxs_in_image == self.proposal_matcher_gt.BETWEEN_THRESHOLDS
+                labels_in_image[ignore_inds] = -1  # -1 is ignored by sampler
+
+        #matched_idxs.append(clamped_matched_idxs_in_image) #gli id effettivamente corretti
+        #può capitare che la best proposal non sia quella corretta!
+        #labels.append(labels_in_image)
+        matched_idxs=clamped_matched_idxs_in_image
+        labels=labels_in_image
+        #print(len(gt_boxes_in_image))  # 3
+        #print(matched_idxs) # [tensor([0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], device='cuda:0')]
+        #print(labels) # [tensor([1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0], device='cuda:0')]
+        
+        #1 conto numero di gt totali -> 3
+        #2 per ogni valore, cerco in matched idx se c'è, es cerco 0, 1, 2; cercando al tempo stesso in labels se c'è il valore 1 indicando che quel match è effettivamente sulla persona
+        #3 alla prima corrispondenza, salvo l'indice (essendo già ordinati decrescenti è best match) e passo al prossimo; se non trovo niente, salto al prossimo valore fino a terminarli
+        #4 al di fuori di questa funzione, keep gli indici trovati
+        n_gt_in_image=len(gt_boxes_in_image)
+        best_det_for_each_gt = []
+        n_wrong_det_stored=0
+        for gt in range(0,n_gt_in_image): #per quanti gt boxes ci sono
+        	for index, (matched_id, label) in enumerate(zip(matched_idxs, labels)):
+        		#qui tengo sempre in egual numero le det con score più alto che però sono errate, label=0 -> background
+        		if(label==0 and n_wrong_det_stored<n_gt_in_image):
+        			best_det_for_each_gt.append(index)
+        			n_wrong_det_stored+=1
+        		#se label=1 persona, poi controllo che il valore in matched_id sia gt
+        		if(label==1 and matched_id==gt):
+        			best_det_for_each_gt.append(index)
+        			break
+        #per garantire che ci siano in egual numero, devo per forza verificarlo io. può capitare che se tutte le det con score più alto sono le prime, l'if sopra non mette in egual numero perché il controllo non ha mai esito positivo
+        if(n_wrong_det_stored<n_gt_in_image):
+        	for index, (matched_id, label) in enumerate(zip(matched_idxs, labels)):
+        		if(n_wrong_det_stored<n_gt_in_image):
+        			if(label==0 and index not in best_det_for_each_gt): #se è background e non lo avevo già preso nel for precedente
+        				best_det_for_each_gt.append(index)
+        				n_wrong_det_stored+=1
+        		else:
+        			break
+        #può accadere che non abbia identificato nessuna persona nonostante c'era nel GT
+        #in questo caso, manderò solo proposals negative di background che dovrebbero portare il modello a distinguere meglio fin da subito tra persona e background
+        return best_det_for_each_gt
+        #return matched_idxs, labels
