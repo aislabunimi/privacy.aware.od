@@ -1,9 +1,10 @@
-#from torch.utils.data import DataLoader #Utils per caricare i dati
 import torchvision
 import os
-#from PIL import Image
+import json
+from PIL import Image
 from typing import Optional, List
 from torch import Tensor
+from model_utils_and_functions import deterministic_worker, deterministic_generator
 #from plot_utils import *
 from detr_transforms import * 
 
@@ -223,9 +224,7 @@ def collate_fn_disturbed(batch):
 def collate_fn_tasknet(batch):
     return list(zip(*batch))
 
-import json
-import os
-from PIL import Image
+
 class DisturbedDataset(torch.utils.data.Dataset):
     def __init__(self, json_file, disturbed_path, orig_path, transform=None, is_training=False, resize_scales=None):
         self.data = json.load(open(json_file))
@@ -296,13 +295,17 @@ def load_dataset(train_img_folder, train_ann_file, val_img_folder, val_ann_file,
                                           shuffle=True,
                                           num_workers=4,
                                           pin_memory=True,
-                                          collate_fn=collate)
+                                          collate_fn=collate,
+                                          worker_init_fn=deterministic_worker,
+                                          generator=deterministic_generator())
 	val_dataloader = torch.utils.data.DataLoader(val_coco_dataset,
                                           batch_size=val_batch_size,
                                           shuffle=False,
                                           num_workers=4,
                                           pin_memory=True,
-                                          collate_fn=collate)
+                                          collate_fn=collate,
+                                          worker_init_fn=deterministic_worker,
+                                          generator=deterministic_generator())
 	
 	return train_dataloader, val_dataloader
 	
@@ -321,13 +324,17 @@ def load_dataset_for_generating_disturbed_set(train_img_folder, train_ann_file, 
                                           shuffle=False,
                                           num_workers=4,
                                           pin_memory=True,
-                                          collate_fn=collate_fn_nested_tensors)
+                                          collate_fn=collate_fn_nested_tensors,
+                                          worker_init_fn=deterministic_worker,
+                                          generator=deterministic_generator())
 	val_dataloader_gen_disturbed = torch.utils.data.DataLoader(val_coco_dataset,
                                           batch_size=1,
                                           shuffle=False,
                                           num_workers=4,
                                           pin_memory=True,
-                                          collate_fn=collate_fn_nested_tensors)
+                                          collate_fn=collate_fn_nested_tensors,
+                                          worker_init_fn=deterministic_worker,
+                                          generator=deterministic_generator())
 	
 	return train_dataloader_gen_disturbed, val_dataloader_gen_disturbed
 	
@@ -346,12 +353,16 @@ def load_disturbed_dataset(disturbed_train_img_folder, disturbed_train_ann, dist
                                           shuffle=True,
                                           num_workers=4,
                                           pin_memory=True,
-                                          collate_fn=collate_fn_disturbed)
+                                          collate_fn=collate_fn_disturbed,
+                                          worker_init_fn=deterministic_worker,
+                                          generator=deterministic_generator())
 	disturbed_val_dataloader = torch.utils.data.DataLoader(disturbed_val_dataset,
                                           batch_size=val_batch_size,
                                           shuffle=False,
                                           num_workers=4,
                                           pin_memory=True,
-                                          collate_fn=collate_fn_disturbed)
+                                          collate_fn=collate_fn_disturbed,
+                                          worker_init_fn=deterministic_worker,
+                                          generator=deterministic_generator())
 		
 	return disturbed_train_dataloader, disturbed_val_dataloader

@@ -15,6 +15,8 @@ from plot_utils import *
 
 ###### CONFIG
 seed_everything(0) #per rendere deterministico l'esperimento
+#nota: upsample_bilinear2d_backward_out_cuda della unet non è deterministico
+torch.use_deterministic_algorithms(mode=True, warn_only=True)
 device='cuda'
 #Config Plotting and Save files
 plt.rcParams['figure.figsize'] = 15, 10
@@ -47,8 +49,8 @@ resume_training=False
 train_only_tasknet=False
 save_disturbed_dataset=False
 train_backward_on_disturbed_sets=False
-use_custom_filter_proposals=False #se usare il mio filter proposal custom o meno nell'rpn della faster
-num_epochs = 1 #setto numero delle epoche
+use_custom_filter_proposals=True #se usare il mio filter proposal custom o meno nell'rpn della faster
+num_epochs = 50 #setto numero delle epoche
 
 ###### MODELLI
 #Instanzio il modello e gli iperparametri; lo muovo poi al device

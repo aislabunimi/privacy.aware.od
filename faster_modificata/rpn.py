@@ -441,10 +441,9 @@ class RegionProposalNetwork(torch.nn.Module):
             prop = boxes[keep]
             best_det_for_each_gt = assign_targets_to_proposals_gt(self, prop, gt['boxes'], gt['labels'])
             
-            matched_det_boxes_to_keep = [prop[i] for i in best_det_for_each_gt]
             #keep = keep[: self.post_nms_top_n()]
             index_list=[]
-            for det_to_keep in matched_det_boxes_to_keep:
+            for det_to_keep in best_det_for_each_gt:
             	index = torch.where(torch.all(det_to_keep == boxes, dim=1))[0]
             	index = index[0].item()
             	index_list.append(index)
@@ -538,28 +537,7 @@ class RegionProposalNetwork(torch.nn.Module):
         mean = torch.tensor([0.485, 0.456, 0.406])
         std = torch.tensor([0.229, 0.224, 0.225])
         unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
-        """
-        """
-        for box, img in zip(proposals, images.tensors):
-        	ax = plt.gca()
-        	img = unnormalize(img)
-        	img = unnormalize(img)
-        	plt.imshow(img.cpu().permute(1, 2, 0).detach().numpy())
-        	
-        	i=0
-        	for (xmin, ymin, xmax, ymax) in box:
-        		if i==40000 or i==50000 or i==60000 or i==70000 or i==80000 or i==90000 or i==100000:
-        			ax.add_patch(plt.Rectangle((xmin.cpu(), ymin.cpu()), xmax.cpu() - xmin.cpu(), ymax.cpu() - ymin.cpu(), fill=False, color='red', linewidth=3))
-        			i=i+1
-        		elif i<100000:
-        			i=i+1
-        		else:
-        			break
-        	plt.show()
-        	plt.clf()
-        """
         
-        """
         for box, score, img in zip(boxes, scores, images.tensors):
         	ax = plt.gca()
         	img = unnormalize(img)
@@ -572,7 +550,7 @@ class RegionProposalNetwork(torch.nn.Module):
         		ax.text(xmin, ymin, prob, fontsize=15, bbox=dict(facecolor='yellow', alpha=0.5))
         	plt.show()
         	plt.clf()
-        """	  
+        """  
         
         losses = {}
         #PASSO 3: solo in training, alleno il modello a migliorare le anchors.
@@ -659,23 +637,27 @@ def assign_targets_to_proposals_gt(self, proposals_in_image, gt_boxes_in_image, 
         n_gt_in_image=len(gt_boxes_in_image)
         best_det_for_each_gt = []
         n_wrong_det_stored=0
+        matched_index_list=[]
         for gt in range(0,n_gt_in_image): #per quanti gt boxes ci sono
         	for index, (matched_id, label) in enumerate(zip(matched_idxs, labels)):
         		#qui tengo sempre in egual numero le det con score più alto che però sono errate, label=0 -> background
         		if(label==0 and n_wrong_det_stored<n_gt_in_image):
-        			best_det_for_each_gt.append(index)
+        			best_det_for_each_gt.append(proposals_in_image[index])
         			n_wrong_det_stored+=1
+        			matched_index_list.append(index)
         		#se label=1 persona, poi controllo che il valore in matched_id sia gt
         		if(label==1 and matched_id==gt):
-        			best_det_for_each_gt.append(index)
+        			best_det_for_each_gt.append(proposals_in_image[index])
+        			matched_index_list.append(index)
         			break
         #per garantire che ci siano in egual numero, devo per forza verificarlo io. può capitare che se tutte le det con score più alto sono le prime, l'if sopra non mette in egual numero perché il controllo non ha mai esito positivo
         if(n_wrong_det_stored<n_gt_in_image):
         	for index, (matched_id, label) in enumerate(zip(matched_idxs, labels)):
         		if(n_wrong_det_stored<n_gt_in_image):
-        			if(label==0 and index not in best_det_for_each_gt): #se è background e non lo avevo già preso nel for precedente
-        				best_det_for_each_gt.append(index)
+        			if(label==0 and index not in matched_index_list): #se è background e non lo avevo già preso nel for precedente
+        				best_det_for_each_gt.append(proposals_in_image[index])
         				n_wrong_det_stored+=1
+        				matched_index_list.append(index)
         		else:
         			break
         #può accadere che non abbia identificato nessuna persona nonostante c'era nel GT
