@@ -34,12 +34,14 @@ train_img_folder = '/home/alberti/coco_people_indoor/train/images'
 train_ann_file = '/home/alberti/coco_people_indoor/train/train.json'
 val_img_folder = '/home/alberti/coco_people_indoor/val/images'
 val_ann_file = '/home/alberti/coco_people_indoor/val/val.json'
+disturbed_train_img_gen='/home/math0012/Tesi_magistrale/open_images_v7/images'
+disturbed_train_ann_gen='/home/math0012/Tesi_magistrale/open_images_v7/open_images_id_list.json'
 disturbed_train_img_folder='disturbed_dataset/train'
 disturbed_train_ann='disturbed_dataset/train.json'
 disturbed_val_img_folder='disturbed_dataset/val'
 disturbed_val_ann='disturbed_dataset/val.json'
-train_batch_size=2
-val_batch_size=2
+train_batch_size=4
+val_batch_size=4
 resize_scales_transform = [200, 300, 400, 500, 600]
 use_dataset_subset=0
 #resize_scales_transform = [200]
@@ -48,6 +50,8 @@ use_dataset_subset=0
 resume_training=False
 train_only_tasknet=False
 save_disturbed_dataset=False
+keep_original_size=False #quando generi il dataset disturbato, deve essere a True se mi serve per il comparison con la tasknet plain, se no a False se devo fare train backward
+#split_size_train_set = 0 #necessario per quando si fa il train backward. Se a 0 nessuno split. Non è possibile usare lo stesso dataset per train perché le img ricostruite dal train potrebbero contenere più info rispetto a quelle generate dal validation. Quindi tengo i primi n elementi per train del modello con la tasknet, poi genero di disturbati quelli da n in poi, e userò solo quelli per trainare il backward. Questo se voglio usare coco indoor.
 train_backward_on_disturbed_sets=False
 use_custom_filter_proposals=True #se usare il mio filter proposal custom o meno nell'rpn della faster
 num_epochs = 50 #setto numero delle epoche
@@ -101,13 +105,12 @@ val_loss = [] #Lista che conversa la test loss
 log = {'TRAIN_LOSS': [], 'VAL_LOSS': []}
 
 if save_disturbed_dataset:
-	train_dataloader_gen_disturbed, val_dataloader_gen_disturbed = load_dataset_for_generating_disturbed_set(train_img_folder, train_ann_file, val_img_folder, val_ann_file, use_dataset_subset)
+	train_dataloader_gen_disturbed, val_dataloader_gen_disturbed = load_dataset_for_generating_disturbed_set(disturbed_train_img_gen, disturbed_train_ann_gen, val_img_folder, val_ann_file, use_dataset_subset) #, split_size_train_set)
 
 if train_backward_on_disturbed_sets: #carico i dataloader appositi del dataset disturbato
 	disturbed_train_dataloader, disturbed_val_dataloader = load_disturbed_dataset(disturbed_train_img_folder, disturbed_train_ann, disturbed_val_img_folder, disturbed_val_ann, train_img_folder, val_img_folder, train_batch_size, val_batch_size, resize_scales_transform, use_dataset_subset)
 else:
-	train_dataloader, val_dataloader= load_dataset(train_img_folder, train_ann_file, val_img_folder, val_ann_file, train_batch_size, val_batch_size, save_disturbed_dataset, train_only_tasknet, resize_scales_transform, use_dataset_subset)
-
+	train_dataloader, val_dataloader= load_dataset(train_img_folder, train_ann_file, val_img_folder, val_ann_file, train_batch_size, val_batch_size, save_disturbed_dataset, train_only_tasknet, resize_scales_transform, use_dataset_subset) #, split_size_train_set)
 
 if resume_training:
 	completed_epochs = load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler) #3 arg, il modello, il save path e l'optimizer
@@ -142,7 +145,7 @@ elif (not train_backward_on_disturbed_sets):
     		unet_scheduler.step()
     		log['VAL_LOSS'].append(val_model(val_dataloader, epoch, device, val_loss, unet, unet_save_path, tasknet, unet_optimizer, unet_scheduler, ap_log_path, ap_score_threshold, my_ap_log_path))
     		if((num_epochs-epoch)==0 and save_disturbed_dataset): #serve se sono arrivato all'ultima epoca e voglio salvare il dataset disturbato
-    			generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, epoch, device, unet, disturbed_train_img_folder, disturbed_train_ann, disturbed_val_img_folder, disturbed_val_ann)
+    			generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, epoch, device, unet, disturbed_train_img_folder, disturbed_train_ann, disturbed_val_img_folder, disturbed_val_ann, keep_original_size)
     		print(f'EPOCH {epoch} SUMMARY: ' + ', '.join([f'{k}: {v[epoch-1]}' for k, v in log.items()]))
     		with open(loss_log_path, 'a') as file:
     			loss_log_append = f"{epoch} {log['TRAIN_LOSS'][epoch-1]} {log['VAL_LOSS'][epoch-1]}\n"

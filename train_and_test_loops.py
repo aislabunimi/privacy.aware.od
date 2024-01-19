@@ -19,9 +19,51 @@ def train_model(train_dataloader, epoch, device, train_loss, model, tasknet, mod
 		imgs, _ = imgs.decompose()
 		imgs = imgs.to(device)
 		targets = [{k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in t.items()} for t in targets]
-		#print_batch_after_collatefn(imgs, targets, 2) #QUESTO CON DECOMPOSE
+		#print_batch_after_collatefn(imgs, targets, 2) #QUESTO CON DECOMPOSE		
 		tasknet.train()
 		reconstructed = model(imgs)
+		#l'img ricostruita dovuta alla mancanza delle skip connection, non ha la stessa dim dell'originale ma perde qualche pixel
+		#può capitare il seguente caso: 'boxes': tensor[ 20.2250,   0.0000, 249.8900, 200.0000]
+		#nel bbox 249 è la width della bbox, 200 è la height; sotto la width e height sono in ordine inverso
+		#la dimensione originale dell'img prima dell'unet era tensor[200, 250]
+		#dopo all'unet diventa: tensor[192, 256]
+		#quindi ora la bbox in height sforerebbe la dim dell'img, dando origine a un'ap minore e loss maggiore del dovuto. Conviene quindi resizare le img all'originale per evitare questo inconveniente
+				
+		#import matplotlib.pyplot as plt
+		#import matplotlib.image as mpimg
+		#mean = torch.tensor([0.485, 0.456, 0.406])
+		#std = torch.tensor([0.229, 0.224, 0.225])
+		#unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
+		
+		#qui riporto alla dimensione originale del batch. Faccio così piuttosto che la dim originale di ogni singola img, perché così 1 lavoro sul batch, più efficiente 2 farlo sulla singola img cambia poco il risultato, nel senso che si parla sempre di pochi pixel aggiunti.
+		trans_r = transforms.Resize((imgs.shape[2], imgs.shape[3]), antialias=False)
+		reconstructed = trans_r(reconstructed)
+		"""
+		reconstructed = list(img.to(device) for img in reconstructed)
+		for index, (rec_img, img_target) in enumerate(zip(reconstructed, targets)):
+			#orig_size = img_target['size'].tolist()
+			orig_height, orig_width = img_target['size'].tolist()
+			rec_height, rec_width = reconstructed[index].shape[1], reconstructed[index].shape[2]
+			if rec_height<=orig_height: #più piccolo, allargo l'img
+				trans_height = orig_height
+			else: #più grande, non devo allargarla
+				trans_height = rec_height
+			if rec_width<=orig_width:
+				trans_width = orig_width
+			else:
+				trans_width = rec_width
+			#plt.imshow(unnormalize(reconstructed[index]).detach().cpu().permute(1, 2, 0).numpy())
+			#plt.show()
+			trans_r = transforms.Resize((trans_height, trans_width), antialias=False)
+			reconstructed[index] = trans_r(reconstructed[index])
+			plt.imshow(unnormalize(reconstructed[index]).detach().cpu().permute(1, 2, 0).numpy())
+			plt.show()
+			#torchvision.transforms.functional.crop(img: Tensor, top: int, left: int, height: int, width: int) → Tensor
+			#if (trans_height>orig_height or trans_width>orig_width): #se c'è una di queste condizioni, vuol dire che c'era del padding e si può rimuovere -> problema: il modello ci mette 25% in più del tempo se lo faccio e ho un guadagno praticamente nullo in termini di ap (0.001 in media).
+			#	reconstructed[index] = transforms.functional.crop(reconstructed[index], 0, 0, orig_height, orig_width)
+			#plt.imshow(unnormalize(reconstructed[index]).detach().cpu().permute(1, 2, 0).numpy())
+			#plt.show()
+		"""
 		reconstructed_loss_dict = tasknet(reconstructed, targets)
 		reconstructed_losses = sum(loss for loss in reconstructed_loss_dict.values())
 		
@@ -44,10 +86,14 @@ def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, t
 		for imgs, targets in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):
 			imgs, _ = imgs.decompose()
 			imgs = imgs.to(device)
-			new_targets = [{k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in t.items()} for t in targets]
+			targets = [{k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in t.items()} for t in targets]
 			reconstructed = model(imgs)
 			tasknet.train()
-			reconstructed_loss_dict = tasknet(reconstructed, new_targets)
+			
+			trans_r = transforms.Resize((imgs.shape[2], imgs.shape[3]), antialias=False)
+			reconstructed = trans_r(reconstructed)
+			
+			reconstructed_loss_dict = tasknet(reconstructed, targets)
 			reconstructed_losses = sum(loss for loss in reconstructed_loss_dict.values())
 					
 			tasknet.eval()
@@ -63,14 +109,14 @@ def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, t
 	compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, ap_log_path, my_ap_log_path, res)	
 	val_loss.append(running_loss)
 	model_save_path = f'{model_save_path}_{epoch}.pt'   
-	#create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
+	create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
 	return running_loss
 
-def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, epoch, device, model, train_img_folder, train_ann, val_img_folder, val_ann): #funzione che si occupa di generare il dataset disturbato
+def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, epoch, device, model, train_img_folder, train_ann, val_img_folder, val_ann, keep_original_size): #funzione che si occupa di generare il dataset disturbato
 	model.eval()
 	#Prima genero il disturbed training
 	batch_size = len(train_dataloader_gen_disturbed) #recupero la batch size
-	coco = get_coco_api_from_dataset(train_dataloader_gen_disturbed.dataset)
+	#coco = get_coco_api_from_dataset(train_dataloader_gen_disturbed.dataset)
 	disturbed_list = []
 	mean = torch.tensor([0.485, 0.456, 0.406])
 	std = torch.tensor([0.229, 0.224, 0.225])
@@ -80,19 +126,33 @@ def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_ge
 			imgs, _ = imgs.decompose()
 			imgs = imgs.to(device)
 			reconstructed = model(imgs)
-			for image, recons in zip(targets, reconstructed):
-				coco_image_id = image["image_id"].item()
-				path = coco.loadImgs(coco_image_id)[0]["file_name"]
-				#le img sono già normalizzate, faccio solo il resize per tenerle della stessa dimensione dell'originale (si perde qualche pixel per via del padding rimosso che veniva fatto con le skip connections dall'unet)
-				#orig_size = image['orig_size'].tolist()
-				#trans = transforms.Resize(orig_size, antialias=False)
-				#recons = trans(recons)
+			path = ''.join(targets)
+			#le img sono già normalizzate, faccio solo il resize per tenerle della stessa dimensione dell'originale (si perde qualche pixel per via del padding rimosso che veniva fatto con le skip connections dall'unet). Ha senso farlo per il comparison con la tasknet e basta, non nel backward però, dove simulo il fatto che un attaccante colleziona coppie plain-disturbate.
+			if keep_original_size:
+				orig_size = [imgs.shape[1], imgs.shape[2]]
+				trans = transforms.Resize(orig_size, antialias=False)
+				reconstructed = trans(reconstructed)
+			reconstructed = unnormalize(reconstructed)
+			save_image(reconstructed, os.path.join(train_img_folder, path))
+			disturbed_list.append({
+				"image_path": path,
+			})
+			"""for image, recons in zip(targets, reconstructed):
+				#coco_image_id = image["image_id"].item()
+				#path = coco.loadImgs(coco_image_id)[0]["file_name"]
+				path = ''.join(targets)
+				print(path)
+				#le img sono già normalizzate, faccio solo il resize per tenerle della stessa dimensione dell'originale (si perde qualche pixel per via del padding rimosso che veniva fatto con le skip connections dall'unet). Ha senso farlo per il comparison con la tasknet e basta, non nel backward però, dove simulo il fatto che un attaccante colleziona coppie plain-disturbate.
+				if keep_original_size:
+					orig_size = [imgs.shape[1], imgs.shape[2]]
+					trans = transforms.Resize(orig_size, antialias=False)
+					recons = trans(recons)
 				recons = unnormalize(recons)
 				save_image(recons, os.path.join(train_img_folder, path))
 				disturbed_list.append({
-					"coco_image_path": path,
-					"coco_image_id": coco_image_id
-				})
+					"image_path": path,
+					#"coco_image_id": coco_image_id
+			"""	#})
 	with open(train_ann, 'w') as json_file:
 		json.dump(disturbed_list, json_file, indent=2)
 	#Ora genero il disturbed val
@@ -104,28 +164,42 @@ def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_ge
 			imgs, _ = imgs.decompose()
 			imgs = imgs.to(device)
 			reconstructed = model(imgs)
+			coco_image_id = targets[0]["image_id"].item()
+			path = coco.loadImgs(coco_image_id)[0]["file_name"]
+			if keep_original_size:
+				orig_size = [imgs.shape[1], imgs.shape[2]]
+				trans = transforms.Resize(orig_size, antialias=False)
+				reconstructed = trans(reconstructed)
+			reconstructed = unnormalize(reconstructed)
+			save_image(reconstructed, os.path.join(val_img_folder, path))
+			disturbed_list.append({
+				"image_path": path,
+				"coco_image_id": coco_image_id
+			})
+			"""
 			for image, recons in zip(targets, reconstructed):
 				coco_image_id = image["image_id"].item()
 				path = coco.loadImgs(coco_image_id)[0]["file_name"]
-				#orig_size = image['orig_size'].tolist()
-				#trans = transforms.Resize(orig_size, antialias=False)
-				#recons = trans(recons)
+				if keep_original_size:
+					#orig_size = image['orig_size'].tolist()
+					orig_size = [imgs.shape[1], imgs.shape[2]]
+					trans = transforms.Resize(orig_size, antialias=False)
+					recons = trans(recons)
 				recons = unnormalize(recons)
 				save_image(recons, os.path.join(val_img_folder, path))
 				disturbed_list.append({
-					"coco_image_path": path,
+					"image_path": path,
 					"coco_image_id": coco_image_id
-				})
+			"""#	})
 	with open(val_ann, 'w') as json_file:
 		json.dump(disturbed_list, json_file, indent=2)
 	model.train()
 
 from pytorch_msssim import ms_ssim, MS_SSIM
-def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss, model, model_optimizer): #funzione che si occupa del training
+def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss, model, model_optimizer): 
 	model.train()
-	#loss_fn = torch.nn.MSELoss() # Mean squared loss which computes difference between two images.
-	batch_size = len(train_dataloader) #recupero la batch size
-	running_loss = 0 # Iniziallizzo la variabile per la loss
+	batch_size = len(train_dataloader)
+	running_loss = 0
 	mean = torch.tensor([0.485, 0.456, 0.406])
 	std = torch.tensor([0.229, 0.224, 0.225])
 	unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
@@ -158,7 +232,8 @@ def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss,
 		#print_batch_after_collatefn(imgs, targets, 2) #QUESTO CON DECOMPOSE
 		#reconstructed = model(imgs)
 		reconstructed = model(disturbed_imgs)
-		trans = transforms.Resize((reconstructed[0].shape[1], reconstructed[0].shape[2]), antialias=False)
+		trans = transforms.Resize((reconstructed.shape[2], reconstructed.shape[3]), antialias=False)
+		#riduco la dimensione dell'originale all'output dell'unet; ha più senso rispetto che riportare all'originale l'ouput dell'unet, che richiederebbe di aggiungere info
 		orig_imgs = trans(orig_imgs)
 		
 		"""
@@ -185,7 +260,6 @@ def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss,
 
 def val_model_on_disturbed_images(val_dataloader, epoch, device, val_loss, model, model_save_path, model_optimizer, model_scheduler): #funzione che si occupa del test
 	model.eval()
-	#loss_fn = torch.nn.MSELoss() # Mean squared loss which computes difference between two images.
 	batch_size = len(val_dataloader) #recupero la batch size
 	running_loss = 0 # Initializing variable for storing  loss 
 	mean = torch.tensor([0.485, 0.456, 0.406])
@@ -199,41 +273,11 @@ def val_model_on_disturbed_images(val_dataloader, epoch, device, val_loss, model
 			orig_imgs, _ = orig_imgs.decompose()
 			orig_imgs = orig_imgs.to(device)
 			
-			# For testing
-			"""
-			import matplotlib.pyplot as plt
-			import matplotlib.image as mpimg
-			plt.imshow(disturbed_imgs[0].cpu().permute(1, 2, 0))
-			plt.title('disturbed_imgs')
-			plt.axis('off')
-			plt.show()
-			
-			plt.imshow(orig_imgs[0].cpu().permute(1, 2, 0))
-			plt.title('orig_imgs')
-			plt.axis('off')
-			plt.show()
-			
-			plt.imshow(disturbed_imgs[1].cpu().permute(1, 2, 0))
-			plt.title('disturbed_imgs')
-			plt.axis('off')
-			plt.show()
-			
-			plt.imshow(orig_imgs[1].cpu().permute(1, 2, 0))
-			plt.title('orig_imgs')
-			plt.axis('off')
-			plt.show()
-			"""
-			
 			reconstructed = model(disturbed_imgs)
 			#print(reconstructed[0].shape[1], reconstructed[0].shape[2])
-			trans = transforms.Resize((reconstructed[0].shape[1], reconstructed[0].shape[2]), antialias=False)
+			trans = transforms.Resize((reconstructed.shape[2], reconstructed.shape[3]), antialias=False)
 			orig_imgs = trans(orig_imgs)
-			"""
-			plt.imshow(orig_imgs[1].cpu().permute(1, 2, 0))
-			plt.title('orig_imgs')
-			plt.axis('off')
-			plt.show()
-			"""
+
 			reconstructed=unnormalize(reconstructed)
 			orig_imgs=unnormalize(orig_imgs)	
 			true_loss = 1 - ms_ssim_module(reconstructed, orig_imgs)
@@ -275,9 +319,9 @@ def val_tasknet(val_dataloader, epoch, device, val_loss, tasknet_save_path, task
 	with torch.no_grad(): #non calcolo il gradiente, sto testando e bassa
 		for imgs, targets in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):
 			imgs = list(img.to(device) for img in imgs)
-			new_targets = [{k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in t.items()} for t in targets]
+			targets = [{k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in t.items()} for t in targets]
 			tasknet.train()
-			loss_dict = tasknet(imgs, new_targets)
+			loss_dict = tasknet(imgs, targets)
 			losses = sum(loss for loss in loss_dict.values())
 			running_loss += losses.item()
 			tasknet.eval()
