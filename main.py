@@ -31,11 +31,15 @@ unet_weights_to_compare= "model_weights/model_50.pt"
 tasknet_weights_load= "tasknet_weights/tasknet_20.pt"
 #Config DATASET
 train_img_folder = '/home/alberti/coco_people_indoor/train/images'
+#train_img_folder = '/home/math0012/Tesi_magistrale/open_images_v7/images'
 train_ann_file = '/home/alberti/coco_people_indoor/train/train.json'
 val_img_folder = '/home/alberti/coco_people_indoor/val/images'
 val_ann_file = '/home/alberti/coco_people_indoor/val/val.json'
 disturbed_train_img_gen='/home/math0012/Tesi_magistrale/open_images_v7/images'
 disturbed_train_ann_gen='/home/math0012/Tesi_magistrale/open_images_v7/open_images_id_list.json'
+#disturbed_train_img_gen='/home/alberti/coco_people_indoor/train/images'
+#disturbed_train_ann_gen='/home/alberti/coco_people_indoor/train/train.json'
+use_coco_train_for_generating_disturbed_set=False #se metti questo a true, allora stai usando il dataset di train di coco per generare il disturbato. Vanno cambiati i due path sopra
 disturbed_train_img_folder='disturbed_dataset/train'
 disturbed_train_ann='disturbed_dataset/train.json'
 disturbed_val_img_folder='disturbed_dataset/val'
@@ -105,7 +109,7 @@ val_loss = [] #Lista che conversa la test loss
 log = {'TRAIN_LOSS': [], 'VAL_LOSS': []}
 
 if save_disturbed_dataset:
-	train_dataloader_gen_disturbed, val_dataloader_gen_disturbed = load_dataset_for_generating_disturbed_set(disturbed_train_img_gen, disturbed_train_ann_gen, val_img_folder, val_ann_file, use_dataset_subset) #, split_size_train_set)
+	train_dataloader_gen_disturbed, val_dataloader_gen_disturbed = load_dataset_for_generating_disturbed_set(disturbed_train_img_gen, disturbed_train_ann_gen, val_img_folder, val_ann_file, use_dataset_subset, use_coco_train_for_generating_disturbed_set) #, split_size_train_set)
 
 if train_backward_on_disturbed_sets: #carico i dataloader appositi del dataset disturbato
 	disturbed_train_dataloader, disturbed_val_dataloader = load_disturbed_dataset(disturbed_train_img_folder, disturbed_train_ann, disturbed_val_img_folder, disturbed_val_ann, train_img_folder, val_img_folder, train_batch_size, val_batch_size, resize_scales_transform, use_dataset_subset)
@@ -145,7 +149,7 @@ elif (not train_backward_on_disturbed_sets):
     		unet_scheduler.step()
     		log['VAL_LOSS'].append(val_model(val_dataloader, epoch, device, val_loss, unet, unet_save_path, tasknet, unet_optimizer, unet_scheduler, ap_log_path, ap_score_threshold, my_ap_log_path))
     		if((num_epochs-epoch)==0 and save_disturbed_dataset): #serve se sono arrivato all'ultima epoca e voglio salvare il dataset disturbato
-    			generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, epoch, device, unet, disturbed_train_img_folder, disturbed_train_ann, disturbed_val_img_folder, disturbed_val_ann, keep_original_size)
+    			generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, epoch, device, unet, disturbed_train_img_folder, disturbed_train_ann, disturbed_val_img_folder, disturbed_val_ann, keep_original_size, use_coco_train_for_generating_disturbed_set)
     		print(f'EPOCH {epoch} SUMMARY: ' + ', '.join([f'{k}: {v[epoch-1]}' for k, v in log.items()]))
     		with open(loss_log_path, 'a') as file:
     			loss_log_append = f"{epoch} {log['TRAIN_LOSS'][epoch-1]} {log['VAL_LOSS'][epoch-1]}\n"

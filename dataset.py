@@ -315,10 +315,12 @@ def load_dataset(train_img_folder, train_ann_file, val_img_folder, val_ann_file,
 	
 	return train_dataloader, val_dataloader
 	
-def load_dataset_for_generating_disturbed_set(train_img_folder, train_ann_file, val_img_folder, val_ann_file, use_dataset_subset): #, split_size_train_set):
+def load_dataset_for_generating_disturbed_set(train_img_folder, train_ann_file, val_img_folder, val_ann_file, use_dataset_subset, use_coco_train): #, split_size_train_set):
 	val_coco_dataset = CocoDetection(val_img_folder, val_ann_file, transforms=make_coco_transforms('val'), return_masks=False)
-	#train_coco_dataset_without_resize = CocoDetection(train_img_folder, train_ann_file, transforms=make_coco_transforms('val'), return_masks=None)
-	disturbed_train_dataset_gen = DisturbedDataset(train_ann_file, train_img_folder, transform=make_coco_transforms('disturbed_val'), is_training=False)
+	if use_coco_train:
+		disturbed_train_dataset_gen = CocoDetection(train_img_folder, train_ann_file, transforms=make_coco_transforms('val'), return_masks=None)
+	else:
+		disturbed_train_dataset_gen = DisturbedDataset(train_ann_file, train_img_folder, transform=make_coco_transforms('disturbed_val'), is_training=False)
 	
 	train_indices = list(range(0, len(disturbed_train_dataset_gen), 1))
 	val_indices = list(range(0, len(val_coco_dataset), 1))

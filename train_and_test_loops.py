@@ -112,11 +112,12 @@ def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, t
 	create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
 	return running_loss
 
-def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, epoch, device, model, train_img_folder, train_ann, val_img_folder, val_ann, keep_original_size): #funzione che si occupa di generare il dataset disturbato
+def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, epoch, device, model, train_img_folder, train_ann, val_img_folder, val_ann, keep_original_size, use_coco_train): #funzione che si occupa di generare il dataset disturbato
 	model.eval()
 	#Prima genero il disturbed training
 	batch_size = len(train_dataloader_gen_disturbed) #recupero la batch size
-	#coco = get_coco_api_from_dataset(train_dataloader_gen_disturbed.dataset)
+	if use_coco_train:
+		coco = get_coco_api_from_dataset(train_dataloader_gen_disturbed.dataset)
 	disturbed_list = []
 	mean = torch.tensor([0.485, 0.456, 0.406])
 	std = torch.tensor([0.229, 0.224, 0.225])
@@ -126,33 +127,31 @@ def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_ge
 			imgs, _ = imgs.decompose()
 			imgs = imgs.to(device)
 			reconstructed = model(imgs)
-			path = ''.join(targets)
-			#le img sono già normalizzate, faccio solo il resize per tenerle della stessa dimensione dell'originale (si perde qualche pixel per via del padding rimosso che veniva fatto con le skip connections dall'unet). Ha senso farlo per il comparison con la tasknet e basta, non nel backward però, dove simulo il fatto che un attaccante colleziona coppie plain-disturbate.
-			if keep_original_size:
-				orig_size = [imgs.shape[1], imgs.shape[2]]
-				trans = transforms.Resize(orig_size, antialias=False)
-				reconstructed = trans(reconstructed)
-			reconstructed = unnormalize(reconstructed)
-			save_image(reconstructed, os.path.join(train_img_folder, path))
-			disturbed_list.append({
-				"image_path": path,
-			})
-			"""for image, recons in zip(targets, reconstructed):
-				#coco_image_id = image["image_id"].item()
-				#path = coco.loadImgs(coco_image_id)[0]["file_name"]
-				path = ''.join(targets)
-				print(path)
-				#le img sono già normalizzate, faccio solo il resize per tenerle della stessa dimensione dell'originale (si perde qualche pixel per via del padding rimosso che veniva fatto con le skip connections dall'unet). Ha senso farlo per il comparison con la tasknet e basta, non nel backward però, dove simulo il fatto che un attaccante colleziona coppie plain-disturbate.
+			if use_coco_train:
+				coco_image_id = targets[0]["image_id"].item()
+				path = coco.loadImgs(coco_image_id)[0]["file_name"]
 				if keep_original_size:
-					orig_size = [imgs.shape[1], imgs.shape[2]]
+					orig_size = [imgs.shape[2], imgs.shape[3]]
 					trans = transforms.Resize(orig_size, antialias=False)
-					recons = trans(recons)
-				recons = unnormalize(recons)
-				save_image(recons, os.path.join(train_img_folder, path))
+					reconstructed = trans(reconstructed)
+				reconstructed = unnormalize(reconstructed)
+				save_image(reconstructed, os.path.join(train_img_folder, path))
 				disturbed_list.append({
 					"image_path": path,
-					#"coco_image_id": coco_image_id
-			"""	#})
+					"coco_image_id": coco_image_id
+				})
+			else:
+				path = ''.join(targets)
+				#le img sono già normalizzate, faccio solo il resize per tenerle della stessa dimensione dell'originale (si perde qualche pixel per via del padding rimosso che veniva fatto con le skip connections dall'unet). Ha senso farlo per il comparison con la tasknet e basta, non nel backward però, dove simulo il fatto che un attaccante colleziona coppie plain-disturbate.
+				if keep_original_size:
+					orig_size = [imgs.shape[2], imgs.shape[3]]
+					trans = transforms.Resize(orig_size, antialias=False)
+					reconstructed = trans(reconstructed)
+				reconstructed = unnormalize(reconstructed)
+				save_image(reconstructed, os.path.join(train_img_folder, path))
+				disturbed_list.append({
+					"image_path": path,
+				})
 	with open(train_ann, 'w') as json_file:
 		json.dump(disturbed_list, json_file, indent=2)
 	#Ora genero il disturbed val
@@ -167,7 +166,7 @@ def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_ge
 			coco_image_id = targets[0]["image_id"].item()
 			path = coco.loadImgs(coco_image_id)[0]["file_name"]
 			if keep_original_size:
-				orig_size = [imgs.shape[1], imgs.shape[2]]
+				orig_size = [imgs.shape[2], imgs.shape[3]]
 				trans = transforms.Resize(orig_size, antialias=False)
 				reconstructed = trans(reconstructed)
 			reconstructed = unnormalize(reconstructed)
@@ -176,26 +175,12 @@ def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_ge
 				"image_path": path,
 				"coco_image_id": coco_image_id
 			})
-			"""
-			for image, recons in zip(targets, reconstructed):
-				coco_image_id = image["image_id"].item()
-				path = coco.loadImgs(coco_image_id)[0]["file_name"]
-				if keep_original_size:
-					#orig_size = image['orig_size'].tolist()
-					orig_size = [imgs.shape[1], imgs.shape[2]]
-					trans = transforms.Resize(orig_size, antialias=False)
-					recons = trans(recons)
-				recons = unnormalize(recons)
-				save_image(recons, os.path.join(val_img_folder, path))
-				disturbed_list.append({
-					"image_path": path,
-					"coco_image_id": coco_image_id
-			"""#	})
 	with open(val_ann, 'w') as json_file:
 		json.dump(disturbed_list, json_file, indent=2)
 	model.train()
 
 from pytorch_msssim import ms_ssim, MS_SSIM
+#MS SSIM dovrebbe tenere conto di più di come appare l'img a una persona, rispetto alla sola distribuzione dell'EMD
 def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss, model, model_optimizer): 
 	model.train()
 	batch_size = len(train_dataloader)
@@ -247,6 +232,11 @@ def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss,
 		orig_imgs=unnormalize(orig_imgs)	
 		true_loss = 1 - ms_ssim_module(reconstructed, orig_imgs)
 		#true_loss = loss_fn(reconstructed, orig_imgs)
+
+		#plt.imshow(orig_imgs[0].cpu().permute(1, 2, 0))
+		#plt.title(orig_imgs)
+		#plt.axis('off')
+		#plt.show()
 		
 		model_optimizer.zero_grad(set_to_none=True) #pulisco i gradienti prima del backpropagation step
 		
