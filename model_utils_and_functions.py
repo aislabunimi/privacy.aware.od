@@ -33,7 +33,10 @@ def compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, ap_lo
 	iou_types = _get_iou_types(tasknet)
 	coco_evaluator = CocoEvaluator(coco, iou_types)
 	my_ap_evaluator = CocoEvaluator(coco, iou_types)
-	new_interpolation = np.linspace(.0, (1-ap_score_threshold), int(np.round(((1-ap_score_threshold) - .0) / .01)) + 1, endpoint=True)
+	#new_interpolation = np.linspace(.0, (1-ap_score_threshold), int(np.round(((1-ap_score_threshold) - .0) / .01)) + 1, endpoint=True)
+	new_interpolation = np.linspace(.0, (1-ap_score_threshold), int(np.round(((1-ap_score_threshold) - .0) / (1-ap_score_threshold)/.01)) + 1, endpoint=True) #questa fa 101 point sulla nuova curva, quella sopra faceva solo 26 punti. La differenza in AP è però trascurabile, ma mi sembra più corretto i 101 punti piuttosto che 26
+	#print(new_interpolation)
+	#print(len(new_interpolation))
 	my_ap_evaluator.coco_eval['bbox'].params.recThrs = new_interpolation #necessaria visto che devo prendere i punti solo fino allo ap_score_threshold
 	coco_evaluator.update(res)
 	coco_evaluator.synchronize_between_processes()
