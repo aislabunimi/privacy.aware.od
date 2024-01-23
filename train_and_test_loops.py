@@ -27,42 +27,35 @@ def train_model(train_dataloader, epoch, device, train_loss, model, tasknet, mod
 		#nel bbox 249 è la width della bbox, 200 è la height; sotto la width e height sono in ordine inverso
 		#la dimensione originale dell'img prima dell'unet era tensor[200, 250]
 		#dopo all'unet diventa: tensor[192, 256]
-		#quindi ora la bbox in height sforerebbe la dim dell'img, dando origine a un'ap minore e loss maggiore del dovuto. Conviene quindi resizare le img all'originale per evitare questo inconveniente
+		#quindi ora la bbox in height sforerebbe la dim dell'img, dando origine a un'ap minore e loss maggiore del dovuto. Conviene quindi o resizare le img all'originale per evitare questo inconveniente (ma ci sarebbe uno stretch), oppure modificare le bbox target e proporzionarle all'img ricostruita.
+		#le bboxes quindi saranno leggermente più piccole 
 				
+		orig_batch_w, orig_batch_h = imgs.shape[3], imgs.shape[2]
+		rec_batch_w, rec_batch_h =  reconstructed.shape[3], reconstructed.shape[2]
+
+		for e in targets:
+			for i, box in enumerate(e['boxes']):
+				xm, ym, xM, yM = box.tolist()
+				rec_xm = (rec_batch_w * xm) / orig_batch_w
+				rec_xM = (rec_batch_w * xM) / orig_batch_w
+				rec_ym = (rec_batch_h * ym) / orig_batch_h
+				rec_yM = (rec_batch_h * yM) / orig_batch_h
+				e['boxes'][i] = torch.tensor([rec_xm, rec_ym, rec_xM, rec_yM], device=box.device)
+
 		#import matplotlib.pyplot as plt
 		#import matplotlib.image as mpimg
 		#mean = torch.tensor([0.485, 0.456, 0.406])
 		#std = torch.tensor([0.229, 0.224, 0.225])
 		#unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
-		
-		#qui riporto alla dimensione originale del batch. Faccio così piuttosto che la dim originale di ogni singola img, perché così 1 lavoro sul batch, più efficiente 2 farlo sulla singola img cambia poco il risultato, nel senso che si parla sempre di pochi pixel aggiunti.
-		trans_r = transforms.Resize((imgs.shape[2], imgs.shape[3]), antialias=False)
-		reconstructed = trans_r(reconstructed)
 		"""
-		reconstructed = list(img.to(device) for img in reconstructed)
-		for index, (rec_img, img_target) in enumerate(zip(reconstructed, targets)):
-			#orig_size = img_target['size'].tolist()
-			orig_height, orig_width = img_target['size'].tolist()
-			rec_height, rec_width = reconstructed[index].shape[1], reconstructed[index].shape[2]
-			if rec_height<=orig_height: #più piccolo, allargo l'img
-				trans_height = orig_height
-			else: #più grande, non devo allargarla
-				trans_height = rec_height
-			if rec_width<=orig_width:
-				trans_width = orig_width
-			else:
-				trans_width = rec_width
-			#plt.imshow(unnormalize(reconstructed[index]).detach().cpu().permute(1, 2, 0).numpy())
-			#plt.show()
-			trans_r = transforms.Resize((trans_height, trans_width), antialias=False)
-			reconstructed[index] = trans_r(reconstructed[index])
-			plt.imshow(unnormalize(reconstructed[index]).detach().cpu().permute(1, 2, 0).numpy())
-			plt.show()
-			#torchvision.transforms.functional.crop(img: Tensor, top: int, left: int, height: int, width: int) → Tensor
-			#if (trans_height>orig_height or trans_width>orig_width): #se c'è una di queste condizioni, vuol dire che c'era del padding e si può rimuovere -> problema: il modello ci mette 25% in più del tempo se lo faccio e ho un guadagno praticamente nullo in termini di ap (0.001 in media).
-			#	reconstructed[index] = transforms.functional.crop(reconstructed[index], 0, 0, orig_height, orig_width)
-			#plt.imshow(unnormalize(reconstructed[index]).detach().cpu().permute(1, 2, 0).numpy())
-			#plt.show()
+		print(targets)
+		plt.imshow(unnormalize(reconstructed[0]).detach().cpu().permute(1, 2, 0).numpy())
+		ax = plt.gca()
+		xmin, ymin, xmax, ymax = targets[0]['boxes'][0]
+		xmin, ymin, xmax, ymax = int(xmin), int(ymin), int(xmax), int(ymax)
+		ax.add_patch(plt.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin, fill=False, color='red', linewidth=3))
+		plt.show()
+		plt.clf()
 		"""
 		reconstructed_loss_dict = tasknet(reconstructed, targets)
 		reconstructed_losses = sum(loss for loss in reconstructed_loss_dict.values())
@@ -90,8 +83,16 @@ def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, t
 			reconstructed = model(imgs)
 			tasknet.train()
 			
-			trans_r = transforms.Resize((imgs.shape[2], imgs.shape[3]), antialias=False)
-			reconstructed = trans_r(reconstructed)
+			orig_batch_w, orig_batch_h = imgs.shape[3], imgs.shape[2]
+			rec_batch_w, rec_batch_h =  reconstructed.shape[3], reconstructed.shape[2]
+			for e in targets:
+				for i, box in enumerate(e['boxes']):
+					xm, ym, xM, yM = box.tolist()
+					rec_xm = (rec_batch_w * xm) / orig_batch_w
+					rec_xM = (rec_batch_w * xM) / orig_batch_w
+					rec_ym = (rec_batch_h * ym) / orig_batch_h
+					rec_yM = (rec_batch_h * yM) / orig_batch_h
+					e['boxes'][i] = torch.tensor([rec_xm, rec_ym, rec_xM, rec_yM], device=box.device)
 			
 			reconstructed_loss_dict = tasknet(reconstructed, targets)
 			reconstructed_losses = sum(loss for loss in reconstructed_loss_dict.values())
