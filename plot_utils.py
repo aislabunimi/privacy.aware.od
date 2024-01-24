@@ -133,7 +133,7 @@ def compare_two_results_unet(unet, tasknet, device, img_file_path, name_path_sav
 	img_primo_plot = unnormalize(img_primo_plot)
 	nms_pred = apply_nms(res_tasknet[0], iou_thresh=0.1)
 	plt.subplot(1, 3, 1)
-	plt.title('Original Image, bbox by only tasknet')
+	plt.title('Original Image')
 	plot_results(img_primo_plot, nms_pred['scores'], nms_pred['boxes'])
 	
 	plt.subplot(1, 3, 2)	
@@ -144,7 +144,9 @@ def compare_two_results_unet(unet, tasknet, device, img_file_path, name_path_sav
 	reconstructed = tasknet(out)
 	pred_recon = reconstructed[0]
 	nms_pred_recon = apply_nms(pred_recon, iou_thresh=0.1) #per applicare nms e salvare l'ultima box
-	plt.title(f'{unet_weights_load}')
+	filename = os.path.basename(unet_weights_load)
+	name = os.path.splitext(filename)[0]
+	plt.title(f'Reconstructed by {name}')
 	plot_results(out_to_plot, nms_pred_recon['scores'], nms_pred_recon['boxes'])
 	
 	plt.subplot(1, 3, 3)
@@ -155,12 +157,15 @@ def compare_two_results_unet(unet, tasknet, device, img_file_path, name_path_sav
 	reconstructed = tasknet(out)
 	pred_recon = reconstructed[0]
 	nms_pred_recon = apply_nms(pred_recon, iou_thresh=0.1) #per applicare nms e salvare l'ultima box
-	plt.title(f'{unet_weights_to_compare}')
+	filename = os.path.basename(unet_weights_to_compare)
+	name = os.path.splitext(filename)[0]
+	plt.title(f'Reconstructed by {name}')
 	plot_results(out_to_plot, nms_pred_recon['scores'], nms_pred_recon['boxes'])
 	
+	plt.subplots_adjust(wspace=0.05)
 	plt.savefig(name_path_save, format='png', bbox_inches='tight')
 	plt.clf()
-	
+
 from torchvision.utils import save_image
 def save_disturbed_pred(unet, device, img_file_path, name_path_save):
 	image = Image.open(img_file_path).convert("RGB")
