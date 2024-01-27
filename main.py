@@ -24,12 +24,19 @@ ap_log_path="plot/ap_log.txt"
 loss_log_path='plot/loss_log.txt'
 ap_score_threshold=0.75
 my_ap_log_path="plot/my_ap_log.txt"
+my_ap_nointerp_thresh_path="plot/my_ap_nointerp_thresh_log.txt"
+my_ap_interp_thresh_path="plot/my_ap_interp_thresh_log.txt"
+michele_metric_folder="michele_plot"
 unet_save_path = "model_weights/model"
 tasknet_save_path = "tasknet_weights/tasknet"
 unet_weights_load= "model_weights/model_50.pt"
 unet_weights_to_compare= "model_weights/model_50.pt"
-tasknet_weights_load= "tasknet_weights/tasknet_20.pt"
+tasknet_weights_load= "tasknet_weights/tasknet_10.pt"
 #Config DATASET
+#train_img_folder = '/home/alberti/coco_person/train/images' #Questi per trainare la tasknet su 65k
+#train_ann_file = '/home/alberti/coco_person/train/train.json'
+#val_img_folder = '/home/alberti/coco_person/val/images'
+#val_ann_file = '/home/alberti/coco_person/val/val.json'
 train_img_folder = '/home/alberti/coco_people_indoor/train/images'
 #train_img_folder = '/home/math0012/Tesi_magistrale/open_images_v7/images'
 train_ann_file = '/home/alberti/coco_people_indoor/train/train.json'
@@ -44,8 +51,10 @@ disturbed_train_img_folder='disturbed_dataset/train'
 disturbed_train_ann='disturbed_dataset/train.json'
 disturbed_val_img_folder='disturbed_dataset/val'
 disturbed_val_ann='disturbed_dataset/val.json'
-train_batch_size=4
-val_batch_size=4
+train_batch_size=8 #8 batch size usata nella tasknet
+val_batch_size=8 #8 batch size usata nella tasknet
+#train_batch_size=4
+#val_batch_size=4
 resize_scales_transform = [200, 300, 400, 500, 600]
 use_dataset_subset=0
 #resize_scales_transform = [200]
@@ -136,6 +145,17 @@ if(train_only_tasknet and not train_backward_on_disturbed_sets):
     		with open(loss_log_path, 'a') as file:
     			loss_log_append = f"{epoch} {log['TRAIN_LOSS'][epoch-1]} {log['VAL_LOSS'][epoch-1]}\n"
     			file.write(loss_log_append)
+#BLOCCO TRAINING TASKNET
+if(train_only_tasknet and not train_backward_on_disturbed_sets):
+	tasknet.train()
+	for epoch in range(1, num_epochs+1): #itero ora facendo un train e un test per ogni epoca
+    		log['TRAIN_LOSS'].append(train_tasknet(train_dataloader, epoch, device, train_loss, tasknet_save_path, tasknet, tasknet_optimizer))
+    		tasknet_scheduler.step()
+    		log['VAL_LOSS'].append(val_tasknet(val_dataloader, epoch, device, val_loss, tasknet_save_path, tasknet, tasknet_optimizer, tasknet_scheduler, ap_log_path, ap_score_threshold, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, michele_metric_folder))
+    		print(f'EPOCH {epoch} SUMMARY: ' + ', '.join([f'{k}: {v[epoch-1]}' for k, v in log.items()]))
+    		with open(loss_log_path, 'a') as file:
+    			loss_log_append = f"{epoch} {log['TRAIN_LOSS'][epoch-1]} {log['VAL_LOSS'][epoch-1]}\n"
+    			file.write(loss_log_append)
 #BLOCCO TRAINING MODEL
 elif (not train_backward_on_disturbed_sets):
 	load_checkpoint(tasknet, tasknet_weights_load, tasknet_optimizer, tasknet_scheduler)
@@ -147,7 +167,7 @@ elif (not train_backward_on_disturbed_sets):
 	for epoch in range(1, num_epochs+1): #itero ora facendo un train e un test per ogni epoca
     		log['TRAIN_LOSS'].append(train_model(train_dataloader, epoch, device, train_loss, unet, tasknet, unet_optimizer))
     		unet_scheduler.step()
-    		log['VAL_LOSS'].append(val_model(val_dataloader, epoch, device, val_loss, unet, unet_save_path, tasknet, unet_optimizer, unet_scheduler, ap_log_path, ap_score_threshold, my_ap_log_path))
+    		log['VAL_LOSS'].append(val_model(val_dataloader, epoch, device, val_loss, unet, unet_save_path, tasknet, unet_optimizer, unet_scheduler, ap_log_path, ap_score_threshold, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, michele_metric_folder))
     		if((num_epochs-epoch)==0 and save_disturbed_dataset): #serve se sono arrivato all'ultima epoca e voglio salvare il dataset disturbato
     			generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, epoch, device, unet, disturbed_train_img_folder, disturbed_train_ann, disturbed_val_img_folder, disturbed_val_ann, keep_original_size, use_coco_train_for_generating_disturbed_set)
     		print(f'EPOCH {epoch} SUMMARY: ' + ', '.join([f'{k}: {v[epoch-1]}' for k, v in log.items()]))

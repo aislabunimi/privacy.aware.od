@@ -28,16 +28,20 @@ def deterministic_generator():
 	g.manual_seed(0)
 	return g
 
-def compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, ap_log_path, my_ap_log_path, res):
+def compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, ap_log_path, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, res):
 	coco = get_coco_api_from_dataset(val_dataloader.dataset)
 	iou_types = _get_iou_types(tasknet)
-	coco_evaluator = CocoEvaluator(coco, iou_types)
-	my_ap_evaluator = CocoEvaluator(coco, iou_types)
+	coco_evaluator = CocoEvaluator(coco, iou_types) #AP con tutte le pred, curva non interpolata
+	my_ap_evaluator = CocoEvaluator(coco, iou_types) #AP con tutte le pred, curva interpolata
+	my_ap_nointerp_thresh = CocoEvaluator(coco, iou_types) #AP con solo pred superiori score thresh, curva non interpolata
+	my_ap_interp_thresh = CocoEvaluator(coco, iou_types) #AP con solo pred superiori score thresh, curva interpolata
 	#new_interpolation = np.linspace(.0, (1-ap_score_threshold), int(np.round(((1-ap_score_threshold) - .0) / .01)) + 1, endpoint=True)
 	new_interpolation = np.linspace(.0, (1-ap_score_threshold), int(np.round(((1-ap_score_threshold) - .0) / (1-ap_score_threshold)/.01)) + 1, endpoint=True) #questa fa 101 point sulla nuova curva, quella sopra faceva solo 26 punti. La differenza in AP è però trascurabile, ma mi sembra più corretto i 101 punti piuttosto che 26
 	#print(new_interpolation)
 	#print(len(new_interpolation))
 	my_ap_evaluator.coco_eval['bbox'].params.recThrs = new_interpolation #necessaria visto che devo prendere i punti solo fino allo ap_score_threshold
+	my_ap_interp_thresh.coco_eval['bbox'].params.recThrs = new_interpolation
+	
 	coco_evaluator.update(res)
 	coco_evaluator.synchronize_between_processes()
 	coco_evaluator.coco_eval['bbox'].evaluate()
@@ -48,6 +52,20 @@ def compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, ap_lo
 	sys.stdout = f
 	print(f'AP for Epoch {epoch}')
 	coco_evaluator.summarize()
+	
+	sys.stdout = orig_stdout
+	f.close()
+	
+	my_ap_evaluator.update(res)
+	my_ap_evaluator.synchronize_between_processes()
+	my_ap_evaluator.coco_eval['bbox'].evaluate()
+	my_ap_evaluator.accumulate()
+	
+	orig_stdout = sys.stdout
+	f = open(my_ap_log_path, 'a')
+	sys.stdout = f
+	print(f'AP for Epoch {epoch} with all predictions but curve interpolation, score thresh: {ap_score_threshold}')
+	my_ap_evaluator.summarize()
 	
 	sys.stdout = orig_stdout
 	f.close()
@@ -71,16 +89,30 @@ def compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, ap_lo
                 	res[image_id] = {'boxes': torch.empty((0,4)).to(device),
                 			 'labels': torch.empty((0,)).to(device),
                 			 'scores': torch.empty((0,)).to(device)}
-	my_ap_evaluator.update(res)
-	my_ap_evaluator.synchronize_between_processes()
-	my_ap_evaluator.coco_eval['bbox'].evaluate()
-	my_ap_evaluator.accumulate()
+	my_ap_nointerp_thresh.update(res)
+	my_ap_nointerp_thresh.synchronize_between_processes()
+	my_ap_nointerp_thresh.coco_eval['bbox'].evaluate()
+	my_ap_nointerp_thresh.accumulate()
 	
 	orig_stdout = sys.stdout
-	f = open(my_ap_log_path, 'a')
+	f = open(my_ap_nointerp_thresh_path, 'a')
 	sys.stdout = f
-	print(f'AP for Epoch {epoch} for only predictions with score above {ap_score_threshold}')
-	my_ap_evaluator.summarize()
+	print(f'AP for Epoch {epoch} with only pred above score thresh: {ap_score_threshold}')
+	my_ap_nointerp_thresh.summarize()
+	
+	sys.stdout = orig_stdout
+	f.close()
+	
+	my_ap_interp_thresh.update(res)
+	my_ap_interp_thresh.synchronize_between_processes()
+	my_ap_interp_thresh.coco_eval['bbox'].evaluate()
+	my_ap_interp_thresh.accumulate()
+	
+	orig_stdout = sys.stdout
+	f = open(my_ap_interp_thresh_path, 'a')
+	sys.stdout = f
+	print(f'AP for Epoch {epoch} with only pred above score thresh and curve interpolation, score thresh: {ap_score_threshold}')
+	my_ap_interp_thresh.summarize()
 	
 	sys.stdout = orig_stdout
 	f.close()
