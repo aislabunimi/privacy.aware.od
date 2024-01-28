@@ -51,10 +51,10 @@ disturbed_train_img_folder='disturbed_dataset/train'
 disturbed_train_ann='disturbed_dataset/train.json'
 disturbed_val_img_folder='disturbed_dataset/val'
 disturbed_val_ann='disturbed_dataset/val.json'
-train_batch_size=8 #8 batch size usata nella tasknet
-val_batch_size=8 #8 batch size usata nella tasknet
-#train_batch_size=4
-#val_batch_size=4
+#train_batch_size=8 #8 batch size usata nella tasknet
+#val_batch_size=8 #8 batch size usata nella tasknet
+train_batch_size=4
+val_batch_size=4
 resize_scales_transform = [200, 300, 400, 500, 600]
 use_dataset_subset=0
 #resize_scales_transform = [200]
@@ -92,10 +92,10 @@ elif not train_backward_on_disturbed_sets:
 	from faster_modificata.faster_rcnn import fasterrcnn_resnet50_fpn_modificata, FasterRCNN_ResNet50_FPN_Weights, FastRCNNPredictor
 	weights = FasterRCNN_ResNet50_FPN_Weights.DEFAULT
 	tasknet = fasterrcnn_resnet50_fpn_modificata(weights=weights, progress=False,
-		rpn_pre_nms_top_n_train=100, rpn_pre_nms_top_n_test=1000,
-		rpn_post_nms_top_n_train=100, rpn_post_nms_top_n_test=1000,
+		rpn_pre_nms_top_n_train=2000, rpn_pre_nms_top_n_test=1000,
+		rpn_post_nms_top_n_train=2000, rpn_post_nms_top_n_test=1000,
 		rpn_nms_thresh=0.7, rpn_fg_iou_thresh=0.7, rpn_bg_iou_thresh=0.3,
-		rpn_score_thresh=0.0, use_custom_filter_proposals=use_custom_filter_proposals)
+		rpn_score_thresh=0.1, use_custom_filter_proposals=use_custom_filter_proposals)
 
 	num_classes = 2  # 1 class (person) + background
 	# get number of input features for the classifier

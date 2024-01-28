@@ -160,7 +160,7 @@ class RegionProposalNetwork(torch.nn.Module):
         
         self.use_custom_filter_proposals = use_custom_filter_proposals
         if use_custom_filter_proposals:
-        	#i valori sono fg_iou_thresh e bg_iou_thresh delle roi head
+        	#i valori sono fg_iou_thresh e bg_iou_thresh scelti da me
         	self.proposal_matcher_gt = det_utils.Matcher(0.5, 0.5, allow_low_quality_matches=False)
 
         self.fg_bg_sampler = det_utils.BalancedPositiveNegativeSampler(batch_size_per_image, positive_fraction) # This class samples batches, ensuring that they contain a fixed proportion of positives
@@ -437,9 +437,11 @@ class RegionProposalNetwork(torch.nn.Module):
             # non-maximum suppression, independently done per level
             keep = box_ops.batched_nms(boxes, scores, lvl, self.nms_thresh)
             
-            #QUI in keep ho gli indici delle proposals sopravvissute alle bbox, ordinate in modo decrescente, quindi i primi risultati nel tensore saranno le best prediction
+            #QUI in keep ho gli indici delle proposals sopravvissute alle bbox, ordinate in modo decrescente, quindi i primi risultati nel tensore saranno già le best prediction
             prop = boxes[keep]
-            best_det_for_each_gt = assign_targets_to_proposals_gt(self, prop, gt['boxes'], gt['labels'])
+            scor = scores[keep]
+            #in teoria li potrei passare come zip(prop, scor)
+            best_det_for_each_gt = self.assign_targets_to_proposals_gt(prop, gt['boxes'], gt['labels'], scor)
             
             #keep = keep[: self.post_nms_top_n()]
             index_list=[]
@@ -467,6 +469,144 @@ class RegionProposalNetwork(torch.nn.Module):
             final_scores.append(scores)
         #print(final_scores)
         return final_boxes, final_scores
+    
+    def assign_targets_to_proposals_gt(self, proposals_in_image, gt_boxes_in_image, gt_labels_in_image, scores):
+        # type: (List[Tensor], List[Tensor], List[Tensor]) -> Tuple[List[Tensor], List[Tensor]]
+        #2 liste vuote. La label qui conterrà le label dell'oggetto preso dalla GT.
+        #matched_idxs = []
+        #labels = []
+        if gt_boxes_in_image.numel() == 0:
+                # Background image
+                #img vuota sensa oggetti se dal GT vedo che non ci sono box. Allora tensore tutto a 0
+                device = proposals_in_image.device
+                clamped_matched_idxs_in_image = torch.zeros(
+                    (proposals_in_image.shape[0],), dtype=torch.int64, device=device
+                )
+                labels_in_image = torch.zeros((proposals_in_image.shape[0],), dtype=torch.int64, device=device)
+        else:
+                #0: le proposal che mi arrivano qui sono ordinate già per score
+                #ora le ordino poi per IoU, quindi -> 
+                #1: ottengo l'IoU di ogni proposal rispetto le gt nell'img
+                match_quality_matrix = box_ops.box_iou(gt_boxes_in_image, proposals_in_image)
+                # match_quality_matrix is M (gt) x N (predicted)
+                #2: ordino per IoU in ordine decrescente, quindi prima le proposal con maggiore IoU
+                #data_dict = [{'score': s, 'iou': i} for s, i in zip(scores, match_quality_matrix[0])]
+                #x=input()
+                #ci sono pred con IoU molto alto, tipo 0.6; ma hanno score basso, tipo 0.01. Varrebbe la pena filtrare tutte quelle proposal che hanno score molto basso.
+                #devo mandare avanti robe con IoU alto ma con score anche decente
+                #def custom_sort(item):
+                #	iou = item['iou'].item() #if 'iou' in item else 0.0
+                #	score = item['score'].item() #if 'score' in item else 0.0
+                #	return -iou
+                #	#return (-iou, -score)
+                #
+                # Sort the list using the custom sorting key
+                #sorted_data = sorted(data_dict, key=custom_sort)
+                #print(sorted_data)
+                #print(len(sorted_data))
+                #x=input()
+                # Define the number of intervals
+                #num_intervals = 10
+                #interval_size = 1.0 / num_intervals
+                # Initialize a list of dictionaries for each interval
+                #interval_dicts = [[] for _ in range(num_intervals)]
+                # Partition the sorted data into intervals based on IoU
+                #for entry in sorted_data:
+                #	iou = entry['iou']
+                #	for interval_index in range(num_intervals):
+                #		lower_bound = interval_index * interval_size
+                #		upper_bound = (interval_index + 1) * interval_size
+                #		if lower_bound <= iou <= upper_bound:
+                #			interval_dicts[interval_index].append(entry)
+                #			break
+                # Print the partitioned data
+                #for interval_index, interval_data in enumerate(interval_dicts):
+                #	print(f"Interval {interval_index + 1}: {interval_data}")           
+                #print(interval_dicts)
+                #x=input()
+                #torch.set_printoptions(threshold=10_000)
+                #cosi quando selezionerò la prop lo farò non per best score ma best iou, sia in neg che pos
+                match_quality_matrix, _ = torch.sort(match_quality_matrix, descending=True)
+                matched_idxs_in_image = self.proposal_matcher_gt(match_quality_matrix)
+                #Questi sono gli id della match quality matrix che soddisfano il proposal matcher gt
+                # #i valori usati per scegliere se una proposal matcha la gt sono questi fg_iou_thresh e bg_iou_thresh
+                #print(matched_idxs_in_image) #tensor([ 0, -1, -1,  0,  1,  2], device='cuda:0')
+                # get the targets corresponding GT for each proposal.
+                #da quello che ho capito questo tensore lungo n (es 6) funziona così:
+                #ogni n-esima proposals, mi chiedo a quale delle bbox del tensore delle GT somiglia di più
+                #estraggo gli id
+
+                clamped_matched_idxs_in_image = matched_idxs_in_image.clamp(min=0)
+                #print(clamped_matched_idxs_in_image) #tensor([0, 0, 0, 0, 1, 2], device='cuda:0')
+                #il clamping viene fatto per evitare l'errore
+
+                labels_in_image = gt_labels_in_image[clamped_matched_idxs_in_image]
+                labels_in_image = labels_in_image.to(dtype=torch.int64)
+                #print(labels_in_image) #tensor([1, 1, 1, 1, 1, 1], device='cuda:0')
+
+                # Label background (below the low threshold)
+                bg_inds = matched_idxs_in_image == self.proposal_matcher_gt.BELOW_LOW_THRESHOLD
+                labels_in_image[bg_inds] = 0
+
+                # Label ignore proposals (between low and high thresholds)
+                ignore_inds = matched_idxs_in_image == self.proposal_matcher_gt.BETWEEN_THRESHOLDS
+                labels_in_image[ignore_inds] = -1  # -1 is ignored by sampler
+
+        #matched_idxs.append(clamped_matched_idxs_in_image) #gli id effettivamente corretti
+        #può capitare che la best proposal non sia quella corretta!
+        #labels.append(labels_in_image)
+        matched_idxs=clamped_matched_idxs_in_image
+        labels=labels_in_image
+        #print(len(gt_boxes_in_image))  # 3
+        #torch.set_printoptions(threshold=10_000)
+        #print(matched_idxs) # [tensor([0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], device='cuda:0')]
+        #print(labels) # [tensor([1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0], device='cuda:0')]
+        #x=input()
+        #1 conto numero di gt totali -> 3
+        #2 per ogni valore, cerco in matched idx se c'è, es cerco 0, 1, 2; cercando al tempo stesso in labels se c'è il valore 1 indicando che quel match è effettivamente sulla persona
+        #3 alla prima corrispondenza, salvo l'indice (essendo già ordinati decrescenti è best match per score) e passo al prossimo; se non trovo niente, salto al prossimo valore fino a terminarli
+        #4 al di fuori di questa funzione, keep gli indici trovati
+        n_gt_in_image=len(gt_boxes_in_image)
+        n_factor=1 #serve se per ogni gt non voglio considerare 1 sola esatta ma ad esempio 2, 3
+        #farò lo stesso con le negative. Quindi: 2 persone, 2gt-> 2 proposal per ogni persona, +4 negative
+        #print(n_gt_in_image)
+        #x=input()
+        best_det_for_each_gt = []
+        n_wrong_det_stored=0
+        matched_index_list=[]
+        for gt in range(0,n_gt_in_image): #per quanti gt boxes ci sono
+        	n_matches=0
+        	for index, (matched_id, label) in enumerate(zip(matched_idxs, labels)):
+        		#qui tengo sempre in egual numero le det con score più alto che però sono errate, label=0 -> background
+        		if(label==0 and n_wrong_det_stored<(n_gt_in_image*n_factor)):
+        			best_det_for_each_gt.append(proposals_in_image[index])
+        			n_wrong_det_stored+=1
+        			matched_index_list.append(index)
+        		#se label=1 persona, poi controllo che il valore in matched_id sia gt
+        		elif(label==1 and matched_id==gt):
+        			best_det_for_each_gt.append(proposals_in_image[index])
+        			matched_index_list.append(index)
+        			n_matches+=1
+        			if(n_matches==n_factor):
+        				break
+        #per garantire che ci siano in egual numero, devo per forza verificarlo io. può capitare che se tutte le det con score più alto sono le prime, l'if sopra non mette in egual numero perché il controllo non ha mai esito positivo
+        if(n_wrong_det_stored<(n_gt_in_image*n_factor)):
+        	for index, (matched_id, label) in enumerate(zip(matched_idxs, labels)):
+        		if(n_wrong_det_stored<(n_gt_in_image*n_factor)):
+        			if(label==0 and index not in matched_index_list): #se è background e non lo avevo già preso nel for precedente
+        				best_det_for_each_gt.append(proposals_in_image[index])
+        				n_wrong_det_stored+=1
+        				matched_index_list.append(index)
+        		else:
+        			break
+        #può accadere che non abbia identificato nessuna persona nonostante c'era nel GT
+        #in questo caso, manderò solo proposals negative di background che dovrebbero portare il modello a distinguere meglio fin da subito tra persona e background
+        #print(best_det_for_each_gt)
+        #x=input()
+        return best_det_for_each_gt
+        #return matched_idxs, labels
+    
+    
     
     def forward(
         self,
@@ -580,87 +720,3 @@ class RegionProposalNetwork(torch.nn.Module):
                 "loss_rpn_box_reg": loss_rpn_box_reg,
             }
         return boxes, losses
-
-
-def assign_targets_to_proposals_gt(self, proposals_in_image, gt_boxes_in_image, gt_labels_in_image):
-        # type: (List[Tensor], List[Tensor], List[Tensor]) -> Tuple[List[Tensor], List[Tensor]]
-        #2 liste vuote. La label qui conterrà le label dell'oggetto preso dalla GT.
-        #matched_idxs = []
-        #labels = []
-        if gt_boxes_in_image.numel() == 0:
-                # Background image
-                #img vuota sensa oggetti se dal GT vedo che non ci sono box. Allora tensore tutto a 0
-                device = proposals_in_image.device
-                clamped_matched_idxs_in_image = torch.zeros(
-                    (proposals_in_image.shape[0],), dtype=torch.int64, device=device
-                )
-                labels_in_image = torch.zeros((proposals_in_image.shape[0],), dtype=torch.int64, device=device)
-        else:
-                
-                match_quality_matrix = box_ops.box_iou(gt_boxes_in_image, proposals_in_image)
-                matched_idxs_in_image = self.proposal_matcher_gt(match_quality_matrix)
-                #print(matched_idxs_in_image) #tensor([ 0, -1, -1,  0,  1,  2], device='cuda:0')
-                # get the targets corresponding GT for each proposal.
-                #da quello che ho capito questo tensore lungo n (es 6) funziona così:
-                #ogni n-esima proposals, mi chiedo a quale delle bbox del tensore delle GT somiglia di più
-                #estraggo gli id
-
-                clamped_matched_idxs_in_image = matched_idxs_in_image.clamp(min=0)
-                #print(clamped_matched_idxs_in_image) #tensor([0, 0, 0, 0, 1, 2], device='cuda:0')
-                #il clamping viene fatto per evitare l'errore
-
-                labels_in_image = gt_labels_in_image[clamped_matched_idxs_in_image]
-                labels_in_image = labels_in_image.to(dtype=torch.int64)
-                #print(labels_in_image) #tensor([1, 1, 1, 1, 1, 1], device='cuda:0')
-
-                # Label background (below the low threshold)
-                bg_inds = matched_idxs_in_image == self.proposal_matcher_gt.BELOW_LOW_THRESHOLD
-                labels_in_image[bg_inds] = 0
-
-                # Label ignore proposals (between low and high thresholds)
-                ignore_inds = matched_idxs_in_image == self.proposal_matcher_gt.BETWEEN_THRESHOLDS
-                labels_in_image[ignore_inds] = -1  # -1 is ignored by sampler
-
-        #matched_idxs.append(clamped_matched_idxs_in_image) #gli id effettivamente corretti
-        #può capitare che la best proposal non sia quella corretta!
-        #labels.append(labels_in_image)
-        matched_idxs=clamped_matched_idxs_in_image
-        labels=labels_in_image
-        #print(len(gt_boxes_in_image))  # 3
-        #print(matched_idxs) # [tensor([0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], device='cuda:0')]
-        #print(labels) # [tensor([1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0], device='cuda:0')]
-        
-        #1 conto numero di gt totali -> 3
-        #2 per ogni valore, cerco in matched idx se c'è, es cerco 0, 1, 2; cercando al tempo stesso in labels se c'è il valore 1 indicando che quel match è effettivamente sulla persona
-        #3 alla prima corrispondenza, salvo l'indice (essendo già ordinati decrescenti è best match) e passo al prossimo; se non trovo niente, salto al prossimo valore fino a terminarli
-        #4 al di fuori di questa funzione, keep gli indici trovati
-        n_gt_in_image=len(gt_boxes_in_image)
-        best_det_for_each_gt = []
-        n_wrong_det_stored=0
-        matched_index_list=[]
-        for gt in range(0,n_gt_in_image): #per quanti gt boxes ci sono
-        	for index, (matched_id, label) in enumerate(zip(matched_idxs, labels)):
-        		#qui tengo sempre in egual numero le det con score più alto che però sono errate, label=0 -> background
-        		if(label==0 and n_wrong_det_stored<n_gt_in_image):
-        			best_det_for_each_gt.append(proposals_in_image[index])
-        			n_wrong_det_stored+=1
-        			matched_index_list.append(index)
-        		#se label=1 persona, poi controllo che il valore in matched_id sia gt
-        		if(label==1 and matched_id==gt):
-        			best_det_for_each_gt.append(proposals_in_image[index])
-        			matched_index_list.append(index)
-        			break
-        #per garantire che ci siano in egual numero, devo per forza verificarlo io. può capitare che se tutte le det con score più alto sono le prime, l'if sopra non mette in egual numero perché il controllo non ha mai esito positivo
-        if(n_wrong_det_stored<n_gt_in_image):
-        	for index, (matched_id, label) in enumerate(zip(matched_idxs, labels)):
-        		if(n_wrong_det_stored<n_gt_in_image):
-        			if(label==0 and index not in matched_index_list): #se è background e non lo avevo già preso nel for precedente
-        				best_det_for_each_gt.append(proposals_in_image[index])
-        				n_wrong_det_stored+=1
-        				matched_index_list.append(index)
-        		else:
-        			break
-        #può accadere che non abbia identificato nessuna persona nonostante c'era nel GT
-        #in questo caso, manderò solo proposals negative di background che dovrebbero portare il modello a distinguere meglio fin da subito tra persona e background
-        return best_det_for_each_gt
-        #return matched_idxs, labels
