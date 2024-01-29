@@ -538,24 +538,25 @@ class RegionProposalNetwork(torch.nn.Module):
         labels=labels_in_image
         #torch.set_printoptions(threshold=10_000)
         #Idea: il risultato del proposal è un tensore labels dove 0 è il bg, 1 è la persona
-        person_score_indices = [index for index, value in enumerate(labels) if value == 1]
-        #print(len(person_score_indices))
-        bg_score_indices = [index for index, value in enumerate(labels) if value == 0]
-        #print(person_score_indices)
+        #con == 1 ottengo tensore di True e False, con nonzero ottengo gli indici
+        person_score_indices = torch.nonzero(labels == 1).flatten()
+        bg_score_indices = torch.nonzero(labels == 0).flatten()
+
         #questi indici li posso ora sfruttare per dividere le prop come sopra.
         #In pratica, gli indici con persona -> la proposal ha soddisfatto la thresh di IoU per considerare la prop appartenente a persona
         #Gli indici a bg -> non ha soddisfatto la thresh
         #Divisi in queste due "partizioni", posso prendere le n migliori
         #import time
         #start = time.time()
+
         if gt_boxes_in_image.numel() > 0:
+        	device = proposals_in_image.device
         	best_det_for_each_gt=[] #Il metodo è lento, però posso impostare lo score thresh a 0.1 tranquillamente e ridurre di molto le proposal. Lo posso fare perché nella logica della scelta delle proposal, le proposal con IoU molto alto ma score molto basso hanno distanza massima e non verranno mai scelte; è inutile quindi che mi porto dietro tanti indici peggiorando notevolmente le performance
-        	for match_matrix_each_gt in match_quality_matrix: #itero per GT
-        		iou_indices = list(range(len(match_quality_matrix[0])))
-        		# sorting ora per valore IoU in ordine decrescente
-        		sorted_iou_indices = sorted(iou_indices, key=lambda i: match_matrix_each_gt[i - 1], reverse=True)
-        		bg_iou_indices = [index for index in sorted_iou_indices if index in bg_score_indices]
-        		person_iou_indices = [index for index in sorted_iou_indices if index in person_score_indices]
+        	for match_matrix_each_gt in match_quality_matrix: #itero per GT			
+        		_ , iou_indices = torch.sort(match_matrix_each_gt, 0, descending=True)
+        		person_mask = torch.isin(iou_indices, person_score_indices)
+        		person_iou_indices = iou_indices[person_mask]
+        		bg_iou_indices = iou_indices[~person_mask]
         		#es:
         		#person_score_indices: [0, 2, 4, 6, 8, 9, 19, 21, 29, 30, 42, 45, 49, 53, 73, 105, 199]
         		#person_iou_indices: [9, 30, 2, 6, 53, 4, 8, 105, 29, 19, 45, 21, 0, 49, 73, 199, 42]
@@ -566,14 +567,30 @@ class RegionProposalNetwork(torch.nn.Module):
         		#Per questo motivo metto un termine weight, incrementato di 1 ogni volta che passo all'indice successivo, per pesare e dare priorità a quei valori che appaiono prima nel tensore. Inoltre prima rischiavo di prendere il 199 che non aveva alcun motivo di essere preso
         		#Con l'aggiunta di weight, 2 ha d=3, 6 ha d=3, 199 d=16
         		#Prima seleziono le persone
-        		distance_dict = {}
-        		weight=0
-        		for iou_index in person_iou_indices:
-        			distance_dict[iou_index] = abs(person_iou_indices.index(iou_index) - person_score_indices.index(iou_index)) + weight
-        			weight+=1
-        		n_person=1 #1 vuol dire che per ogni GT prendo 1 sola proposal
-        		sorted_distance_dict = sorted(distance_dict, key=distance_dict.get)
-        		top_n_index_person = sorted_distance_dict[:n_person]
+        		#tensore con l'ordine in cui si trovano i vari indici. Lo userò poi per fare la differenza
+        		index_iou = torch.arange(len(person_iou_indices), device=device)
+        		#tensore vuoto di zeri che andrò ad aggiornarlo con le distanze
+        		index_score = torch.zeros_like(person_iou_indices, device=device)
+        		#quello alla pos[i] lo aggiornerò con la posizione in person score rispettiva
+        		for i, index in enumerate(person_iou_indices):
+        			index_score[i] = torch.where(person_score_indices == index)[0]
+        		"""
+person iou indices [20, 5, 21, 393, 8, 123, 499, 869, 50, 3201, 4, 2,
+          72, 15, 1587, 66, 716, 7]
+person score indices [   2,    4,    5,    7,    8,   15,   20,   21,   50,   66,   72,  123,
+         393,  499,  716,  869, 1587, 3201]
+index score [ 6,  2,  7, 12,  4, 11, 13, 15,  8, 17,  1,  0, 10,  5, 16,  9, 14,  3],
+index iou tensor [ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17],
+distance tensor [ 6,  2,  7, 12,  4, 11, 13, 15,  8, 17, 19, 22, 14, 21, 16, 21, 18, 31]
+        		"""
+        		#tensore di 0, 1, 2, ....
+        		weights = torch.arange(len(person_iou_indices), dtype=torch.int64, device=device)
+        		distances = torch.abs(index_iou - index_score) + weights
+        		sorted_indices = torch.argsort(distances)
+        		# Sorto ora in base alle distanze
+        		sorted_person_iou_indices = person_iou_indices[sorted_indices]
+        		n_person=1
+        		top_n_index_person=sorted_person_iou_indices[:n_person]
         		#Devo controllare che non prendo due volte una stessa proposal, perché magari ha abbastanza IoU da overlappare due persone vicine
         		taken=[] #lista temporanea per il controllo
         		for index_person in top_n_index_person:
@@ -586,14 +603,18 @@ class RegionProposalNetwork(torch.nn.Module):
         				taken.append(next_index)
         				best_det_for_each_gt.append(proposals_in_image[next_index])
         		#Ora seleziono i background
-        		distance_dict = {}
-        		weight=0
-        		for iou_index in bg_iou_indices:
-        			distance_dict[iou_index] = abs(bg_iou_indices.index(iou_index) - bg_score_indices.index(iou_index)) + weight
-        			weight+=1
-        		n_bg=1 #Per ogni gt prendo 1 background
-        		sorted_distance_dict = sorted(distance_dict, key=distance_dict.get)
-        		top_n_index_bg = sorted_distance_dict[:n_bg]
+        		index_iou = torch.arange(len(bg_iou_indices), device=device)
+        		index_score = torch.zeros_like(bg_iou_indices, device=device)
+        		for i, index in enumerate(bg_iou_indices):
+        			index_score[i] = torch.where(bg_score_indices == index)[0]
+        		#tensore di 0, 1, 2, ....
+        		weights = torch.arange(len(bg_iou_indices), dtype=torch.int64, device=device)
+        		distances = torch.abs(index_iou - index_score) + weights
+        		sorted_indices = torch.argsort(distances)
+        		# Sorto ora in base alle distanze
+        		sorted_bg_iou_indices = bg_iou_indices[sorted_indices]
+        		n_bg=1
+        		top_n_index_bg=sorted_bg_iou_indices[:n_bg]
         		#Devo controllare che non prendo due volte una stessa proposal, con background in teoria è molto più raro che accada
         		taken=[] #lista temporanea per il controllo
         		for index_bg in top_n_index_bg:
