@@ -551,6 +551,8 @@ class RegionProposalNetwork(torch.nn.Module):
 
         if gt_boxes_in_image.numel() > 0:
         	device = proposals_in_image.device
+        	n_gt_in_image=len(gt_boxes_in_image)
+        	n_gt_now=0 #cosi sono sicuro di controllare per ogni gt
         	best_det_for_each_gt=[] #Il metodo è lento, però posso impostare lo score thresh a 0.1 tranquillamente e ridurre di molto le proposal. Lo posso fare perché nella logica della scelta delle proposal, le proposal con IoU molto alto ma score molto basso hanno distanza massima e non verranno mai scelte; è inutile quindi che mi porto dietro tanti indici peggiorando notevolmente le performance
         	for match_matrix_each_gt in match_quality_matrix: #itero per GT			
         		_ , iou_indices = torch.sort(match_matrix_each_gt, 0, descending=True)
@@ -594,14 +596,17 @@ distance tensor [ 6,  2,  7, 12,  4, 11, 13, 15,  8, 17, 19, 22, 14, 21, 16, 21,
         		#Devo controllare che non prendo due volte una stessa proposal, perché magari ha abbastanza IoU da overlappare due persone vicine
         		taken=[] #lista temporanea per il controllo
         		for index_person in top_n_index_person:
-        			if index_person not in taken:
+        			if index_person not in taken and matched_idxs[index_person]==n_gt_now:
         				taken.append(index_person)
         				best_det_for_each_gt.append(proposals_in_image[index_person])
         			else:
         				#se è già preso, allora cerco il prossimo index
-        				next_index = next(i for i in sorted_distance_dict if i not in taken)
+        				next_index = next((i for i in sorted_person_iou_indices if (i not in taken and matched_idxs[index_person]==n_gt_now)), None)
+        				if next_index is None: #se è None vuol dire che non ho trovato un indice
+        					break #posso uscire subito dal for perché vuol dire che li ho passati tutti e non ho trovato nulla che soddisfi la condizione
         				taken.append(next_index)
         				best_det_for_each_gt.append(proposals_in_image[next_index])
+        		n_gt_now+=1
         		#Ora seleziono i background
         		index_iou = torch.arange(len(bg_iou_indices), device=device)
         		index_score = torch.zeros_like(bg_iou_indices, device=device)
@@ -623,7 +628,9 @@ distance tensor [ 6,  2,  7, 12,  4, 11, 13, 15,  8, 17, 19, 22, 14, 21, 16, 21,
         				best_det_for_each_gt.append(proposals_in_image[index_bg])
         			else:
         				#se già preso, cerco il prossimo index
-        				next_index = next(i for i in sorted_distance_dict if i not in taken)
+        				next_index = next((i for i in sorted_bg_iou_indices if i not in taken), None)
+        				if next_index is None:
+        					break
         				taken.append(next_index)
         				best_det_for_each_gt.append(proposals_in_image[next_index])
         		
