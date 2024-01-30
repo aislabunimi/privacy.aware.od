@@ -476,210 +476,60 @@ class RegionProposalNetwork(torch.nn.Module):
                     (proposals_in_image.shape[0],), dtype=torch.int64, device=device
                 )
                 labels_in_image = torch.zeros((proposals_in_image.shape[0],), dtype=torch.int64, device=device)
+                best_det_for_each_gt=torch.empty((0,)).to(device)
         else:
-                #0: le proposal che mi arrivano qui sono ordinate già per score
-                #1: ottengo l'IoU di ogni proposal rispetto le gt nell'img
-                match_quality_matrix = box_ops.box_iou(gt_boxes_in_image, proposals_in_image)
-                # match_quality_matrix is M (gt) x N (predicted)
-                #2: ordino per IoU in ordine decrescente, quindi prima le proposal con maggiore IoU
-                #ci sono pred con IoU molto alto, tipo 0.6; ma hanno score basso, tipo 0.01. Varrebbe la pena filtrare tutte quelle proposal che hanno score molto basso.
-                #devo mandare avanti robe con IoU alto ma con score anche decente
-                #def custom_sort(item):
-                #	iou = item['iou'].item() #if 'iou' in item else 0.0
-                #	score = item['score'].item() #if 'score' in item else 0.0
-                #	return -iou
-                #	#return (-iou, -score)
-                #sorted_data = sorted(data_dict, key=custom_sort)
-                # intevalli in parti uguali
-                #num_intervals = 10
-                #interval_size = 1.0 / num_intervals
-                # lista per ogni invervallo
-                #interval_dicts = [[] for _ in range(num_intervals)]
-                # partiziono il data dict in intervals
-                #for entry in sorted_data:
-                #	iou = entry['iou']
-                #	for interval_index in range(num_intervals):
-                #		lower_bound = interval_index * interval_size
-                #		upper_bound = (interval_index + 1) * interval_size
-                #		if lower_bound <= iou <= upper_bound:
-                #			interval_dicts[interval_index].append(entry)
-                #			break
-                #cosi quando selezionerò la prop lo farò non per best score ma best iou, sia in neg che pos
-                #match_quality_matrix, _ = torch.sort(match_quality_matrix, descending=True)
-                matched_idxs_in_image = self.proposal_matcher_gt(match_quality_matrix)
-                #Questi sono gli id della match quality matrix che soddisfano il proposal matcher gt
-                # #i valori usati per scegliere se una proposal matcha la gt sono questi fg_iou_thresh e bg_iou_thresh
-                #print(matched_idxs_in_image) #tensor([ 0, -1, -1,  0,  1,  2], device='cuda:0')
-                # get the targets corresponding GT for each proposal.
-                #da quello che ho capito questo tensore lungo n (es 6) funziona così:
-                #ogni n-esima proposals, mi chiedo a quale delle bbox del tensore delle GT somiglia di più
-                #estraggo gli id
-
-                clamped_matched_idxs_in_image = matched_idxs_in_image.clamp(min=0)
-                #print(clamped_matched_idxs_in_image) #tensor([0, 0, 0, 0, 1, 2], device='cuda:0')
-                #il clamping viene fatto per evitare l'errore
-
-                labels_in_image = gt_labels_in_image[clamped_matched_idxs_in_image]
-                labels_in_image = labels_in_image.to(dtype=torch.int64)
-                #print(labels_in_image) #tensor([1, 1, 1, 1, 1, 1], device='cuda:0')
-
-                # Label background (below the low threshold)
-                bg_inds = matched_idxs_in_image == self.proposal_matcher_gt.BELOW_LOW_THRESHOLD
-                labels_in_image[bg_inds] = 0
-
-                # Label ignore proposals (between low and high thresholds)
-                ignore_inds = matched_idxs_in_image == self.proposal_matcher_gt.BETWEEN_THRESHOLDS
-                labels_in_image[ignore_inds] = -1  # -1 is ignored by sampler
-
-        #matched_idxs.append(clamped_matched_idxs_in_image) #gli id effettivamente corretti
-        #può capitare che la best proposal non sia quella corretta!
-        #labels.append(labels_in_image)
-        matched_idxs=clamped_matched_idxs_in_image
-        labels=labels_in_image
-        #torch.set_printoptions(threshold=10_000)
-        #Idea: il risultato del proposal è un tensore labels dove 0 è il bg, 1 è la persona
-        #con == 1 ottengo tensore di True e False, con nonzero ottengo gli indici
-        person_score_indices = torch.nonzero(labels == 1).flatten()
-        bg_score_indices = torch.nonzero(labels == 0).flatten()
-
-        #questi indici li posso ora sfruttare per dividere le prop come sopra.
-        #In pratica, gli indici con persona -> la proposal ha soddisfatto la thresh di IoU per considerare la prop appartenente a persona
-        #Gli indici a bg -> non ha soddisfatto la thresh
-        #Divisi in queste due "partizioni", posso prendere le n migliori
-        #import time
-        #start = time.time()
-
-        if gt_boxes_in_image.numel() > 0:
+        	match_quality_matrix = box_ops.box_iou(gt_boxes_in_image, proposals_in_image)
         	device = proposals_in_image.device
-        	n_gt_in_image=len(gt_boxes_in_image)
-        	n_gt_now=0 #cosi sono sicuro di controllare per ogni gt
+        	#n_gt_in_image=len(gt_boxes_in_image)
+        	#n_gt_now=0 #cosi sono sicuro di controllare per ogni gt
         	best_det_for_each_gt=[] #Il metodo è lento, però posso impostare lo score thresh a 0.1 tranquillamente e ridurre di molto le proposal. Lo posso fare perché nella logica della scelta delle proposal, le proposal con IoU molto alto ma score molto basso hanno distanza massima e non verranno mai scelte; è inutile quindi che mi porto dietro tanti indici peggiorando notevolmente le performance
+        	taken=[] #per non prendere 2 volte le stesse proposals
         	for match_matrix_each_gt in match_quality_matrix: #itero per GT			
-        		_ , iou_indices = torch.sort(match_matrix_each_gt, 0, descending=True)
-        		person_mask = torch.isin(iou_indices, person_score_indices)
-        		person_iou_indices = iou_indices[person_mask]
-        		bg_iou_indices = iou_indices[~person_mask]
-        		#es:
-        		#person_score_indices: [0, 2, 4, 6, 8, 9, 19, 21, 29, 30, 42, 45, 49, 53, 73, 105, 199]
-        		#person_iou_indices: [9, 30, 2, 6, 53, 4, 8, 105, 29, 19, 45, 21, 0, 49, 73, 199, 42]
-        		#Idea: la prima lista rappresenta gli indici ordinati per score. La seconda rappresenta gli indici ordinati per IoU.
-        		#Allora prendo gli indici di IoU, per ognuno di essi li cerco nella lista person_score e calcolo la loro distanza relativa in valore assoluto
-        		#Questo permette di bilanciare l'IoU e lo Score, dando però priorità a IoU più alta
-        		#Nell'es sopra, 6 ha d=0, 2 ha d=1, 199 d=2. Idealmente vorrei prendere 2, perché arriva prima e bilancia meglio le due cose
-        		#Per questo motivo metto un termine weight, incrementato di 1 ogni volta che passo all'indice successivo, per pesare e dare priorità a quei valori che appaiono prima nel tensore. Inoltre prima rischiavo di prendere il 199 che non aveva alcun motivo di essere preso
-        		#Con l'aggiunta di weight, 2 ha d=3, 6 ha d=3, 199 d=16
-        		#Prima seleziono le persone
-        		#tensore con l'ordine in cui si trovano i vari indici. Lo userò poi per fare la differenza
-        		index_iou = torch.arange(len(person_iou_indices), device=device)
-        		#tensore vuoto di zeri che andrò ad aggiornarlo con le distanze
-        		index_score = torch.zeros_like(person_iou_indices, device=device)
-        		#quello alla pos[i] lo aggiornerò con la posizione in person score rispettiva
-        		for i, index in enumerate(person_iou_indices):
-        			index_score[i] = torch.where(person_score_indices == index)[0]
+        		iou_values , iou_indices = torch.sort(match_matrix_each_gt, 0, descending=True)
         		"""
-person iou indices [20, 5, 21, 393, 8, 123, 499, 869, 50, 3201, 4, 2,
-          72, 15, 1587, 66, 716, 7]
-person score indices [   2,    4,    5,    7,    8,   15,   20,   21,   50,   66,   72,  123,
-         393,  499,  716,  869, 1587, 3201]
-index score [ 6,  2,  7, 12,  4, 11, 13, 15,  8, 17,  1,  0, 10,  5, 16,  9, 14,  3],
-index iou tensor [ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17],
-distance tensor [ 6,  2,  7, 12,  4, 11, 13, 15,  8, 17, 19, 22, 14, 21, 16, 21, 18, 31]
+        		Premessa 1 (attivare proposals): ordinerei tutte le proposals per ogni target in base a IOU con esso (tralasciando condifence e label), seleziono le prime n e le passo alla loss
         		"""
-        		#tensore di 0, 1, 2, ....
-        		weights = torch.arange(len(person_iou_indices), dtype=torch.int64, device=device)
-        		distances = torch.abs(index_iou - index_score) + weights
-        		sorted_indices = torch.argsort(distances)
-        		# Sorto ora in base alle distanze
-        		sorted_person_iou_indices = person_iou_indices[sorted_indices]
-        		n_person=1
-        		top_n_index_person=sorted_person_iou_indices[:n_person]
-        		#Devo controllare che non prendo due volte una stessa proposal, perché magari ha abbastanza IoU da overlappare due persone vicine
-        		taken=[] #lista temporanea per il controllo
-        		for index_person in top_n_index_person:
-        			if index_person not in taken and matched_idxs[index_person]==n_gt_now:
-        				taken.append(index_person)
-        				best_det_for_each_gt.append(proposals_in_image[index_person])
+        		n_prop_to_keep = 1 #numero di proposal per ogni GT da tenere indipendentemente dal loro score, label ecc..., ma solo ordinate per loro IoU. In teoria sono necessariamente positive
+        		top_prop=iou_indices[:n_prop_to_keep]
+        		for index_prop in top_prop:
+        			#il matched_idxs mi darebbe problemi usarlo, perché filtra già per 0.5; a me il matcher non serve più
+        			if index_prop not in taken:
+        			#if proposals_in_image[index_prop] not in best_det_for_each_gt: #and matched_idxs[index_prop]==n_gt_now:
+        				taken.append(index_prop)
+        				best_det_for_each_gt.append(proposals_in_image[index_prop])
         			else:
         				#se è già preso, allora cerco il prossimo index
-        				next_index = next((i for i in sorted_person_iou_indices if (i not in taken and matched_idxs[index_person]==n_gt_now)), None)
+        				next_index = next((i for i in iou_indices if i not in taken), None)
+        				#next_index = next((i for i in iou_indices if (proposals_in_image[i] not in best_det_for_each_gt)), None) # and matched_idxs[index_prop]==n_gt_now)), None)
         				if next_index is None: #se è None vuol dire che non ho trovato un indice
         					break #posso uscire subito dal for perché vuol dire che li ho passati tutti e non ho trovato nulla che soddisfi la condizione
-        				taken.append(next_index)
+        				taken.append(index_prop)
         				best_det_for_each_gt.append(proposals_in_image[next_index])
-        		n_gt_now+=1
-        		#Ora seleziono i background
-        		index_iou = torch.arange(len(bg_iou_indices), device=device)
-        		index_score = torch.zeros_like(bg_iou_indices, device=device)
-        		for i, index in enumerate(bg_iou_indices):
-        			index_score[i] = torch.where(bg_score_indices == index)[0]
-        		#tensore di 0, 1, 2, ....
-        		weights = torch.arange(len(bg_iou_indices), dtype=torch.int64, device=device)
-        		distances = torch.abs(index_iou - index_score) + weights
-        		sorted_indices = torch.argsort(distances)
-        		# Sorto ora in base alle distanze
-        		sorted_bg_iou_indices = bg_iou_indices[sorted_indices]
-        		n_bg=1
-        		top_n_index_bg=sorted_bg_iou_indices[:n_bg]
-        		#Devo controllare che non prendo due volte una stessa proposal, con background in teoria è molto più raro che accada
-        		taken=[] #lista temporanea per il controllo
-        		for index_bg in top_n_index_bg:
-        			if index_bg not in taken:
-        				taken.append(index_bg)
-        				best_det_for_each_gt.append(proposals_in_image[index_bg])
+        		"""
+        		Premessa 2 (sopprimere predicitions FPiou): considero solo le bbox con label 1 (persona), le ordino per confidence  e seleziono le prime t con iou < di 0.5
+        		"""
+        		"""
+        		Commento mio: in realtà il modello lavora con objectness score e filtra solo in base a quello se è persona o meno. Questo vuol dire che non so mai se una persona è persona, ma solo se soddisfa la soglia di threshold messa dal matcher. Siccome la label non mi interessa, a sto punto ordino per confidence tutte le bbox che hanno iou<0.5 e propago quelle, che so già che sono background
+        		"""
+        		iou_thresh=0.5
+        		iou_indices = iou_indices[iou_values[iou_indices] < iou_thresh] #gli indici che soddisfano IoU. Li prendo rispetto iou_indices quindi sono già ordinati per score
+        		n_fpiou_to_keep = 1 #numero di proposal per ogni GT da tenere per sopprimere le fpiou, sono ordinate per confidence e hanno meno thresh
+        		top_fpiou=iou_indices[:n_fpiou_to_keep]
+        		for index_fpiou in top_fpiou:
+        			if index_fpiou not in taken:
+        			#if proposals_in_image[index_fpiou] not in best_det_for_each_gt: #and matched_idxs[index_fpiou]==n_gt_now:
+        				taken.append(index_fpiou)
+        				best_det_for_each_gt.append(proposals_in_image[index_fpiou])
         			else:
-        				#se già preso, cerco il prossimo index
-        				next_index = next((i for i in sorted_bg_iou_indices if i not in taken), None)
-        				if next_index is None:
-        					break
-        				taken.append(next_index)
+        				#se è già preso, allora cerco il prossimo index
+        				next_index = next((i for i in iou_indices if i not in taken), None) # and matched_idxs[index_fpiou]==n_gt_now)), None)
+        				if next_index is None: #se è None vuol dire che non ho trovato un indice
+        					break #posso uscire subito dal for perché vuol dire che li ho passati tutti e non ho trovato nulla che soddisfi la condizione
+        				taken.append(index_fpiou)
         				best_det_for_each_gt.append(proposals_in_image[next_index])
-        		
-        	#end = time.time()
-        	#print(end - start)
-        	#x=input()
-        	return best_det_for_each_gt
+        		#n_gt_now+=1 #passo al prossimo gt
 
-        #1 conto numero di gt totali -> 3
-        #2 per ogni valore, cerco in matched idx se c'è, es cerco 0, 1, 2; cercando al tempo stesso in labels se c'è il valore 1 indicando che quel match è effettivamente sulla persona
-        #3 alla prima corrispondenza, salvo l'indice (essendo già ordinati decrescenti è best match per score) e passo al prossimo; se non trovo niente, salto al prossimo valore fino a terminarli
-        #4 al di fuori di questa funzione, keep gli indici trovati
-        n_gt_in_image=len(gt_boxes_in_image)
-        #print(n_gt_in_image)
-        n_factor=1 #serve se per ogni gt non voglio considerare 1 sola esatta ma ad esempio 2, 3
-        #farò lo stesso con le negative. Quindi: 2 persone, 2gt-> 2 proposal per ogni persona, +4 negative
-        #print(n_gt_in_image)
-        #x=input()
-        best_det_for_each_gt = []
-        n_wrong_det_stored=0
-        matched_index_list=[]
-        for gt in range(0,n_gt_in_image): #per quanti gt boxes ci sono
-        	n_matches=0
-        	for index in person_score_indices:
-        		#qui tengo sempre in egual numero le det con score più alto che però sono errate, label=0 -> background
-        		if(matched_idxs[index]==gt):
-        			best_det_for_each_gt.append(proposals_in_image[index])
-        			matched_index_list.append(index)
-        			n_matches+=1
-        			if(n_matches==n_factor):
-        				break
-        #per garantire che ci siano in egual numero, devo per forza verificarlo io. può capitare che se tutte le det con score più alto sono le prime, l'if sopra non mette in egual numero perché il controllo non ha mai esito positivo
-        for index in bg_score_indices:
-        	best_det_for_each_gt.append(proposals_in_image[index])
-        	n_wrong_det_stored+=1
-        	matched_index_list.append(index)
-        	if(n_wrong_det_stored==(n_gt_in_image*n_factor)):
-        		break
-        #può accadere che non abbia identificato nessuna persona nonostante c'era nel GT
-        #in questo caso, manderò solo proposals negative di background che dovrebbero portare il modello a distinguere meglio fin da subito tra persona e background
-        #print(best_det_for_each_gt)
-        #x=input()
-        #end = time.time()
-        #print(end - start)
-        #x=input()
         return best_det_for_each_gt
-        #return matched_idxs, labels
-    
-    
     
     def forward(
         self,
