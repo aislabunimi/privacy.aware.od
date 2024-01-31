@@ -513,7 +513,7 @@ class RegionProposalNetwork(torch.nn.Module):
         		"""
         		iou_thresh=0.5
         		iou_indices = iou_indices[iou_values[iou_indices] < iou_thresh] #gli indici che soddisfano IoU. Li prendo rispetto iou_indices quindi sono già ordinati per score
-        		n_fpiou_to_keep = 1 #numero di proposal per ogni GT da tenere per sopprimere le fpiou, sono ordinate per confidence e hanno meno thresh
+        		n_fpiou_to_keep = 10 #numero di proposal per ogni GT da tenere per sopprimere le fpiou, sono ordinate per confidence e hanno meno thresh
         		top_fpiou=iou_indices[:n_fpiou_to_keep]
         		for index_fpiou in top_fpiou:
         			if index_fpiou not in taken:

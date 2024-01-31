@@ -10,7 +10,6 @@ from unet_model import UNet
 from dataset import *
 from model_utils_and_functions import *
 from train_and_test_loops import *
-from plot_utils import *
 ############
 
 ###### CONFIG
@@ -19,14 +18,13 @@ seed_everything(0) #per rendere deterministico l'esperimento
 torch.use_deterministic_algorithms(mode=True, warn_only=True)
 device='cuda'
 #Config Plotting and Save files
-plt.rcParams['figure.figsize'] = 15, 10
-ap_log_path="plot/ap_log.txt"
-loss_log_path='plot/loss_log.txt'
+loss_log_path='results/loss_log.txt'
 ap_score_threshold=0.75
-my_ap_log_path="plot/my_ap_log.txt"
-my_ap_nointerp_thresh_path="plot/my_ap_nointerp_thresh_log.txt"
-my_ap_interp_thresh_path="plot/my_ap_interp_thresh_log.txt"
-michele_metric_folder="michele_plot"
+ap_log_path="results/ap_log.txt" #standard AP
+my_ap_log_path="results/my_ap_log.txt" #mia ap con interpolation senza filtrare i result
+my_ap_nointerp_thresh_path="results/my_ap_nointerp_thresh_log.txt" #mia ap senza interpolation ma filtrando i result
+my_ap_interp_thresh_path="results/my_ap_interp_thresh_log.txt" #mia Ap con interpolation ma filtrando i result
+michele_metric_folder="results"
 unet_save_path = "model_weights/model"
 tasknet_save_path = "tasknet_weights/tasknet"
 unet_weights_load= "model_weights/model_50.pt"
@@ -72,8 +70,11 @@ num_epochs = 50 #setto numero delle epoche
 ###### MODELLI
 #Instanzio il modello e gli iperparametri; lo muovo poi al device
 #primo parametro n canali, secondo n_classes is the number of probabilities you want to get per pixel
-unet = UNet(3, 3, False)
-unet.to(device) 
+if not train_only_tasknet:
+	unet = UNet(3, 3, False)
+	unet.to(device)
+	unet_optimizer = torch.optim.SGD(unet.parameters(), lr=0.005, momentum=0.9, weight_decay=0.0005, nesterov=True)
+	unet_scheduler = torch.optim.lr_scheduler.StepLR(unet_optimizer, step_size=10, gamma=0.5)
 
 if train_only_tasknet:
 	from torchvision.models.detection import fasterrcnn_resnet50_fpn, FasterRCNN_ResNet50_FPN_Weights
@@ -186,26 +187,3 @@ else:
     			file.write(loss_log_append)
     			
 print("Done!")
-
-#load_checkpoint(tasknet, tasknet_weights_load, tasknet_optimizer, tasknet_scheduler)
-#load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler)
-
-#show_res_test_unet(unet, tasknet, device, 'plot/val.jpg', True, 'plot/reconstructed_person.png')
-"""
-image_name_list=['val', 'cat', 'lenna', 'people']
-#image_name_list=['disturbed_val', 'disturbed_cat', 'disturbed_lenna', 'disturbed_people']
-
-load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler)
-for img in image_name_list:
-	#image_path=f'plot/{img}.jpg'
-	image_path=f'plot/disturbed_{img}.png'
-	image_save_name=f'plot/test_{img}_rec_msssim.png'
-	compare_two_results_unet(unet, tasknet, device, image_path, image_save_name, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler)
-"""
-"""
-load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler)
-for img in image_name_list:
-	image_path=f'plot/{img}.jpg'
-	image_save_name=f'plot/disturbed_{img}.png'
-	save_disturbed_pred(unet, device, image_path, image_save_name)
-"""
