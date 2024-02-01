@@ -477,14 +477,21 @@ class RegionProposalNetwork(torch.nn.Module):
                 )
                 labels_in_image = torch.zeros((proposals_in_image.shape[0],), dtype=torch.int64, device=device)
                 best_det_for_each_gt=torch.empty((0,)).to(device)
+                tensor_det = best_det_for_each_gt
         else:
         	match_quality_matrix = box_ops.box_iou(gt_boxes_in_image, proposals_in_image)
         	device = proposals_in_image.device
-        	#n_gt_in_image=len(gt_boxes_in_image)
+        	n_gt_in_image=len(gt_boxes_in_image)
         	#n_gt_now=0 #cosi sono sicuro di controllare per ogni gt
         	#best_det_for_each_gt=[] #Il metodo è lento, però posso impostare lo score thresh a 0.1 tranquillamente e ridurre di molto le proposal. Lo posso fare perché nella logica della scelta delle proposal, le proposal con IoU molto alto ma score molto basso hanno distanza massima e non verranno mai scelte; è inutile quindi che mi porto dietro tanti indici peggiorando notevolmente le performance
         	taken=[] #per non prendere 2 volte le stesse proposals. Può capitare in teoria, ma è raro. Con le negative se se ne tengono tante questo controllo rallenta molto le performance. Allora rimuovo le negative duplicate e basta
         	tensor_det = torch.empty(0).to(device) #tensore contenente le bbox che salvo
+        	#very_neg_mask = torch.zeros_like(proposals_in_image)
+        	very_neg_mask = torch.arange(len(proposals_in_image))
+        	for match_matrix_each_gt in match_quality_matrix:       		
+        		bg_thresh=0.00       		
+        		very_neg_mask[match_matrix_each_gt > bg_thresh] = -1
+        	# Idea: tengo tutte le negative che cadono nel background al 100% e che non cadono in nessun GT. Queste non dovrebbero contribuire sensibilmente alla ricostruzione dell'immagine (spero) e porterebbero a maggiore ap.
         	for match_matrix_each_gt in match_quality_matrix: #itero per GT			
         		iou_values , iou_indices = torch.sort(match_matrix_each_gt, 0, descending=True)
         		"""
@@ -514,9 +521,12 @@ class RegionProposalNetwork(torch.nn.Module):
         		"""
         		Commento mio: in realtà il modello lavora con objectness score e filtra solo in base a quello se è persona o meno. Questo vuol dire che non so mai se una persona è persona, ma solo se soddisfa la soglia di threshold messa dal matcher. Siccome la label non mi interessa, a sto punto ordino per confidence tutte le bbox che hanno iou<0.5 e propago quelle, che so già che sono background
         		"""
-        		neg_iou_indices = iou_indices[iou_values[iou_indices] < self.iou_neg_thresh] #gli indici che soddisfano IoU. Li prendo rispetto iou_indices quindi sono già ordinati per score
+        		neg_iou_indices = iou_indices[iou_values[iou_indices] < self.iou_neg_thresh] #gli indici che soddisfano IoU.
         		#numero di proposal per ogni GT da tenere per sopprimere le fpiou, sono ordinate per confidence e hanno meno thresh
+        		neg_iou_indices, _ = torch.sort(neg_iou_indices, 0, descending=False) #riordino per score
         		top_fpiou=neg_iou_indices[:self.n_top_neg_to_keep]
+        		#print(neg_iou_indices)
+        		#print(scores[neg_iou_indices])
         		#import time
         		#start=time.time()
         		for index_fpiou in top_fpiou:
@@ -538,21 +548,32 @@ class RegionProposalNetwork(torch.nn.Module):
         				#best_det_for_each_gt.append(proposals_in_image[next_index])
         				tensor_det = torch.cat([tensor_det, proposals_in_image[next_index].unsqueeze(0)], dim=0)
         		"""
-        		Mia premessa: porto dietro tutto ciò che è sicuramente background
+        		Mia premessa: porto dietro tutto ciò che è sicuramente background. Prop molto negative
         		"""
-        		bg_thresh=0.05
-        		bg_to_keep=512 - self.n_top_iou_to_keep - self.n_top_neg_to_keep
-        		bg_iou_indices = iou_indices[iou_values[iou_indices] < bg_thresh]
+        		"""
+        		bg_thresh=0.00
+        		bg_to_keep=int((512 - (self.n_top_iou_to_keep*n_gt_in_image) - (self.n_top_neg_to_keep*n_gt_in_image))/n_gt_in_image) #questa formula serve per prendere in modo equo n prop molto negative per ogni gt. Gli tolgo quelle che sono le prop positive e le negative in totale per tutta l'img (non per ogni gt) che devo sicuramente mantenere nel sampler. Poi divido per il numero di gt nell'immagine e trasformo in int, ottenendo quelle molto negative.
+        		#es: se n_top è 1, n_top_neg è 10, n_gt è 2, batch size è 512, terrò 245 molto negative rispetto al primo gt, e poi 245 molto neg rispetto al secondo gt. 512-490 = 22, 2 pos e 20 neg.
+        		bg_iou_indices = iou_indices[iou_values[iou_indices] <= bg_thresh]
+        		bg_iou_indices, _ = torch.sort(bg_iou_indices, 0, descending=False) #riordino per score
         		top_bg_iou_indices = bg_iou_indices[:bg_to_keep]
         		for index_bg in top_bg_iou_indices:
-        			tensor_det = torch.cat([tensor_det, proposals_in_image[index_bg].unsqueeze(0)], dim=0)	
+        			tensor_det = torch.cat([tensor_det, proposals_in_image[index_bg].unsqueeze(0)], dim=0)
+        		"""
         		#n_gt_now+=1 #passo al prossimo gt
         		#end=time.time()
         		#print(end-start)
 
-        tensor_det = torch.unique(tensor_det, dim=0) #da usare con metodo nuovo. Elimino possibili proposal prese due volte. Più efficiente che scorrere nelle liste. As es su 6 gt se tengo 1 pos e 100 neg ho 66 duplicati; in totale tengo alla fine 540 proposal (il max era 606).
+        	#Mia premessa: porto dietro tutto ciò che è sicuramente background. Prop molto negative
+        	#sono già ordinati per score, essendo indici delle prop come l'originale. Mi basta eliminare le -1 che sono quelle che non soddisfano quella thresh
+        	very_neg_indices = very_neg_mask[very_neg_mask != -1]
+        	vn_to_keep=int(512 - (self.n_top_iou_to_keep*n_gt_in_image) - (self.n_top_neg_to_keep*n_gt_in_image))
+        	top_very_neg = very_neg_indices[:vn_to_keep]
+        	for index_vn in very_neg_indices:
+        		tensor_det = torch.cat([tensor_det, proposals_in_image[index_vn].unsqueeze(0)], dim=0)
+        	tensor_det = torch.unique(tensor_det, dim=0) #da usare con metodo nuovo. Elimino possibili proposal prese due volte. Più efficiente che scorrere nelle liste. As es su 6 gt se tengo 1 pos e 100 neg ho 66 duplicati; in totale tengo alla fine 540 proposal (il max era 606).
         #print(len(gt_boxes_in_image))
-        #print(len(tensor_det))
+        print(len(tensor_det))
         return tensor_det
     
     def forward(
