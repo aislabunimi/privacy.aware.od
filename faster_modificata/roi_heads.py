@@ -25,6 +25,7 @@ def fastrcnn_loss(class_logits, box_regression, labels, regression_targets):
     labels = torch.cat(labels, dim=0)
     regression_targets = torch.cat(regression_targets, dim=0)
 
+    #la classification loss è calcolata su tutte le pred, sia le pos che negative, in base alla probabilità di classe assegnata e rispettiva label.
     classification_loss = F.cross_entropy(class_logits, labels)
 
     # get indices that correspond to the regression targets for
@@ -35,6 +36,7 @@ def fastrcnn_loss(class_logits, box_regression, labels, regression_targets):
     N, num_classes = class_logits.shape
     box_regression = box_regression.reshape(N, box_regression.size(-1) // 4, 4)
 
+    #la box loss è calcolata solo sulle positive ovvimanete.
     box_loss = F.smooth_l1_loss(
         box_regression[sampled_pos_inds_subset, labels_pos],
         regression_targets[sampled_pos_inds_subset],
@@ -628,10 +630,10 @@ class RoIHeads(nn.Module):
 
     def subsample(self, labels):
         # type: (List[Tensor]) -> List[Tensor]
-        sampled_pos_inds, sampled_neg_inds = self.fg_bg_sampler(labels)
+        sampled_pos_inds, sampled_neg_inds = self.fg_bg_sampler(labels) #2 maschere binarie dove è 1 se è indice pos ed è stato scelto oppure 0 se non lo è.
         sampled_inds = []
         for img_idx, (pos_inds_img, neg_inds_img) in enumerate(zip(sampled_pos_inds, sampled_neg_inds)):
-            img_sampled_inds = torch.where(pos_inds_img | neg_inds_img)[0]
+            img_sampled_inds = torch.where(pos_inds_img | neg_inds_img)[0] #si fa un or fra le due maschere e si scelgono solo quegli indici che sono stati presi dal sampler o come pos o come neg
             sampled_inds.append(img_sampled_inds)
         return sampled_inds
 
@@ -675,6 +677,7 @@ class RoIHeads(nn.Module):
         # get matching gt indices for each proposal
         matched_idxs, labels = self.assign_targets_to_proposals(proposals, gt_boxes, gt_labels)
         # sample a fixed proportion of positive-negative proposals
+        #queste rispettano i due parametri di batch_size e pos_fraction. Di default sono a 512 e 0.25, quindi verranno prese 128 pos e il resto delle 512 a neg. Questo a patto che ce ne siano abbastanza di pos e neg; altrimenti, ne vengono tenute le n pos e le restanti 512 - npos sono negative.
         sampled_inds = self.subsample(labels)
         matched_gt_boxes = []
         num_images = len(proposals)

@@ -100,8 +100,6 @@ class GeneralizedRCNN(nn.Module):
         losses = {}
         losses.update(detector_losses)
         losses.update(proposal_losses)
-        #print(losses)
-        #x = input()
 
         if torch.jit.is_scripting():
             if not self._has_warned:

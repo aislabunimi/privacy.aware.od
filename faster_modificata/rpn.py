@@ -141,6 +141,9 @@ class RegionProposalNetwork(torch.nn.Module):
         nms_thresh: float,
         score_thresh: float = 0.0,
         use_custom_filter_proposals: bool=False,
+        n_top_iou_to_keep: int=1,
+        iou_neg_thresh: float=0.5,
+        n_top_neg_to_keep: int=100,
     ) -> None:
         super().__init__()
         self.anchor_generator = anchor_generator
@@ -159,9 +162,12 @@ class RegionProposalNetwork(torch.nn.Module):
         #se voglio usare il mio filter proposals sarà a true
         
         self.use_custom_filter_proposals = use_custom_filter_proposals
-        if use_custom_filter_proposals:
-        	#i valori sono fg_iou_thresh e bg_iou_thresh scelti da me
-        	self.proposal_matcher_gt = det_utils.Matcher(0.5, 0.5, allow_low_quality_matches=False)
+        self.n_top_iou_to_keep = n_top_iou_to_keep
+        self.iou_neg_thresh = iou_neg_thresh
+        self.n_top_neg_to_keep = n_top_neg_to_keep
+        #if use_custom_filter_proposals:
+        #	#i valori sono fg_iou_thresh e bg_iou_thresh scelti da me
+        #	self.proposal_matcher_gt = det_utils.Matcher(0.5, 0.5, allow_low_quality_matches=False)
 
         self.fg_bg_sampler = det_utils.BalancedPositiveNegativeSampler(batch_size_per_image, positive_fraction) # This class samples batches, ensuring that they contain a fixed proportion of positives
         # estrae casualmente un numero di sample positivi (con oggetto) e negativi (senza) che rispettano la proporzione
@@ -461,6 +467,7 @@ class RegionProposalNetwork(torch.nn.Module):
             final_boxes.append(boxes)
             final_scores.append(scores)
         #print(final_scores)
+        
         return final_boxes, final_scores
     
     def assign_targets_to_proposals_gt(self, proposals_in_image, gt_boxes_in_image, gt_labels_in_image, scores):
@@ -482,21 +489,23 @@ class RegionProposalNetwork(torch.nn.Module):
         	device = proposals_in_image.device
         	#n_gt_in_image=len(gt_boxes_in_image)
         	#n_gt_now=0 #cosi sono sicuro di controllare per ogni gt
-        	best_det_for_each_gt=[] #Il metodo è lento, però posso impostare lo score thresh a 0.1 tranquillamente e ridurre di molto le proposal. Lo posso fare perché nella logica della scelta delle proposal, le proposal con IoU molto alto ma score molto basso hanno distanza massima e non verranno mai scelte; è inutile quindi che mi porto dietro tanti indici peggiorando notevolmente le performance
-        	taken=[] #per non prendere 2 volte le stesse proposals
+        	#best_det_for_each_gt=[] #Il metodo è lento, però posso impostare lo score thresh a 0.1 tranquillamente e ridurre di molto le proposal. Lo posso fare perché nella logica della scelta delle proposal, le proposal con IoU molto alto ma score molto basso hanno distanza massima e non verranno mai scelte; è inutile quindi che mi porto dietro tanti indici peggiorando notevolmente le performance
+        	taken=[] #per non prendere 2 volte le stesse proposals. Può capitare in teoria, ma è raro. Con le negative se se ne tengono tante questo controllo rallenta molto le performance. Allora rimuovo le negative duplicate e basta
+        	tensor_det = torch.empty(0).to(device) #tensore contenente le bbox che salvo
         	for match_matrix_each_gt in match_quality_matrix: #itero per GT			
         		iou_values , iou_indices = torch.sort(match_matrix_each_gt, 0, descending=True)
         		"""
         		Premessa 1 (attivare proposals): ordinerei tutte le proposals per ogni target in base a IOU con esso (tralasciando condifence e label), seleziono le prime n e le passo alla loss
         		"""
-        		n_prop_to_keep = 1 #numero di proposal per ogni GT da tenere indipendentemente dal loro score, label ecc..., ma solo ordinate per loro IoU. In teoria sono necessariamente positive
-        		top_prop=iou_indices[:n_prop_to_keep]
+        		#numero di proposal per ogni GT da tenere indipendentemente dal loro score, label ecc..., ma solo ordinate per loro IoU. In teoria sono necessariamente positive
+        		top_prop=iou_indices[:self.n_top_iou_to_keep]
         		for index_prop in top_prop:
         			#il matched_idxs mi darebbe problemi usarlo, perché filtra già per 0.5; a me il matcher non serve più
         			if index_prop not in taken:
         			#if proposals_in_image[index_prop] not in best_det_for_each_gt: #and matched_idxs[index_prop]==n_gt_now:
         				taken.append(index_prop)
-        				best_det_for_each_gt.append(proposals_in_image[index_prop])
+        				#best_det_for_each_gt.append(proposals_in_image[index_prop])
+        				tensor_det = torch.cat([tensor_det, proposals_in_image[index_prop].unsqueeze(0)], dim=0)
         			else:
         				#se è già preso, allora cerco il prossimo index
         				next_index = next((i for i in iou_indices if i not in taken), None)
@@ -504,32 +513,54 @@ class RegionProposalNetwork(torch.nn.Module):
         				if next_index is None: #se è None vuol dire che non ho trovato un indice
         					break #posso uscire subito dal for perché vuol dire che li ho passati tutti e non ho trovato nulla che soddisfi la condizione
         				taken.append(index_prop)
-        				best_det_for_each_gt.append(proposals_in_image[next_index])
+        				tensor_det = torch.cat([tensor_det, proposals_in_image[next_index].unsqueeze(0)], dim=0)
+        				#best_det_for_each_gt.append(proposals_in_image[next_index])
         		"""
         		Premessa 2 (sopprimere predicitions FPiou): considero solo le bbox con label 1 (persona), le ordino per confidence  e seleziono le prime t con iou < di 0.5
         		"""
         		"""
         		Commento mio: in realtà il modello lavora con objectness score e filtra solo in base a quello se è persona o meno. Questo vuol dire che non so mai se una persona è persona, ma solo se soddisfa la soglia di threshold messa dal matcher. Siccome la label non mi interessa, a sto punto ordino per confidence tutte le bbox che hanno iou<0.5 e propago quelle, che so già che sono background
         		"""
-        		iou_thresh=0.5
-        		iou_indices = iou_indices[iou_values[iou_indices] < iou_thresh] #gli indici che soddisfano IoU. Li prendo rispetto iou_indices quindi sono già ordinati per score
-        		n_fpiou_to_keep = 10 #numero di proposal per ogni GT da tenere per sopprimere le fpiou, sono ordinate per confidence e hanno meno thresh
-        		top_fpiou=iou_indices[:n_fpiou_to_keep]
+        		neg_iou_indices = iou_indices[iou_values[iou_indices] < self.iou_neg_thresh] #gli indici che soddisfano IoU. Li prendo rispetto iou_indices quindi sono già ordinati per score
+        		#numero di proposal per ogni GT da tenere per sopprimere le fpiou, sono ordinate per confidence e hanno meno thresh
+        		top_fpiou=neg_iou_indices[:self.n_top_neg_to_keep]
+        		#import time
+        		#start=time.time()
         		for index_fpiou in top_fpiou:
+        			#Metodo nuovo. Le tengo tutte anche se non sono duplicate. Alla fine di tutto rimuovo le duplicate
+        			#tensor_det = torch.cat([tensor_det, proposals_in_image[index_fpiou].unsqueeze(0)], dim=0)
+        			
+        			# Metodo vecchia. Passo una per una.
         			if index_fpiou not in taken:
         			#if proposals_in_image[index_fpiou] not in best_det_for_each_gt: #and matched_idxs[index_fpiou]==n_gt_now:
         				taken.append(index_fpiou)
-        				best_det_for_each_gt.append(proposals_in_image[index_fpiou])
+        				#best_det_for_each_gt.append(proposals_in_image[index_fpiou])
+        				tensor_det = torch.cat([tensor_det, proposals_in_image[index_fpiou].unsqueeze(0)], dim=0)
         			else:
         				#se è già preso, allora cerco il prossimo index
-        				next_index = next((i for i in iou_indices if i not in taken), None) # and matched_idxs[index_fpiou]==n_gt_now)), None)
+        				next_index = next((i for i in neg_iou_indices if i not in taken), None) # and matched_idxs[index_fpiou]==n_gt_now)), None)
         				if next_index is None: #se è None vuol dire che non ho trovato un indice
         					break #posso uscire subito dal for perché vuol dire che li ho passati tutti e non ho trovato nulla che soddisfi la condizione
         				taken.append(index_fpiou)
-        				best_det_for_each_gt.append(proposals_in_image[next_index])
+        				#best_det_for_each_gt.append(proposals_in_image[next_index])
+        				tensor_det = torch.cat([tensor_det, proposals_in_image[next_index].unsqueeze(0)], dim=0)
+        		"""
+        		Mia premessa: porto dietro tutto ciò che è sicuramente background
+        		"""
+        		bg_thresh=0.05
+        		bg_to_keep=512 - self.n_top_iou_to_keep - self.n_top_neg_to_keep
+        		bg_iou_indices = iou_indices[iou_values[iou_indices] < bg_thresh]
+        		top_bg_iou_indices = bg_iou_indices[:bg_to_keep]
+        		for index_bg in top_bg_iou_indices:
+        			tensor_det = torch.cat([tensor_det, proposals_in_image[index_bg].unsqueeze(0)], dim=0)	
         		#n_gt_now+=1 #passo al prossimo gt
+        		#end=time.time()
+        		#print(end-start)
 
-        return best_det_for_each_gt
+        tensor_det = torch.unique(tensor_det, dim=0) #da usare con metodo nuovo. Elimino possibili proposal prese due volte. Più efficiente che scorrere nelle liste. As es su 6 gt se tengo 1 pos e 100 neg ho 66 duplicati; in totale tengo alla fine 540 proposal (il max era 606).
+        #print(len(gt_boxes_in_image))
+        #print(len(tensor_det))
+        return tensor_det
     
     def forward(
         self,
@@ -589,10 +620,10 @@ class RegionProposalNetwork(torch.nn.Module):
         	if self.training:
         		boxes, scores = self.filter_proposals_custom(proposals, objectness, images.image_sizes, num_anchors_per_level, targets)
         	else:
-        		temp = self.score_thresh #intanto che testo lo score thresh non ci deve essere perchè la faster si deve comportare come una faster normale
-        		self.score_thresh = 0.0
+        		#temp = self.score_thresh #intanto che testo lo score thresh non ci deve essere perchè la faster si deve comportare come una faster normale
+        		#self.score_thresh = 0.0
         		boxes, scores = self.filter_proposals(proposals, objectness, images.image_sizes, num_anchors_per_level)
-        		self.score_thresh = temp
+        		#self.score_thresh = temp
         else:
         	boxes, scores = self.filter_proposals(proposals, objectness, images.image_sizes, num_anchors_per_level)
         
@@ -616,7 +647,7 @@ class RegionProposalNetwork(torch.nn.Module):
         		ax.text(xmin, ymin, prob, fontsize=15, bbox=dict(facecolor='yellow', alpha=0.5))
         	plt.show()
         	plt.clf()
-        """  
+        """
         
         losses = {}
         #PASSO 3: solo in training, alleno il modello a migliorare le anchors.

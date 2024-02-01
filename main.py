@@ -96,7 +96,24 @@ elif not train_backward_on_disturbed_sets:
 		rpn_pre_nms_top_n_train=2000, rpn_pre_nms_top_n_test=1000,
 		rpn_post_nms_top_n_train=2000, rpn_post_nms_top_n_test=1000,
 		rpn_nms_thresh=0.7, rpn_fg_iou_thresh=0.7, rpn_bg_iou_thresh=0.3,
-		rpn_score_thresh=0.1, use_custom_filter_proposals=use_custom_filter_proposals)
+		rpn_score_thresh=0.0, use_custom_filter_proposals=use_custom_filter_proposals,
+		rpn_n_top_iou_to_keep=1, rpn_iou_neg_thresh=0.25, rpn_n_top_neg_to_keep=10,
+		box_batch_size_per_image=512, box_positive_fraction=0.25)
+	"""
+	commento su ultimi due campi: sono del sampler degli indici delle proposal. Valore di default rispettivi: 512, 0.25. Il primo ti dice quante proposal tenere al massimo, scelte a caso. Il secondo ti dice: di quelle 512 proposal quante al massimo sono positive? Il sampler nel codice fa una roba del genere. Immaginiamo di avere 1 positiva (con IoU >0.5, il Roi head le discrimina così) e tenere 1000 negative (IoU<0.5).
+num_pos = int(self.batch_size_per_image * self.positive_fraction)   #num_pos = 512*0.25 -> 128
+# protect against not enough positive examples
+num_pos = min(positive.numel(), num_pos)   # num_pos = min(1, 128) -> 1
+num_neg = self.batch_size_per_image - num_pos    # num_neg = 512 - 1 -> 511
+# protect against not enough negative examples
+num_neg = min(negative.numel(), num_neg)    # num_neg = min(1000, 511) -> 511
+
+# randomly select positive and negative examples
+perm1 = torch.randperm(positive.numel(), device=positive.device)[:num_pos] #1 a caso fra le 1 pos che ho
+perm2 = torch.randperm(negative.numel(), device=negative.device)[:num_neg] #511 a caso fra le 1000 neg che ho
+
+Quindi:se voglio tenere tutte le negative, devo aumentare il 512 a un valore maggiore, ad esempio 2000, visto che di negative con basso IoU ne ho molte
+	"""
 
 	num_classes = 2  # 1 class (person) + background
 	# get number of input features for the classifier
@@ -135,17 +152,6 @@ if resume_training:
 #freeze_encoder(unet)
 #freeze_decoder(unet)
 
-#BLOCCO TRAINING TASKNET
-if(train_only_tasknet and not train_backward_on_disturbed_sets):
-	tasknet.train()
-	for epoch in range(1, num_epochs+1): #itero ora facendo un train e un test per ogni epoca
-    		log['TRAIN_LOSS'].append(train_tasknet(train_dataloader, epoch, device, train_loss, tasknet_save_path, tasknet, tasknet_optimizer))
-    		tasknet_scheduler.step()
-    		log['VAL_LOSS'].append(val_tasknet(val_dataloader, epoch, device, val_loss, tasknet_save_path, tasknet, tasknet_optimizer, tasknet_scheduler, ap_log_path, ap_score_threshold, my_ap_log_path))
-    		print(f'EPOCH {epoch} SUMMARY: ' + ', '.join([f'{k}: {v[epoch-1]}' for k, v in log.items()]))
-    		with open(loss_log_path, 'a') as file:
-    			loss_log_append = f"{epoch} {log['TRAIN_LOSS'][epoch-1]} {log['VAL_LOSS'][epoch-1]}\n"
-    			file.write(loss_log_append)
 #BLOCCO TRAINING TASKNET
 if(train_only_tasknet and not train_backward_on_disturbed_sets):
 	tasknet.train()
