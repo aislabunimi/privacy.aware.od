@@ -11,6 +11,10 @@ from torchvision.models.detection import _utils as det_utils
 from torchvision.models.detection.anchor_utils import AnchorGenerator  # noqa: 401
 from torchvision.models.detection.image_list import ImageList
 
+#####
+# CODE COPYPASTED FROM TORCHVISION DETECTION, ADDED MY COMMENTS AND PARAMETERS; REMOVED USELESS PARTS FOR ME LIKE KEYPOINTS AND MASKS
+# ADDED CUSTOM METHOD FOR PROPOSALS: filter_proposals_custom
+#####
 
 class RPNHead(nn.Module):
     """ Head dell'RPN per la classificazione e regressione delle bbox
@@ -199,14 +203,9 @@ class RegionProposalNetwork(torch.nn.Module):
         #2 liste di tensori. Lista perché ogni tensore che contiene la label intesa come bg, fg o niente.
         labels = []
         matched_gt_boxes = [] #questo è un tensore contenente le gt boxes che le anchors matchano
-        #in particolare i tensori saranno lunghi quante sono le anchors delle img, es 185460
-        
-        #a tutte le anchors gli do un id:
-        #verifico che tale anchor non contenga uno dei targets, in base a ciò do la label
-        
+        #in particolare i tensori saranno lunghi quante sono le anchors delle img, es 185460             
         for anchors_per_image, targets_per_image in zip(anchors, targets):
             gt_boxes = targets_per_image["boxes"]
-
             #Se non c'è nessuna GT box nel targets, allora l'immagine è "vuota", non contiene alcun oggetto
             if gt_boxes.numel() == 0:
                 # Background image (negative example)
@@ -216,6 +215,7 @@ class RegionProposalNetwork(torch.nn.Module):
                 labels_per_image = torch.zeros((anchors_per_image.shape[0],), dtype=torch.float32, device=device)
             else:
                 match_quality_matrix = self.box_similarity(gt_boxes, anchors_per_image)
+                #ottengo IoU ancore e gt. In base a questo assegno ogni ancora a una Gt.
                 matched_idxs = self.proposal_matcher(match_quality_matrix)
                 # get the targets corresponding GT for each proposal
                 # NB: need to clamp the indices because we can have a single
@@ -241,15 +241,9 @@ class RegionProposalNetwork(torch.nn.Module):
                 #tutte quelle anchors che non superano la thresh per considerarle positive, cioè che overlappano con le GT box ma solo parzialmente e non abbastanza per considerarle positive
                 inds_to_discard = matched_idxs == self.proposal_matcher.BETWEEN_THRESHOLDS
                 labels_per_image[inds_to_discard] = -1.0
-
             #gli indici che non ho toccato nelle 2 operazioni precedenti saranno quelli delle anchors positive
             labels.append(labels_per_image)
-            matched_gt_boxes.append(matched_gt_boxes_per_image)
-        
-        #es di tensor labels:
-        # tensor([0., 0., 0.,  ..., 0., 0., 0.]
-        # questo perché molte delle anchors cadono ovviamente nel background, quindi 0
-        
+            matched_gt_boxes.append(matched_gt_boxes_per_image)       
         return labels, matched_gt_boxes
 
     def _get_top_n_idx(self, objectness: Tensor, num_anchors_per_level: List[int]) -> Tensor:
@@ -463,7 +457,6 @@ class RegionProposalNetwork(torch.nn.Module):
             	scores=torch.empty((0,)).to(device)
 
             #boxes, scores = boxes[keep], scores[keep]
-
             final_boxes.append(boxes)
             final_scores.append(scores)
         #print(final_scores)
@@ -590,9 +583,8 @@ class RegionProposalNetwork(torch.nn.Module):
         anchors = self.anchor_generator(images, features)
         #Prima vengono generate le anchors sulle feature maps e poi trasformate sull'img
         #la loss quindi delle anchors di objectness e pred_bbox_deltas guarda quanto sono buone la generazione delle anchor di default
-        #contiene tutte le anchors, es 185460
         
-        num_images = len(anchors) #es 2 se batch_size = 2      
+        num_images = len(anchors)    
         num_anchors_per_level_shape_tensors = [o[0].shape for o in objectness]
         #es valore: [torch.Size([3, 232, 200]), torch.Size([3, 116, 100]), torch.Size([3, 58, 50]), torch.Size([3, 29, 25]), torch.Size([3, 15, 13])]
         
@@ -608,7 +600,7 @@ class RegionProposalNetwork(torch.nn.Module):
         #Dal codice: From a set of original boxes (il secondo arg qui sotto) and encoded relative box offsets (il primo arg), get the decoded boxes.
         proposals = self.box_coder.decode(pred_bbox_deltas.detach(), anchors)        
         proposals = proposals.view(num_images, -1, 4)
-        #Qui proposals è ancora uguale al numero di anchors!
+        #Qui proposals è ancora uguale al numero di anchors
         
         #boxes, scores = self.filter_proposals(proposals, objectness, images.image_sizes, num_anchors_per_level)
         

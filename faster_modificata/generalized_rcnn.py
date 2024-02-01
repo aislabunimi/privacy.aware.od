@@ -11,6 +11,9 @@ from torch import nn, Tensor
 
 from torchvision.utils import _log_api_usage_once
 
+#####
+# CODE COPYPASTED FROM TORCHVISION DETECTION, ADDED MY COMMENTS AND PARAMETERS; REMOVED USELESS PARTS FOR ME LIKE KEYPOINTS AND MASKS
+#####
 
 class GeneralizedRCNN(nn.Module):
     """

@@ -21,6 +21,9 @@ from .roi_heads import RoIHeads
 from .rpn import RegionProposalNetwork, RPNHead
 from torchvision.models.detection.transform import GeneralizedRCNNTransform
 
+#####
+# CODE COPYPASTED FROM TORCHVISION DETECTION, ADDED MY COMMENTS AND PARAMETERS; REMOVED USELESS PARTS FOR ME LIKE KEYPOINTS AND MASKS
+#####
 
 __all__ = [
     "FasterRCNN",
