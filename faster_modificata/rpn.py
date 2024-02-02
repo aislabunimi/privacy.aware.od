@@ -512,7 +512,7 @@ class RegionProposalNetwork(torch.nn.Module):
         				#next_index = next((i for i in iou_indices if (proposals_in_image[i] not in best_det_for_each_gt)), None) # and matched_idxs[index_prop]==n_gt_now)), None)
         				if next_index is None: #se è None vuol dire che non ho trovato un indice
         					break #posso uscire subito dal for perché vuol dire che li ho passati tutti e non ho trovato nulla che soddisfi la condizione
-        				taken.append(index_prop)
+        				taken.append(next_index)
         				tensor_det = torch.cat([tensor_det, proposals_in_image[next_index].unsqueeze(0)], dim=0)
         				#best_det_for_each_gt.append(proposals_in_image[next_index])
         		"""
@@ -521,12 +521,10 @@ class RegionProposalNetwork(torch.nn.Module):
         		"""
         		Commento mio: in realtà il modello lavora con objectness score e filtra solo in base a quello se è persona o meno. Questo vuol dire che non so mai se una persona è persona, ma solo se soddisfa la soglia di threshold messa dal matcher. Siccome la label non mi interessa, a sto punto ordino per confidence tutte le bbox che hanno iou<0.5 e propago quelle, che so già che sono background
         		"""
-        		neg_iou_indices = iou_indices[iou_values[iou_indices] < self.iou_neg_thresh] #gli indici che soddisfano IoU.
+        		neg_iou_indices = iou_indices[iou_values[iou_indices] < self.iou_neg_thresh] #gli indici che soddisfano IoU. L'ordine IoU non è conservato, a me va bene perché tanto poi faccio il sort per score
         		#numero di proposal per ogni GT da tenere per sopprimere le fpiou, sono ordinate per confidence e hanno meno thresh
         		neg_iou_indices, _ = torch.sort(neg_iou_indices, 0, descending=False) #riordino per score
         		top_fpiou=neg_iou_indices[:self.n_top_neg_to_keep]
-        		#print(neg_iou_indices)
-        		#print(scores[neg_iou_indices])
         		#import time
         		#start=time.time()
         		for index_fpiou in top_fpiou:
@@ -544,7 +542,7 @@ class RegionProposalNetwork(torch.nn.Module):
         				next_index = next((i for i in neg_iou_indices if i not in taken), None) # and matched_idxs[index_fpiou]==n_gt_now)), None)
         				if next_index is None: #se è None vuol dire che non ho trovato un indice
         					break #posso uscire subito dal for perché vuol dire che li ho passati tutti e non ho trovato nulla che soddisfi la condizione
-        				taken.append(index_fpiou)
+        				taken.append(next_index)
         				#best_det_for_each_gt.append(proposals_in_image[next_index])
         				tensor_det = torch.cat([tensor_det, proposals_in_image[next_index].unsqueeze(0)], dim=0)
         		"""
@@ -566,14 +564,23 @@ class RegionProposalNetwork(torch.nn.Module):
 
         	#Mia premessa: porto dietro tutto ciò che è sicuramente background. Prop molto negative
         	#sono già ordinati per score, essendo indici delle prop come l'originale. Mi basta eliminare le -1 che sono quelle che non soddisfano quella thresh
-        	very_neg_indices = very_neg_mask[very_neg_mask != -1]
-        	vn_to_keep=int(512 - (self.n_top_iou_to_keep*n_gt_in_image) - (self.n_top_neg_to_keep*n_gt_in_image))
+        	vn_to_keep=2
+        	very_neg_indices = very_neg_mask[very_neg_mask != -1]#[:vn_to_keep] #sono già sortati per score perché mantengono ordine originale
+        	#vn_to_keep=int(512 - (self.n_top_iou_to_keep*n_gt_in_image) - (self.n_top_neg_to_keep*n_gt_in_image)) ricostruisce troppo
         	top_very_neg = very_neg_indices[:vn_to_keep]
-        	for index_vn in very_neg_indices:
-        		tensor_det = torch.cat([tensor_det, proposals_in_image[index_vn].unsqueeze(0)], dim=0)
+        	for index_vn in top_very_neg:
+        		#tensor_det = torch.cat([tensor_det, proposals_in_image[index_vn].unsqueeze(0)], dim=0)
+        		if index_vn not in taken:
+        			taken.append(index_vn)
+        			tensor_det = torch.cat([tensor_det, proposals_in_image[index_vn].unsqueeze(0)], dim=0)
+        		else:
+        			next_index = next((i for i in very_neg_indices if i not in taken), None) 
+        			if next_index is None: #se è None vuol dire che non ho trovato un indice
+        				break #posso uscire subito dal for perché vuol dire che li ho passati tutti e non ho trovato nulla che soddisfi la condizione
+        			taken.append(next_index)
+        			tensor_det = torch.cat([tensor_det, proposals_in_image[next_index].unsqueeze(0)], dim=0)
         	tensor_det = torch.unique(tensor_det, dim=0) #da usare con metodo nuovo. Elimino possibili proposal prese due volte. Più efficiente che scorrere nelle liste. As es su 6 gt se tengo 1 pos e 100 neg ho 66 duplicati; in totale tengo alla fine 540 proposal (il max era 606).
         #print(len(gt_boxes_in_image))
-        print(len(tensor_det))
         return tensor_det
     
     def forward(
