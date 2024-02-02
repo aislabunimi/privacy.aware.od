@@ -477,6 +477,8 @@ class RegionProposalNetwork(torch.nn.Module):
         	tensor_taken=torch.empty(0, dtype=torch.int32).to(device) #per non prendere 2 volte le stesse proposals. Può capitare in teoria, ma è raro. Con le negative se se ne tengono tante questo controllo rallenta molto le performance. Allora rimuovo le negative duplicate e basta
         	#tensor_det = torch.empty(0).to(device) #tensore contenente le bbox che salvo
         	#absolute_bg_mask = torch.zeros_like(proposals_in_image)
+        	tensor_neg_taken=torch.empty(0, dtype=torch.int32).to(device)
+        	match_thresh=0.6
         	absolute_bg_mask = torch.arange(len(proposals_in_image)).to(device) #rappresenta gli indici di elementi che verranno settate a -1 se non appartengono al bg.
         	for match_matrix_each_gt in match_quality_matrix:       		
         		bg_thresh=0.00 #hard coded ma va bene visto che devo tenere quelle sicure nel bg      		
@@ -518,24 +520,52 @@ class RegionProposalNetwork(torch.nn.Module):
         		top_fpiou=neg_iou_indices[:self.n_top_neg_to_keep]
         		#import time
         		#start=time.time()
-        		for index_fpiou in top_fpiou:
-        			#Metodo nuovo. Le tengo tutte anche se non sono duplicate. Alla fine di tutto rimuovo le duplicate
-        			#tensor_det = torch.cat([tensor_det, proposals_in_image[index_fpiou].unsqueeze(0)], dim=0)
-        			
-        			# Metodo vecchia. Passo una per una.
+        		for index_fpiou in top_fpiou:       			
         			if index_fpiou not in tensor_taken:
         			#if proposals_in_image[index_fpiou] not in best_det_for_each_gt: #and matched_idxs[index_fpiou]==n_gt_now:
         				#taken.append(index_fpiou)
+        				if tensor_neg_taken.numel() == 0: #tensore negativo vuoto, aggiungo la prop subito
+        					tensor_taken = torch.cat([tensor_taken, index_fpiou.unsqueeze(0)])
+        					tensor_neg_taken = torch.cat([tensor_neg_taken, index_fpiou.unsqueeze(0)])
+        				else: #devo verificare che non vado a prendere una negativa che overlappi tanto con un'altra negativa che ho già preso
+        					match = box_ops.box_iou(proposals_in_image[tensor_neg_taken], proposals_in_image[index_fpiou].unsqueeze(0))
+        					if torch.any(match > match_thresh):
+        						next_index = next((i for i in neg_iou_indices if torch.all(box_ops.box_iou(proposals_in_image[tensor_neg_taken], proposals_in_image[i].unsqueeze(0)) <= match_thresh)), None)
+        						if next_index is None: 
+        							break
+        						tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
+        						tensor_neg_taken = torch.cat([tensor_neg_taken, next_index.unsqueeze(0)])
+        					else:
+        						tensor_taken = torch.cat([tensor_taken, index_fpiou.unsqueeze(0)])
+        						tensor_neg_taken = torch.cat([tensor_neg_taken, index_fpiou.unsqueeze(0)])
+        				#metodo vecchio
+        				"""
         				tensor_taken = torch.cat([tensor_taken, index_fpiou.unsqueeze(0)])
+        				"""
         				#best_det_for_each_gt.append(proposals_in_image[index_fpiou])
         				#tensor_det = torch.cat([tensor_det, proposals_in_image[index_fpiou].unsqueeze(0)], dim=0)
         			else:
+        				if tensor_neg_taken.numel() == 0: #tensore negativo vuoto, aggiungo la prop subito
+        					next_index = next((i for i in neg_iou_indices if i not in tensor_taken), None) # and matched_idxs[index_fpiou]==n_gt_now)), None)
+        					if next_index is None: #se è None vuol dire che non ho trovato un indice
+        						break
+        					tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
+        					tensor_neg_taken = torch.cat([tensor_neg_taken, next_index.unsqueeze(0)])
+        				else:
+        					next_index = next((i for i in neg_iou_indices if i not in tensor_taken and (torch.all(box_ops.box_iou(proposals_in_image[tensor_neg_taken], proposals_in_image[i].unsqueeze(0)) <= match_thresh))), None)
+        					if next_index is None: #se è None vuol dire che non ho trovato un indice
+        						break
+        					tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
+        					tensor_neg_taken = torch.cat([tensor_neg_taken, next_index.unsqueeze(0)])
+        				#metodo vecchio
         				#se è già preso, allora cerco il prossimo index
+        				"""
         				next_index = next((i for i in neg_iou_indices if i not in tensor_taken), None) # and matched_idxs[index_fpiou]==n_gt_now)), None)
         				if next_index is None: #se è None vuol dire che non ho trovato un indice
         					break #posso uscire subito dal for perché vuol dire che li ho passati tutti e non ho trovato nulla che soddisfi la condizione
         				#taken.append(next_index)
         				tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
+        				"""
         				#best_det_for_each_gt.append(proposals_in_image[next_index])
         				#tensor_det = torch.cat([tensor_det, proposals_in_image[next_index].unsqueeze(0)], dim=0)
         		"""
@@ -563,16 +593,38 @@ class RegionProposalNetwork(torch.nn.Module):
         	for index_vn in top_absolute_bg:
         		#tensor_det = torch.cat([tensor_det, proposals_in_image[index_vn].unsqueeze(0)], dim=0)
         		if index_vn not in tensor_taken:
+        			#posso evitare di verificare che  il tensore negativo sia vuoto
+        			match = box_ops.box_iou(proposals_in_image[tensor_neg_taken], proposals_in_image[index_vn].unsqueeze(0))
+        			if torch.any(match > match_thresh):
+        				next_index = next((i for i in absolute_bg_indices if torch.all(box_ops.box_iou(proposals_in_image[tensor_neg_taken], proposals_in_image[i].unsqueeze(0)) <= match_thresh)), None)
+        				if next_index is None: 
+        					break
+        				tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
+        				tensor_neg_taken = torch.cat([tensor_neg_taken, next_index.unsqueeze(0)])
+        			else:
+        				tensor_taken = torch.cat([tensor_taken, index_vn.unsqueeze(0)])
+        				tensor_neg_taken = torch.cat([tensor_neg_taken, index_vn.unsqueeze(0)])
+        			#metodo vecchio
+        			"""
         			#taken.append(index_vn)
         			tensor_taken = torch.cat([tensor_taken, index_vn.unsqueeze(0)])
         			#tensor_det = torch.cat([tensor_det, proposals_in_image[index_vn].unsqueeze(0)], dim=0)
+        			"""
         		else:
+        			next_index = next((i for i in absolute_bg_indices if i not in tensor_taken and (torch.all(box_ops.box_iou(proposals_in_image[tensor_neg_taken], proposals_in_image[i].unsqueeze(0)) <= match_thresh))), None)
+        			if next_index is None: #se è None vuol dire che non ho trovato un indice
+        				break
+        			tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
+        			tensor_neg_taken = torch.cat([tensor_neg_taken, next_index.unsqueeze(0)])
+        			#metodo vecchio
+        			"""
         			next_index = next((i for i in absolute_bg_indices if i not in tensor_taken), None) 
         			if next_index is None: #se è None vuol dire che non ho trovato un indice
         				break #posso uscire subito dal for perché vuol dire che li ho passati tutti e non ho trovato nulla che soddisfi la condizione
         			#taken.append(next_index)
         			tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
         			#tensor_det = torch.cat([tensor_det, proposals_in_image[next_index].unsqueeze(0)], dim=0)
+        			"""
         	tensor_taken = torch.unique(tensor_taken, dim=0) #rimuovo indici doppi per non far contare 2 volte stessa proposal
         	#tensor_det = torch.unique(tensor_det, dim=0) #da usare con metodo nuovo. Elimino possibili proposal prese due volte. Più efficiente che scorrere nelle liste. As es su 6 gt se tengo 1 pos e 100 neg ho 66 duplicati; in totale tengo alla fine 540 proposal (il max era 606).
         #print(len(gt_boxes_in_image))
@@ -643,7 +695,7 @@ class RegionProposalNetwork(torch.nn.Module):
         else:
         	boxes, scores = self.filter_proposals(proposals, objectness, images.image_sizes, num_anchors_per_level)
         
-        """
+        
         import matplotlib.pyplot as plt
         plt.figure(figsize=(16,10))
         import torchvision.transforms as transforms
@@ -663,7 +715,7 @@ class RegionProposalNetwork(torch.nn.Module):
         		ax.text(xmin, ymin, prob, fontsize=15, bbox=dict(facecolor='yellow', alpha=0.5))
         	plt.show()
         	plt.clf()
-        """
+        
         
         losses = {}
         #PASSO 3: solo in training, alleno il modello a migliorare le anchors.

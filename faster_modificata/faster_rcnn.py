@@ -152,6 +152,7 @@ class FasterRCNN(GeneralizedRCNN):
             n_top_iou_to_keep=rpn_n_top_iou_to_keep,
             iou_neg_thresh=rpn_iou_neg_thresh,
             n_top_neg_to_keep=rpn_n_top_neg_to_keep,
+            n_top_absolute_bg_to_keep=rpn_n_top_absolute_bg_to_keep,
         )
 
         #SETTING vari per l'head della faster
