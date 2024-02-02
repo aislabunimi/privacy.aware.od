@@ -96,7 +96,8 @@ class FasterRCNN(GeneralizedRCNN):
         use_custom_filter_proposals=False, #per usare il filter proposal custom. I parametri sotto vengono usati solo se questa variabile è a true
         rpn_n_top_iou_to_keep=1, #quante proposal con top iou da tenere
         rpn_iou_neg_thresh=0.5, #thresh per considerare negative delle prop
-        rpn_n_top_neg_to_keep=100, #quante proposal negative con iou al di sotto del thresh imposto sopra da tenere
+        rpn_n_top_neg_to_keep=8, #quante proposal negative con iou al di sotto del thresh imposto sopra da tenere
+        rpn_n_top_absolute_bg_to_keep=2, #quante proposal che sono sicuramente nel bg (cioè iou 0.0 con tutto) tengo
         **kwargs,
     ):
 

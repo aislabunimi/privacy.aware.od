@@ -147,7 +147,8 @@ class RegionProposalNetwork(torch.nn.Module):
         use_custom_filter_proposals: bool=False,
         n_top_iou_to_keep: int=1,
         iou_neg_thresh: float=0.5,
-        n_top_neg_to_keep: int=100,
+        n_top_neg_to_keep: int=8,
+        n_top_absolute_bg_to_keep: int=2,
     ) -> None:
         super().__init__()
         self.anchor_generator = anchor_generator
@@ -169,6 +170,7 @@ class RegionProposalNetwork(torch.nn.Module):
         self.n_top_iou_to_keep = n_top_iou_to_keep
         self.iou_neg_thresh = iou_neg_thresh
         self.n_top_neg_to_keep = n_top_neg_to_keep
+        self.n_top_absolute_bg_to_keep = n_top_absolute_bg_to_keep
         #if use_custom_filter_proposals:
         #	#i valori sono fg_iou_thresh e bg_iou_thresh scelti da me
         #	self.proposal_matcher_gt = det_utils.Matcher(0.5, 0.5, allow_low_quality_matches=False)
@@ -474,11 +476,11 @@ class RegionProposalNetwork(torch.nn.Module):
         	#best_det_for_each_gt=[] #Il metodo è lento, però posso impostare lo score thresh a 0.1 tranquillamente e ridurre di molto le proposal. Lo posso fare perché nella logica della scelta delle proposal, le proposal con IoU molto alto ma score molto basso hanno distanza massima e non verranno mai scelte; è inutile quindi che mi porto dietro tanti indici peggiorando notevolmente le performance
         	tensor_taken=torch.empty(0, dtype=torch.int32).to(device) #per non prendere 2 volte le stesse proposals. Può capitare in teoria, ma è raro. Con le negative se se ne tengono tante questo controllo rallenta molto le performance. Allora rimuovo le negative duplicate e basta
         	#tensor_det = torch.empty(0).to(device) #tensore contenente le bbox che salvo
-        	#very_neg_mask = torch.zeros_like(proposals_in_image)
-        	very_neg_mask = torch.arange(len(proposals_in_image)).to(device)
+        	#absolute_bg_mask = torch.zeros_like(proposals_in_image)
+        	absolute_bg_mask = torch.arange(len(proposals_in_image)).to(device) #rappresenta gli indici di elementi che verranno settate a -1 se non appartengono al bg.
         	for match_matrix_each_gt in match_quality_matrix:       		
-        		bg_thresh=0.00       		
-        		very_neg_mask[match_matrix_each_gt > bg_thresh] = -1
+        		bg_thresh=0.00 #hard coded ma va bene visto che devo tenere quelle sicure nel bg      		
+        		absolute_bg_mask[match_matrix_each_gt > bg_thresh] = -1
         	# Idea: tengo tutte le negative che cadono nel background al 100% e che non cadono in nessun GT. Queste non dovrebbero contribuire sensibilmente alla ricostruzione dell'immagine (spero) e porterebbero a maggiore ap.
         	for match_matrix_each_gt in match_quality_matrix: #itero per GT			
         		iou_values , iou_indices = torch.sort(match_matrix_each_gt, 0, descending=True)
@@ -555,18 +557,17 @@ class RegionProposalNetwork(torch.nn.Module):
 
         	#Mia premessa: porto dietro tutto ciò che è sicuramente background. Prop molto negative
         	#sono già ordinati per score, essendo indici delle prop come l'originale. Mi basta eliminare le -1 che sono quelle che non soddisfano quella thresh
-        	vn_to_keep=2
-        	very_neg_indices = very_neg_mask[very_neg_mask != -1]#[:vn_to_keep] #sono già sortati per score perché mantengono ordine originale
+        	absolute_bg_indices = absolute_bg_mask[absolute_bg_mask != -1]#[:vn_to_keep] #sono già sortati per score perché mantengono ordine originale
         	#vn_to_keep=int(512 - (self.n_top_iou_to_keep*n_gt_in_image) - (self.n_top_neg_to_keep*n_gt_in_image)) ricostruisce troppo
-        	top_very_neg = very_neg_indices[:vn_to_keep]
-        	for index_vn in top_very_neg:
+        	top_absolute_bg = absolute_bg_indices[:self.n_top_absolute_bg_to_keep]
+        	for index_vn in top_absolute_bg:
         		#tensor_det = torch.cat([tensor_det, proposals_in_image[index_vn].unsqueeze(0)], dim=0)
         		if index_vn not in tensor_taken:
         			#taken.append(index_vn)
         			tensor_taken = torch.cat([tensor_taken, index_vn.unsqueeze(0)])
         			#tensor_det = torch.cat([tensor_det, proposals_in_image[index_vn].unsqueeze(0)], dim=0)
         		else:
-        			next_index = next((i for i in very_neg_indices if i not in tensor_taken), None) 
+        			next_index = next((i for i in absolute_bg_indices if i not in tensor_taken), None) 
         			if next_index is None: #se è None vuol dire che non ho trovato un indice
         				break #posso uscire subito dal for perché vuol dire che li ho passati tutti e non ho trovato nulla che soddisfi la condizione
         			#taken.append(next_index)
