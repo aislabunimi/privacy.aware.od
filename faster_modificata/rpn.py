@@ -434,33 +434,21 @@ class RegionProposalNetwork(torch.nn.Module):
             #QUI in keep ho gli indici delle proposals sopravvissute alle bbox, ordinate in modo decrescente, quindi i primi risultati nel tensore saranno già le best prediction
             prop = boxes[keep]
             scor = scores[keep]
-            best_det_for_each_gt = self.assign_targets_to_proposals_gt(prop, gt['boxes'], gt['labels'], scor)
+            #best_det_for_each_gt, taken = self.assign_targets_to_proposals_gt(prop, gt['boxes'], gt['labels'], scor)
+            taken = self.assign_targets_to_proposals_gt(prop, gt['boxes'], gt['labels'], scor)
             
             #keep = keep[: self.post_nms_top_n()]
-            index_list=[]
-            for det_to_keep in best_det_for_each_gt:
-            	index = torch.where(torch.all(det_to_keep == boxes, dim=1))[0]
-            	index = index[0].item()
-            	index_list.append(index)
+            boxes = prop[taken]
+            scores = scor[taken]
             
-            #l'ordine delle box e score non è importante, tanto:
-            #1: lo score viene droppato da questa funzione e non usato poi dal ROI
-            #2: il ROI effettua nuovamente l'assegnamento di ogni proposal al GT
-            boxes = [boxes[i] for i in index_list]
-            scores = [scores[i] for i in index_list]
-            if(len(boxes)>0):
-            	boxes = torch.stack(boxes)
-            	scores = torch.stack(scores)
-            else:
+            if(len(boxes)==0): #protezione contro eventuale assenza di pred
             	device = prop.device
             	boxes=torch.empty((0,)).to(device)
             	scores=torch.empty((0,)).to(device)
-
-            #boxes, scores = boxes[keep], scores[keep]
+            
             final_boxes.append(boxes)
             final_scores.append(scores)
-        #print(final_scores)
-        
+        #print(final_scores)  
         return final_boxes, final_scores
     
     def assign_targets_to_proposals_gt(self, proposals_in_image, gt_boxes_in_image, gt_labels_in_image, scores):
@@ -484,10 +472,10 @@ class RegionProposalNetwork(torch.nn.Module):
         	n_gt_in_image=len(gt_boxes_in_image)
         	#n_gt_now=0 #cosi sono sicuro di controllare per ogni gt
         	#best_det_for_each_gt=[] #Il metodo è lento, però posso impostare lo score thresh a 0.1 tranquillamente e ridurre di molto le proposal. Lo posso fare perché nella logica della scelta delle proposal, le proposal con IoU molto alto ma score molto basso hanno distanza massima e non verranno mai scelte; è inutile quindi che mi porto dietro tanti indici peggiorando notevolmente le performance
-        	taken=[] #per non prendere 2 volte le stesse proposals. Può capitare in teoria, ma è raro. Con le negative se se ne tengono tante questo controllo rallenta molto le performance. Allora rimuovo le negative duplicate e basta
-        	tensor_det = torch.empty(0).to(device) #tensore contenente le bbox che salvo
+        	tensor_taken=torch.empty(0, dtype=torch.int32).to(device) #per non prendere 2 volte le stesse proposals. Può capitare in teoria, ma è raro. Con le negative se se ne tengono tante questo controllo rallenta molto le performance. Allora rimuovo le negative duplicate e basta
+        	#tensor_det = torch.empty(0).to(device) #tensore contenente le bbox che salvo
         	#very_neg_mask = torch.zeros_like(proposals_in_image)
-        	very_neg_mask = torch.arange(len(proposals_in_image))
+        	very_neg_mask = torch.arange(len(proposals_in_image)).to(device)
         	for match_matrix_each_gt in match_quality_matrix:       		
         		bg_thresh=0.00       		
         		very_neg_mask[match_matrix_each_gt > bg_thresh] = -1
@@ -501,19 +489,20 @@ class RegionProposalNetwork(torch.nn.Module):
         		top_prop=iou_indices[:self.n_top_iou_to_keep]
         		for index_prop in top_prop:
         			#il matched_idxs mi darebbe problemi usarlo, perché filtra già per 0.5; a me il matcher non serve più
-        			if index_prop not in taken:
+        			if index_prop not in tensor_taken:
         			#if proposals_in_image[index_prop] not in best_det_for_each_gt: #and matched_idxs[index_prop]==n_gt_now:
-        				taken.append(index_prop)
+        				tensor_taken = torch.cat([tensor_taken, index_prop.unsqueeze(0)])
         				#best_det_for_each_gt.append(proposals_in_image[index_prop])
-        				tensor_det = torch.cat([tensor_det, proposals_in_image[index_prop].unsqueeze(0)], dim=0)
+        				#tensor_det = torch.cat([tensor_det, proposals_in_image[index_prop].unsqueeze(0)], dim=0)
         			else:
         				#se è già preso, allora cerco il prossimo index
-        				next_index = next((i for i in iou_indices if i not in taken), None)
+        				next_index = next((i for i in iou_indices if i not in tensor_taken), None)
         				#next_index = next((i for i in iou_indices if (proposals_in_image[i] not in best_det_for_each_gt)), None) # and matched_idxs[index_prop]==n_gt_now)), None)
         				if next_index is None: #se è None vuol dire che non ho trovato un indice
         					break #posso uscire subito dal for perché vuol dire che li ho passati tutti e non ho trovato nulla che soddisfi la condizione
-        				taken.append(next_index)
-        				tensor_det = torch.cat([tensor_det, proposals_in_image[next_index].unsqueeze(0)], dim=0)
+        				#taken.append(next_index)
+        				tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
+        				#tensor_det = torch.cat([tensor_det, proposals_in_image[next_index].unsqueeze(0)], dim=0)
         				#best_det_for_each_gt.append(proposals_in_image[next_index])
         		"""
         		Premessa 2 (sopprimere predicitions FPiou): considero solo le bbox con label 1 (persona), le ordino per confidence  e seleziono le prime t con iou < di 0.5
@@ -532,19 +521,21 @@ class RegionProposalNetwork(torch.nn.Module):
         			#tensor_det = torch.cat([tensor_det, proposals_in_image[index_fpiou].unsqueeze(0)], dim=0)
         			
         			# Metodo vecchia. Passo una per una.
-        			if index_fpiou not in taken:
+        			if index_fpiou not in tensor_taken:
         			#if proposals_in_image[index_fpiou] not in best_det_for_each_gt: #and matched_idxs[index_fpiou]==n_gt_now:
-        				taken.append(index_fpiou)
+        				#taken.append(index_fpiou)
+        				tensor_taken = torch.cat([tensor_taken, index_fpiou.unsqueeze(0)])
         				#best_det_for_each_gt.append(proposals_in_image[index_fpiou])
-        				tensor_det = torch.cat([tensor_det, proposals_in_image[index_fpiou].unsqueeze(0)], dim=0)
+        				#tensor_det = torch.cat([tensor_det, proposals_in_image[index_fpiou].unsqueeze(0)], dim=0)
         			else:
         				#se è già preso, allora cerco il prossimo index
-        				next_index = next((i for i in neg_iou_indices if i not in taken), None) # and matched_idxs[index_fpiou]==n_gt_now)), None)
+        				next_index = next((i for i in neg_iou_indices if i not in tensor_taken), None) # and matched_idxs[index_fpiou]==n_gt_now)), None)
         				if next_index is None: #se è None vuol dire che non ho trovato un indice
         					break #posso uscire subito dal for perché vuol dire che li ho passati tutti e non ho trovato nulla che soddisfi la condizione
-        				taken.append(next_index)
+        				#taken.append(next_index)
+        				tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
         				#best_det_for_each_gt.append(proposals_in_image[next_index])
-        				tensor_det = torch.cat([tensor_det, proposals_in_image[next_index].unsqueeze(0)], dim=0)
+        				#tensor_det = torch.cat([tensor_det, proposals_in_image[next_index].unsqueeze(0)], dim=0)
         		"""
         		Mia premessa: porto dietro tutto ciò che è sicuramente background. Prop molto negative
         		"""
@@ -570,18 +561,22 @@ class RegionProposalNetwork(torch.nn.Module):
         	top_very_neg = very_neg_indices[:vn_to_keep]
         	for index_vn in top_very_neg:
         		#tensor_det = torch.cat([tensor_det, proposals_in_image[index_vn].unsqueeze(0)], dim=0)
-        		if index_vn not in taken:
-        			taken.append(index_vn)
-        			tensor_det = torch.cat([tensor_det, proposals_in_image[index_vn].unsqueeze(0)], dim=0)
+        		if index_vn not in tensor_taken:
+        			#taken.append(index_vn)
+        			tensor_taken = torch.cat([tensor_taken, index_vn.unsqueeze(0)])
+        			#tensor_det = torch.cat([tensor_det, proposals_in_image[index_vn].unsqueeze(0)], dim=0)
         		else:
-        			next_index = next((i for i in very_neg_indices if i not in taken), None) 
+        			next_index = next((i for i in very_neg_indices if i not in tensor_taken), None) 
         			if next_index is None: #se è None vuol dire che non ho trovato un indice
         				break #posso uscire subito dal for perché vuol dire che li ho passati tutti e non ho trovato nulla che soddisfi la condizione
-        			taken.append(next_index)
-        			tensor_det = torch.cat([tensor_det, proposals_in_image[next_index].unsqueeze(0)], dim=0)
-        	tensor_det = torch.unique(tensor_det, dim=0) #da usare con metodo nuovo. Elimino possibili proposal prese due volte. Più efficiente che scorrere nelle liste. As es su 6 gt se tengo 1 pos e 100 neg ho 66 duplicati; in totale tengo alla fine 540 proposal (il max era 606).
+        			#taken.append(next_index)
+        			tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
+        			#tensor_det = torch.cat([tensor_det, proposals_in_image[next_index].unsqueeze(0)], dim=0)
+        	tensor_taken = torch.unique(tensor_taken, dim=0) #rimuovo indici doppi per non far contare 2 volte stessa proposal
+        	#tensor_det = torch.unique(tensor_det, dim=0) #da usare con metodo nuovo. Elimino possibili proposal prese due volte. Più efficiente che scorrere nelle liste. As es su 6 gt se tengo 1 pos e 100 neg ho 66 duplicati; in totale tengo alla fine 540 proposal (il max era 606).
         #print(len(gt_boxes_in_image))
-        return tensor_det
+        return tensor_taken
+        #return tensor_det, tensor_taken
     
     def forward(
         self,
