@@ -11,6 +11,8 @@ import json
 import torchvision.transforms as transforms
 from coco_eval import get_coco_api_from_dataset
 import os
+from pytorch_msssim import ms_ssim, MS_SSIM
+#MS SSIM dovrebbe tenere conto di più di come appare l'img a una persona, rispetto alla sola distribuzione dell'EMD
 
 def train_model(train_dataloader, epoch, device, train_loss, model, tasknet, model_optimizer): #funzione che si occupa del training
 	model.train()
@@ -76,8 +78,13 @@ def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, t
 	model.eval()
 	batch_size = len(val_dataloader) #recupero la batch size
 	running_loss = 0 # Initializing variable for storing  loss 
-	res={}	
-	evaluator_complete_metric = MyEvaluatorCompleteMetric()	
+	res={}
+	ms_ssim_score = 0
+	evaluator_complete_metric = MyEvaluatorCompleteMetric()
+	mean = torch.tensor([0.485, 0.456, 0.406])
+	std = torch.tensor([0.229, 0.224, 0.225])
+	unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
+	ms_ssim_module = MS_SSIM(data_range=1, size_average=True, channel=3) #per misura livello ricostruzione
 	with torch.no_grad(): #non calcolo il gradiente, sto testando e bassa
 		for imgs, targets in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):
 			imgs, _ = imgs.decompose()
@@ -125,16 +132,26 @@ def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, t
 			ax.add_patch(plt.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin, fill=False, color='red', linewidth=3))
 			plt.show()
 			plt.clf()
-			"""			
+			"""
 			
+			trans = transforms.Resize((reconstructed.shape[2], reconstructed.shape[3]), antialias=False)
+			orig_imgs = trans(imgs)
+			reconstructed=unnormalize(reconstructed)
+			orig_imgs=unnormalize(orig_imgs)	
+			ms_ssim_score += ms_ssim_module(reconstructed, orig_imgs)
+				
 			true_loss=reconstructed_losses
-			running_loss += true_loss.item()		
+			running_loss += true_loss.item()	
 	
 	running_loss /= batch_size #calcolo la loss media
 	#la validation loss se è attivo il custom filter proposal è fatta in base a ciò, non è una val
 	#loss con i parametri di default della tasknet, ma val loss con i parametri usati per allenamento
 	compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, ap_log_path, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, res)
-	compute_michele_metric(evaluator_complete_metric, michele_metric_folder, epoch)	
+	compute_michele_metric(evaluator_complete_metric, michele_metric_folder, epoch)
+	ms_ssim_score /= batch_size #0.6 su plain, 0.34 su 10prop, 0.09 su 3prop (completamente irriconoscibile), 0.20 su 1bestiou5neg0bg. Quindi 0.20 potrebbe essere la soglia di privacy?
+	ms_ssim_path="results/ms_ssim_score_log.txt"
+	with open(ms_ssim_path, 'a') as file:
+		file.write(f"{epoch} {ms_ssim_score}\n")
 	val_loss.append(running_loss)
 	model_save_path = f'{model_save_path}_{epoch}.pt'   
 	create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
@@ -207,8 +224,7 @@ def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_ge
 		json.dump(disturbed_list, json_file, indent=2)
 	model.train()
 
-from pytorch_msssim import ms_ssim, MS_SSIM
-#MS SSIM dovrebbe tenere conto di più di come appare l'img a una persona, rispetto alla sola distribuzione dell'EMD
+
 def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss, model, model_optimizer): 
 	model.train()
 	batch_size = len(train_dataloader)

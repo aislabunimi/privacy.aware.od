@@ -50,8 +50,8 @@ ap_comparison_save_path='plotted_results/comparison_ap.png'
 #models
 unet_save_path = "model_weights/model"
 tasknet_save_path = "tasknet_weights/tasknet"
-unet_weights_load= "model_weights/model_13.pt"
-unet_weights_to_compare= "model_weights/model_33.pt"
+unet_weights_load= "model_weights/model_25.pt"
+unet_weights_to_compare= "model_weights/model_8.pt"
 tasknet_weights_load= "tasknet_weights/tasknet_10.pt"
 #Test images:
 image_save_prefix='test'
@@ -96,7 +96,9 @@ plot_ap(my_ap_nointerp_thresh_extracted, my_ap_nointerp_thresh_save_name, best_a
 extract_iou50_ap(my_ap_interp_thresh_path, my_ap_interp_thresh_extracted, standard_ap=False) #My AP, preds that satisfies threshold score, with interpolation
 plot_ap(my_ap_interp_thresh_extracted, my_ap_interp_thresh_save_name, best_ap_value_for_comparison=1, best_recall_value_for_comparison=0.585, model_name='Unet with Plain Tasknet', ap_plot_title=ap_plot_title)
 
-plot_compare_between_two_ap(ap_standard_extracted, my_ap_standard_extracted, ap_model_name='Unet with Plain Tasknet', ap_to_compare_model_name='Unet with Tasknet Modified', plotted_comparison_save_path=ap_comparison_save_path, ap_plot_title=ap_plot_title)
+#plot_compare_between_two_ap(ap_standard_extracted, 'results/ap_iou50_plaintasknet.txt', ap_model_name='Unet with IoU method', ap_to_compare_model_name='Unet with plain tasknet', plotted_comparison_save_path=ap_comparison_save_path, ap_plot_title=ap_plot_title)
+from plot_utils.ms_ssim import plot_ms_ssim_score
+plot_ms_ssim_score(ms_ssim_score_log_path="results/ms_ssim_score_log.txt", ms_ssim_save_name='plotted_results/ms_ssim_score.png')
 
 plot_michele_metric(michele_metric_file_list, michele_metric_file_save_list)
 
