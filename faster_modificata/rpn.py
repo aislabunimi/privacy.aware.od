@@ -149,6 +149,9 @@ class RegionProposalNetwork(torch.nn.Module):
         iou_neg_thresh: float=0.5,
         n_top_neg_to_keep: int=8,
         n_top_absolute_bg_to_keep: int=2,
+        absolute_bg_score_thresh: float = 0.75,
+        use_not_overlapping_proposals: bool=False,
+        overlapping_prop_thresh: float=0.6,
     ) -> None:
         super().__init__()
         self.anchor_generator = anchor_generator
@@ -170,10 +173,10 @@ class RegionProposalNetwork(torch.nn.Module):
         self.n_top_iou_to_keep = n_top_iou_to_keep
         self.iou_neg_thresh = iou_neg_thresh
         self.n_top_neg_to_keep = n_top_neg_to_keep
-        self.n_top_absolute_bg_to_keep = n_top_absolute_bg_to_keep
-        #if use_custom_filter_proposals:
-        #	#i valori sono fg_iou_thresh e bg_iou_thresh scelti da me
-        #	self.proposal_matcher_gt = det_utils.Matcher(0.5, 0.5, allow_low_quality_matches=False)
+        self.n_top_absolute_bg_to_keep = n_top_absolute_bg_to_keep           
+        self.absolute_bg_score_thresh = absolute_bg_score_thresh
+        self.use_not_overlapping_proposals = use_not_overlapping_proposals
+        self.overlapping_prop_thresh = overlapping_prop_thresh
 
         self.fg_bg_sampler = det_utils.BalancedPositiveNegativeSampler(batch_size_per_image, positive_fraction) # This class samples batches, ensuring that they contain a fixed proportion of positives
         # estrae casualmente un numero di sample positivi (con oggetto) e negativi (senza) che rispettano la proporzione
@@ -437,7 +440,7 @@ class RegionProposalNetwork(torch.nn.Module):
             prop = boxes[keep]
             scor = scores[keep]
             #best_det_for_each_gt, taken = self.assign_targets_to_proposals_gt(prop, gt['boxes'], gt['labels'], scor)
-            taken = self.assign_targets_to_proposals_gt(prop, gt['boxes'], gt['labels'], scor)
+            taken = self.select_proposals_custom(prop, gt['boxes'], gt['labels'], scor)
             
             #keep = keep[: self.post_nms_top_n()]
             boxes = prop[taken]
@@ -453,183 +456,136 @@ class RegionProposalNetwork(torch.nn.Module):
         #print(final_scores)  
         return final_boxes, final_scores
     
-    def assign_targets_to_proposals_gt(self, proposals_in_image, gt_boxes_in_image, gt_labels_in_image, scores):
+    def select_proposals_custom(self, proposals_in_image, gt_boxes_in_image, gt_labels_in_image, scores):
         # type: (List[Tensor], List[Tensor], List[Tensor]) -> Tuple[List[Tensor], List[Tensor]]
         #2 liste vuote. La label qui conterrà le label dell'oggetto preso dalla GT.
         #matched_idxs = []
         #labels = []
         if gt_boxes_in_image.numel() == 0:
-                # Background image
-                #img vuota sensa oggetti se dal GT vedo che non ci sono box. Allora tensore tutto a 0
-                device = proposals_in_image.device
-                clamped_matched_idxs_in_image = torch.zeros(
-                    (proposals_in_image.shape[0],), dtype=torch.int64, device=device
-                )
-                labels_in_image = torch.zeros((proposals_in_image.shape[0],), dtype=torch.int64, device=device)
-                best_det_for_each_gt=torch.empty((0,)).to(device)
-                tensor_det = best_det_for_each_gt
+           # Background image
+           #img vuota sensa oggetti se dal GT vedo che non ci sono box. Allora tensore tutto a 0
+           device = proposals_in_image.device
+           clamped_matched_idxs_in_image = torch.zeros(
+           	(proposals_in_image.shape[0],), dtype=torch.int64, device=device
+           )
+           labels_in_image = torch.zeros((proposals_in_image.shape[0],), dtype=torch.int64, device=device)
+           best_det_for_each_gt=torch.empty((0,)).to(device)
+           tensor_det = best_det_for_each_gt
         else:
-        	match_quality_matrix = box_ops.box_iou(gt_boxes_in_image, proposals_in_image)
-        	device = proposals_in_image.device
-        	n_gt_in_image=len(gt_boxes_in_image)
-        	#n_gt_now=0 #cosi sono sicuro di controllare per ogni gt
-        	#best_det_for_each_gt=[] #Il metodo è lento, però posso impostare lo score thresh a 0.1 tranquillamente e ridurre di molto le proposal. Lo posso fare perché nella logica della scelta delle proposal, le proposal con IoU molto alto ma score molto basso hanno distanza massima e non verranno mai scelte; è inutile quindi che mi porto dietro tanti indici peggiorando notevolmente le performance
-        	tensor_taken=torch.empty(0, dtype=torch.int32).to(device) #per non prendere 2 volte le stesse proposals. Può capitare in teoria, ma è raro. Con le negative se se ne tengono tante questo controllo rallenta molto le performance. Allora rimuovo le negative duplicate e basta
-        	#tensor_det = torch.empty(0).to(device) #tensore contenente le bbox che salvo
-        	#absolute_bg_mask = torch.zeros_like(proposals_in_image)
-        	tensor_neg_taken=torch.empty(0, dtype=torch.int32).to(device)
-        	match_thresh=0.6
-        	absolute_bg_mask = torch.arange(len(proposals_in_image)).to(device) #rappresenta gli indici di elementi che verranno settate a -1 se non appartengono al bg.
-        	for match_matrix_each_gt in match_quality_matrix:       		
-        		bg_thresh=0.00 #hard coded ma va bene visto che devo tenere quelle sicure nel bg      		
-        		absolute_bg_mask[match_matrix_each_gt > bg_thresh] = -1
-        	# Idea: tengo tutte le negative che cadono nel background al 100% e che non cadono in nessun GT. Queste non dovrebbero contribuire sensibilmente alla ricostruzione dell'immagine (spero) e porterebbero a maggiore ap.
-        	for match_matrix_each_gt in match_quality_matrix: #itero per GT			
-        		iou_values , iou_indices = torch.sort(match_matrix_each_gt, 0, descending=True)
-        		"""
-        		Premessa 1 (attivare proposals): ordinerei tutte le proposals per ogni target in base a IOU con esso (tralasciando condifence e label), seleziono le prime n e le passo alla loss
-        		"""
-        		#numero di proposal per ogni GT da tenere indipendentemente dal loro score, label ecc..., ma solo ordinate per loro IoU. In teoria sono necessariamente positive
-        		top_prop=iou_indices[:self.n_top_iou_to_keep]
-        		for index_prop in top_prop:
-        			#il matched_idxs mi darebbe problemi usarlo, perché filtra già per 0.5; a me il matcher non serve più
-        			if index_prop not in tensor_taken:
-        			#if proposals_in_image[index_prop] not in best_det_for_each_gt: #and matched_idxs[index_prop]==n_gt_now:
-        				tensor_taken = torch.cat([tensor_taken, index_prop.unsqueeze(0)])
-        				#best_det_for_each_gt.append(proposals_in_image[index_prop])
-        				#tensor_det = torch.cat([tensor_det, proposals_in_image[index_prop].unsqueeze(0)], dim=0)
-        			else:
-        				#se è già preso, allora cerco il prossimo index
-        				next_index = next((i for i in iou_indices if i not in tensor_taken), None)
-        				#next_index = next((i for i in iou_indices if (proposals_in_image[i] not in best_det_for_each_gt)), None) # and matched_idxs[index_prop]==n_gt_now)), None)
-        				if next_index is None: #se è None vuol dire che non ho trovato un indice
-        					break #posso uscire subito dal for perché vuol dire che li ho passati tutti e non ho trovato nulla che soddisfi la condizione
-        				#taken.append(next_index)
-        				tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
-        				#tensor_det = torch.cat([tensor_det, proposals_in_image[next_index].unsqueeze(0)], dim=0)
-        				#best_det_for_each_gt.append(proposals_in_image[next_index])
-        		"""
-        		Premessa 2 (sopprimere predicitions FPiou): considero solo le bbox con label 1 (persona), le ordino per confidence  e seleziono le prime t con iou < di 0.5
-        		"""
-        		"""
-        		Commento mio: in realtà il modello lavora con objectness score e filtra solo in base a quello se è persona o meno. Questo vuol dire che non so mai se una persona è persona, ma solo se soddisfa la soglia di threshold messa dal matcher. Siccome la label non mi interessa, a sto punto ordino per confidence tutte le bbox che hanno iou<0.5 e propago quelle, che so già che sono background
-        		"""
-        		neg_iou_indices = iou_indices[iou_values[iou_indices] < self.iou_neg_thresh] #gli indici che soddisfano IoU. L'ordine IoU non è conservato, a me va bene perché tanto poi faccio il sort per score
-        		#numero di proposal per ogni GT da tenere per sopprimere le fpiou, sono ordinate per confidence e hanno meno thresh
-        		neg_iou_indices, _ = torch.sort(neg_iou_indices, 0, descending=False) #riordino per score
-        		top_fpiou=neg_iou_indices[:self.n_top_neg_to_keep]
-        		#import time
-        		#start=time.time()
-        		for index_fpiou in top_fpiou:       			
-        			if index_fpiou not in tensor_taken:
-        			#if proposals_in_image[index_fpiou] not in best_det_for_each_gt: #and matched_idxs[index_fpiou]==n_gt_now:
-        				#taken.append(index_fpiou)
-        				if tensor_neg_taken.numel() == 0: #tensore negativo vuoto, aggiungo la prop subito
-        					tensor_taken = torch.cat([tensor_taken, index_fpiou.unsqueeze(0)])
-        					tensor_neg_taken = torch.cat([tensor_neg_taken, index_fpiou.unsqueeze(0)])
-        				else: #devo verificare che non vado a prendere una negativa che overlappi tanto con un'altra negativa che ho già preso
-        					match = box_ops.box_iou(proposals_in_image[tensor_neg_taken], proposals_in_image[index_fpiou].unsqueeze(0))
-        					if torch.any(match > match_thresh):
-        						next_index = next((i for i in neg_iou_indices if torch.all(box_ops.box_iou(proposals_in_image[tensor_neg_taken], proposals_in_image[i].unsqueeze(0)) <= match_thresh)), None)
-        						if next_index is None: 
-        							break
-        						tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
-        						tensor_neg_taken = torch.cat([tensor_neg_taken, next_index.unsqueeze(0)])
-        					else:
-        						tensor_taken = torch.cat([tensor_taken, index_fpiou.unsqueeze(0)])
-        						tensor_neg_taken = torch.cat([tensor_neg_taken, index_fpiou.unsqueeze(0)])
-        				#metodo vecchio
-        				"""
-        				tensor_taken = torch.cat([tensor_taken, index_fpiou.unsqueeze(0)])
-        				"""
-        				#best_det_for_each_gt.append(proposals_in_image[index_fpiou])
-        				#tensor_det = torch.cat([tensor_det, proposals_in_image[index_fpiou].unsqueeze(0)], dim=0)
-        			else:
-        				if tensor_neg_taken.numel() == 0: #tensore negativo vuoto, aggiungo la prop subito
-        					next_index = next((i for i in neg_iou_indices if i not in tensor_taken), None) # and matched_idxs[index_fpiou]==n_gt_now)), None)
-        					if next_index is None: #se è None vuol dire che non ho trovato un indice
-        						break
-        					tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
-        					tensor_neg_taken = torch.cat([tensor_neg_taken, next_index.unsqueeze(0)])
-        				else:
-        					next_index = next((i for i in neg_iou_indices if i not in tensor_taken and (torch.all(box_ops.box_iou(proposals_in_image[tensor_neg_taken], proposals_in_image[i].unsqueeze(0)) <= match_thresh))), None)
-        					if next_index is None: #se è None vuol dire che non ho trovato un indice
-        						break
-        					tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
-        					tensor_neg_taken = torch.cat([tensor_neg_taken, next_index.unsqueeze(0)])
-        				#metodo vecchio
-        				#se è già preso, allora cerco il prossimo index
-        				"""
-        				next_index = next((i for i in neg_iou_indices if i not in tensor_taken), None) # and matched_idxs[index_fpiou]==n_gt_now)), None)
-        				if next_index is None: #se è None vuol dire che non ho trovato un indice
-        					break #posso uscire subito dal for perché vuol dire che li ho passati tutti e non ho trovato nulla che soddisfi la condizione
-        				#taken.append(next_index)
-        				tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
-        				"""
-        				#best_det_for_each_gt.append(proposals_in_image[next_index])
-        				#tensor_det = torch.cat([tensor_det, proposals_in_image[next_index].unsqueeze(0)], dim=0)
-        		"""
-        		Mia premessa: porto dietro tutto ciò che è sicuramente background. Prop molto negative
-        		"""
-        		"""
-        		bg_thresh=0.00
-        		bg_to_keep=int((512 - (self.n_top_iou_to_keep*n_gt_in_image) - (self.n_top_neg_to_keep*n_gt_in_image))/n_gt_in_image) #questa formula serve per prendere in modo equo n prop molto negative per ogni gt. Gli tolgo quelle che sono le prop positive e le negative in totale per tutta l'img (non per ogni gt) che devo sicuramente mantenere nel sampler. Poi divido per il numero di gt nell'immagine e trasformo in int, ottenendo quelle molto negative.
-        		#es: se n_top è 1, n_top_neg è 10, n_gt è 2, batch size è 512, terrò 245 molto negative rispetto al primo gt, e poi 245 molto neg rispetto al secondo gt. 512-490 = 22, 2 pos e 20 neg.
-        		bg_iou_indices = iou_indices[iou_values[iou_indices] <= bg_thresh]
-        		bg_iou_indices, _ = torch.sort(bg_iou_indices, 0, descending=False) #riordino per score
-        		top_bg_iou_indices = bg_iou_indices[:bg_to_keep]
-        		for index_bg in top_bg_iou_indices:
-        			tensor_det = torch.cat([tensor_det, proposals_in_image[index_bg].unsqueeze(0)], dim=0)
-        		"""
-        		#n_gt_now+=1 #passo al prossimo gt
-        		#end=time.time()
-        		#print(end-start)
-
-        	#Mia premessa: porto dietro tutto ciò che è sicuramente background. Prop molto negative
-        	#sono già ordinati per score, essendo indici delle prop come l'originale. Mi basta eliminare le -1 che sono quelle che non soddisfano quella thresh
-        	absolute_bg_indices = absolute_bg_mask[absolute_bg_mask != -1]#[:vn_to_keep] #sono già sortati per score perché mantengono ordine originale
-        	#vn_to_keep=int(512 - (self.n_top_iou_to_keep*n_gt_in_image) - (self.n_top_neg_to_keep*n_gt_in_image)) ricostruisce troppo
-        	top_absolute_bg = absolute_bg_indices[:self.n_top_absolute_bg_to_keep]
-        	for index_vn in top_absolute_bg:
-        		#tensor_det = torch.cat([tensor_det, proposals_in_image[index_vn].unsqueeze(0)], dim=0)
-        		if index_vn not in tensor_taken:
-        			#posso evitare di verificare che  il tensore negativo sia vuoto
-        			match = box_ops.box_iou(proposals_in_image[tensor_neg_taken], proposals_in_image[index_vn].unsqueeze(0))
-        			if torch.any(match > match_thresh):
-        				next_index = next((i for i in absolute_bg_indices if torch.all(box_ops.box_iou(proposals_in_image[tensor_neg_taken], proposals_in_image[i].unsqueeze(0)) <= match_thresh)), None)
-        				if next_index is None: 
-        					break
-        				tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
-        				tensor_neg_taken = torch.cat([tensor_neg_taken, next_index.unsqueeze(0)])
-        			else:
-        				tensor_taken = torch.cat([tensor_taken, index_vn.unsqueeze(0)])
-        				tensor_neg_taken = torch.cat([tensor_neg_taken, index_vn.unsqueeze(0)])
-        			#metodo vecchio
-        			"""
-        			#taken.append(index_vn)
-        			tensor_taken = torch.cat([tensor_taken, index_vn.unsqueeze(0)])
-        			#tensor_det = torch.cat([tensor_det, proposals_in_image[index_vn].unsqueeze(0)], dim=0)
-        			"""
-        		else:
-        			next_index = next((i for i in absolute_bg_indices if i not in tensor_taken and (torch.all(box_ops.box_iou(proposals_in_image[tensor_neg_taken], proposals_in_image[i].unsqueeze(0)) <= match_thresh))), None)
-        			if next_index is None: #se è None vuol dire che non ho trovato un indice
-        				break
-        			tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
-        			tensor_neg_taken = torch.cat([tensor_neg_taken, next_index.unsqueeze(0)])
-        			#metodo vecchio
-        			"""
-        			next_index = next((i for i in absolute_bg_indices if i not in tensor_taken), None) 
-        			if next_index is None: #se è None vuol dire che non ho trovato un indice
-        				break #posso uscire subito dal for perché vuol dire che li ho passati tutti e non ho trovato nulla che soddisfi la condizione
-        			#taken.append(next_index)
-        			tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
-        			#tensor_det = torch.cat([tensor_det, proposals_in_image[next_index].unsqueeze(0)], dim=0)
-        			"""
-        	tensor_taken = torch.unique(tensor_taken, dim=0) #rimuovo indici doppi per non far contare 2 volte stessa proposal
-        	#tensor_det = torch.unique(tensor_det, dim=0) #da usare con metodo nuovo. Elimino possibili proposal prese due volte. Più efficiente che scorrere nelle liste. As es su 6 gt se tengo 1 pos e 100 neg ho 66 duplicati; in totale tengo alla fine 540 proposal (il max era 606).
+           match_quality_matrix = box_ops.box_iou(gt_boxes_in_image, proposals_in_image)
+           device = proposals_in_image.device
+           n_gt_in_image=len(gt_boxes_in_image)
+           #n_gt_now=0 #cosi sono sicuro di controllare per ogni gt. In realtà non lo posso fare perché l'assegnamento proposal a gt è basato solo sulla thresh di iou
+           tensor_taken=torch.empty(0, dtype=torch.int32).to(device) #per non prendere 2 volte le stesse proposals. Può capitare in teoria, ma è raro. Con le negative se se ne tengono tante questo controllo rallenta molto le performance. Allora rimuovo le negative duplicate e basta
+           if self.use_not_overlapping_proposals:
+           	tensor_neg_taken=torch.empty(0, dtype=torch.int32).to(device)
+           for match_matrix_each_gt in match_quality_matrix: #itero per GT			
+              iou_values , iou_indices = torch.sort(match_matrix_each_gt, 0, descending=True)
+              """
+              Premessa 1 (attivare proposals): ordinerei tutte le proposals per ogni target in base a IOU con esso (tralasciando condifence e label), seleziono le prime n e le passo alla loss
+              """
+              #numero di proposal per ogni GT da tenere indipendentemente dal loro score, label ecc..., ma solo ordinate per loro IoU. In teoria sono necessariamente positive
+              top_prop=iou_indices[:self.n_top_iou_to_keep]
+              for index_prop in top_prop:
+                 if index_prop not in tensor_taken:
+                    tensor_taken = torch.cat([tensor_taken, index_prop.unsqueeze(0)])
+                 else:   #se è già preso, allora cerco il prossimo index
+                    next_index = next((i for i in iou_indices if i not in tensor_taken), None)
+                    if next_index is None: #se è None vuol dire che non ho trovato un indice
+                       break #posso uscire subito dal for perché vuol dire che li ho passati tutti e non ho trovato nulla che soddisfi la condizione
+                    tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
+              """
+              Premessa 2 (sopprimere predicitions FPiou): considero solo le bbox con label 1 (persona), le ordino per confidence  e seleziono le prime t con iou < di 0.5
+              """
+              """
+              Commento mio: in realtà il modello lavora con objectness score e filtra solo in base a quello se è persona o meno. Questo vuol dire che non so mai se una persona è persona, ma solo se soddisfa la soglia di threshold messa dal matcher. Siccome la label non mi interessa, a sto punto ordino per confidence tutte le bbox che hanno iou<0.5 e propago quelle, che so già che sono background
+              """
+              neg_iou_indices = iou_indices[iou_values[iou_indices] < self.iou_neg_thresh] #gli indici che soddisfano IoU. L'ordine IoU non è conservato, a me va bene perché tanto poi faccio il sort per score
+              neg_iou_indices, _ = torch.sort(neg_iou_indices, 0, descending=False) #riordino per score
+              top_fpiou=neg_iou_indices[:self.n_top_neg_to_keep]
+              for index_fpiou in top_fpiou:       			
+                 if index_fpiou not in tensor_taken:
+                    if self.use_not_overlapping_proposals:
+                       if tensor_neg_taken.numel() == 0: #tensore negativo vuoto, aggiungo la prop subito
+                          tensor_taken = torch.cat([tensor_taken, index_fpiou.unsqueeze(0)])
+                          tensor_neg_taken = torch.cat([tensor_neg_taken, index_fpiou.unsqueeze(0)])
+                       else: #devo verificare che non vado a prendere una negativa che overlappi tanto con un'altra negativa che ho già preso
+                          match = box_ops.box_iou(proposals_in_image[tensor_neg_taken], proposals_in_image[index_fpiou].unsqueeze(0))
+                          if torch.any(match > self.overlapping_prop_thresh):
+                             next_index = next((i for i in neg_iou_indices if torch.all(box_ops.box_iou(proposals_in_image[tensor_neg_taken], proposals_in_image[i].unsqueeze(0)) <= self.overlapping_prop_thresh)), None)
+                             if next_index is None: 
+                                break
+                             tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
+                             tensor_neg_taken = torch.cat([tensor_neg_taken, next_index.unsqueeze(0)])
+                          else:
+                             tensor_taken = torch.cat([tensor_taken, index_fpiou.unsqueeze(0)])
+                             tensor_neg_taken = torch.cat([tensor_neg_taken, index_fpiou.unsqueeze(0)])
+                    else: #metodo non overlapping
+                       tensor_taken = torch.cat([tensor_taken, index_fpiou.unsqueeze(0)])
+                 else:
+                    if self.use_not_overlapping_proposals:
+                       if tensor_neg_taken.numel() == 0: #tensore negativo vuoto, aggiungo la prop subito
+                          next_index = next((i for i in neg_iou_indices if i not in tensor_taken), None)
+                          if next_index is None: #se è None vuol dire che non ho trovato un indice
+                             break
+                          tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
+                          tensor_neg_taken = torch.cat([tensor_neg_taken, next_index.unsqueeze(0)])
+                       else:
+                          next_index = next((i for i in neg_iou_indices if i not in tensor_taken and (torch.all(box_ops.box_iou(proposals_in_image[tensor_neg_taken], proposals_in_image[i].unsqueeze(0)) <= self.overlapping_prop_thresh))), None)
+                          if next_index is None: #se è None vuol dire che non ho trovato un indice
+                             break
+                          tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
+                          tensor_neg_taken = torch.cat([tensor_neg_taken, next_index.unsqueeze(0)])
+                    else: #metodo non overlapping, se è già preso, allora cerco il prossimo index
+                       next_index = next((i for i in neg_iou_indices if i not in tensor_taken), None) 
+                       if next_index is None: #se è None vuol dire che non ho trovato un indice
+                          break #posso uscire subito dal for perché vuol dire che li ho passati tutti e non ho trovato nulla che soddisfi la condizione
+                       tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
+           """
+           Mia premessa: porto dietro tutto ciò che è sicuramente background. Prop molto negative
+           """
+           if self.n_top_absolute_bg_to_keep>0: #se è = 0 vuol dire che non uso il metodo per le bg, allora sta roba sotto non la faccio nememno e risparmio performance-
+              absolute_bg_mask = torch.arange(len(proposals_in_image)).to(device) #rappresenta gli indici di elementi che verranno settate a -1 se non appartengono al bg.
+              for match_matrix_each_gt in match_quality_matrix:       		
+                 bg_thresh=0.00 #hard coded ma va bene visto che devo tenere quelle sicure nel bg      		
+                 absolute_bg_mask[match_matrix_each_gt > bg_thresh] = -1
+        	# Idea: tengo tutte le negative che cadono nel background al 100% e che non cadono in nessun GT.
+              absolute_bg_indices = absolute_bg_mask[absolute_bg_mask != -1]
+              #Problema: le bg contribuisco tantissimo alla ricostruzione dell'immagine. Idea: tieni solo quelle che hanno alta confidence
+              absolute_bg_indices = absolute_bg_indices[scores[absolute_bg_indices] >= self.absolute_bg_score_thresh]
+              #sono già ordinati per score, essendo indici delle prop come l'originale. Mi basta eliminare le -1 che sono quelle che non soddisfano quella thresh
+              top_absolute_bg = absolute_bg_indices[:self.n_top_absolute_bg_to_keep]
+              for index_vn in top_absolute_bg:
+                 if index_vn not in tensor_taken:
+                    if self.use_not_overlapping_proposals:
+                       #posso evitare di verificare che il tensore negativo sia vuoto
+                       match = box_ops.box_iou(proposals_in_image[tensor_neg_taken], proposals_in_image[index_vn].unsqueeze(0))
+                       if torch.any(match > self.overlapping_prop_thresh):
+                          next_index = next((i for i in absolute_bg_indices if torch.all(box_ops.box_iou(proposals_in_image[tensor_neg_taken], proposals_in_image[i].unsqueeze(0)) <= self.overlapping_prop_thresh)), None)
+                          if next_index is None: 
+                             break
+                          tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
+                          tensor_neg_taken = torch.cat([tensor_neg_taken, next_index.unsqueeze(0)])
+                       else:
+                          tensor_taken = torch.cat([tensor_taken, index_vn.unsqueeze(0)])
+                          tensor_neg_taken = torch.cat([tensor_neg_taken, index_vn.unsqueeze(0)])
+                    else: #metodo non overlapping
+                       tensor_taken = torch.cat([tensor_taken, index_vn.unsqueeze(0)])
+                 else:
+                    if self.use_not_overlapping_proposals:
+                       next_index = next((i for i in absolute_bg_indices if i not in tensor_taken and (torch.all(box_ops.box_iou(proposals_in_image[tensor_neg_taken], proposals_in_image[i].unsqueeze(0)) <= self.overlapping_prop_thresh))), None)
+                       if next_index is None: #se è None vuol dire che non ho trovato un indice
+                          break
+                       tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
+                       tensor_neg_taken = torch.cat([tensor_neg_taken, next_index.unsqueeze(0)])
+                    else: #metodo non overlapping
+                       next_index = next((i for i in absolute_bg_indices if i not in tensor_taken), None) 
+                       if next_index is None: #se è None vuol dire che non ho trovato un indice
+                          break
+                       tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
+           tensor_taken = torch.unique(tensor_taken, dim=0) #rimuovo indici doppi per non far contare 2 volte stessa proposal
         #print(len(gt_boxes_in_image))
         return tensor_taken
-        #return tensor_det, tensor_taken
     
     def forward(
         self,
@@ -695,7 +651,7 @@ class RegionProposalNetwork(torch.nn.Module):
         else:
         	boxes, scores = self.filter_proposals(proposals, objectness, images.image_sizes, num_anchors_per_level)
         
-        
+        """
         import matplotlib.pyplot as plt
         plt.figure(figsize=(16,10))
         import torchvision.transforms as transforms
@@ -715,7 +671,7 @@ class RegionProposalNetwork(torch.nn.Module):
         		ax.text(xmin, ymin, prob, fontsize=15, bbox=dict(facecolor='yellow', alpha=0.5))
         	plt.show()
         	plt.clf()
-        
+        """
         
         losses = {}
         #PASSO 3: solo in training, alleno il modello a migliorare le anchors.

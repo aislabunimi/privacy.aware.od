@@ -96,9 +96,10 @@ elif not train_backward_on_disturbed_sets:
 		rpn_pre_nms_top_n_train=2000, rpn_pre_nms_top_n_test=1000,
 		rpn_post_nms_top_n_train=2000, rpn_post_nms_top_n_test=1000,
 		rpn_nms_thresh=0.7, rpn_fg_iou_thresh=0.7, rpn_bg_iou_thresh=0.3,
-		rpn_score_thresh=0.0, use_custom_filter_proposals=use_custom_filter_proposals,
-		rpn_n_top_iou_to_keep=1, rpn_iou_neg_thresh=0.5, rpn_n_top_neg_to_keep=8,
-		rpn_n_top_absolute_bg_to_keep=2,
+		rpn_score_thresh=0.0, rpn_use_custom_filter_proposals=use_custom_filter_proposals,
+		rpn_n_top_iou_to_keep=1, rpn_iou_neg_thresh=0.5, rpn_n_top_neg_to_keep=5,
+		rpn_n_top_absolute_bg_to_keep=0, rpn_absolute_bg_score_thresh=0.75,
+		rpn_use_not_overlapping_proposals=True, rpn_overlapping_prop_thresh=0.6,
 		box_batch_size_per_image=512, box_positive_fraction=0.25)
 	"""
 	commento su ultimi due campi: sono del sampler degli indici delle proposal. Valore di default rispettivi: 512, 0.25. Il primo ti dice quante proposal tenere al massimo, scelte a caso. Il secondo ti dice: di quelle 512 proposal quante al massimo sono positive? Il sampler nel codice fa una roba del genere. Immaginiamo di avere 1 positiva (con IoU >0.5, il Roi head le discrimina così) e tenere 1000 negative (IoU<0.5).
