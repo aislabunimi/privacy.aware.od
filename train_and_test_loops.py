@@ -1,8 +1,10 @@
 import torch
 from tqdm import tqdm
 
-from model_utils_and_functions import create_checkpoint, compute_ap
+from model_utils_and_functions import create_checkpoint, compute_ap, apply_nms, compute_michele_metric
 
+import numpy as np
+from michele_metric.my_evaluators_complete_metric import MyEvaluatorCompleteMetric
 #import per salvare dataset versione disturbata
 from torchvision.utils import save_image
 import json
@@ -70,16 +72,12 @@ def train_model(train_dataloader, epoch, device, train_loss, model, tasknet, mod
 	train_loss.append(running_loss)
 	return running_loss
 
-import numpy as np
-from michele_metric.my_evaluators_complete_metric import MyEvaluatorCompleteMetric
 def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_log_path, ap_score_threshold, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, michele_metric_folder): #funzione che si occupa del test
 	model.eval()
 	batch_size = len(val_dataloader) #recupero la batch size
 	running_loss = 0 # Initializing variable for storing  loss 
-	res={}
-	
-	evaluator_complete_metric = MyEvaluatorCompleteMetric()
-	
+	res={}	
+	evaluator_complete_metric = MyEvaluatorCompleteMetric()	
 	with torch.no_grad(): #non calcolo il gradiente, sto testando e bassa
 		for imgs, targets in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):
 			imgs, _ = imgs.decompose()
@@ -106,7 +104,6 @@ def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, t
 			outputs = tasknet(reconstructed)
 			outputs = [{k: v.to(device) for k, v in t.items()} for t in outputs]
 			res.update({target["image_id"].item(): output for target, output in zip(targets, outputs)})
-			from model_utils_and_functions import apply_nms
 			preds=outputs
 			preds = [apply_nms(pred, iou_thresh=0.5, score_thresh=0.01) for pred in outputs]
 			#for pred in preds: #Questo non devo farlo, ce le ho già giuste
@@ -136,34 +133,9 @@ def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, t
 	running_loss /= batch_size #calcolo la loss media
 	#la validation loss se è attivo il custom filter proposal è fatta in base a ciò, non è una val
 	#loss con i parametri di default della tasknet, ma val loss con i parametri usati per allenamento
-	compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, ap_log_path, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, res)	
+	compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, ap_log_path, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, res)
+	compute_michele_metric(evaluator_complete_metric, michele_metric_folder, epoch)	
 	val_loss.append(running_loss)
-	
-	#iou_threshold=0.5
-	#confidence_threshold=0.5
-	complete_metrics = {}
-	for iou_threshold in np.arange(0.5, 0.76, 0.25): #np.arange(0.5, 0.96, 0.05):
-		for confidence_threshold in np.arange(0.5, 0.76, 0.25): #np.arange(0.5, 0.96, 0.05):
-			iou_threshold = round(iou_threshold, 2)
-			confidence_threshold = round(confidence_threshold, 2)
-			complete_metrics[(iou_threshold, confidence_threshold)] = evaluator_complete_metric.get_metrics(iou_threshold=iou_threshold, confidence_threshold=confidence_threshold, door_no_door_task=False, plot_curves=False)
-	#complete_metrics[(iou_threshold, confidence_threshold)] = evaluator_complete_metric.get_metrics(iou_threshold=iou_threshold, confidence_threshold=confidence_threshold, door_no_door_task=False, plot_curves=False)
-	#print(complete_metrics)
-	filtered_metrics = {key: value['1'] for key, value in complete_metrics.items()} #prendo solo label persone
-	for m in filtered_metrics.items():
-		save_path=f'{michele_metric_folder}/iou{m[0][0]}_score{m[0][1]}.json'
-		m[1]['epoch'] = epoch #aggiungo il campo epoca cosi recupero più facilmente
-		if epoch>1:
-			with open(save_path, 'r') as json_file:
-				data = json.load(json_file)
-			data.append(m[1])
-			with open(save_path, 'w') as json_file:
-				json.dump(data, json_file, indent=2)
-		else:
-			temp_list=[m[1]]
-			with open(save_path, 'w') as json_file:
-				json.dump(temp_list, json_file, indent=2)
-	
 	model_save_path = f'{model_save_path}_{epoch}.pt'   
 	create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
 	return running_loss
@@ -362,9 +334,7 @@ def val_tasknet(val_dataloader, epoch, device, val_loss, tasknet_save_path, task
 	res={}	
 	batch_size = len(val_dataloader) #recupero la batch size
 	running_loss = 0 # Initializing variable for storing  loss 
-	
 	evaluator_complete_metric = MyEvaluatorCompleteMetric()
-	
 	with torch.no_grad(): #non calcolo il gradiente, sto testando e bassa
 		for imgs, targets in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):
 			imgs = list(img.to(device) for img in imgs)
@@ -378,8 +348,6 @@ def val_tasknet(val_dataloader, epoch, device, val_loss, tasknet_save_path, task
 			outputs = [{k: v.to(device) for k, v in t.items()} for t in outputs]
 			
 			res.update({target["image_id"].item(): output for target, output in zip(targets, outputs)})
-			
-			from model_utils_and_functions import apply_nms
 			preds=outputs
 			preds = [apply_nms(pred, iou_thresh=0.5, score_thresh=0.01) for pred in outputs]
 			#for pred in preds: #Questo non devo farlo, ce le ho già giuste
@@ -388,32 +356,7 @@ def val_tasknet(val_dataloader, epoch, device, val_loss, tasknet_save_path, task
 			
 	running_loss /= batch_size #calcolo la loss media
 	compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, ap_log_path, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, res)	
-	
-	#iou_threshold=0.5
-	#confidence_threshold=0.5
-	complete_metrics = {}
-	for iou_threshold in np.arange(0.5, 0.76, 0.25): #np.arange(0.5, 0.96, 0.05):
-		for confidence_threshold in np.arange(0.5, 0.76, 0.25): #np.arange(0.5, 0.96, 0.05):
-			iou_threshold = round(iou_threshold, 2)
-			confidence_threshold = round(confidence_threshold, 2)
-			complete_metrics[(iou_threshold, confidence_threshold)] = evaluator_complete_metric.get_metrics(iou_threshold=iou_threshold, confidence_threshold=confidence_threshold, door_no_door_task=False, plot_curves=False)
-	#complete_metrics[(iou_threshold, confidence_threshold)] = evaluator_complete_metric.get_metrics(iou_threshold=iou_threshold, confidence_threshold=confidence_threshold, door_no_door_task=False, plot_curves=False)
-	#print(complete_metrics)
-	filtered_metrics = {key: value['1'] for key, value in complete_metrics.items()} #prendo solo label persone
-	for m in filtered_metrics.items():
-		save_path=f'{michele_metric_folder}/iou{m[0][0]*100}_score{m[0][1]}.json'
-		m[1]['epoch'] = epoch #aggiungo il campo epoca cosi recupero più facilmente
-		if epoch>1:
-			with open(save_path, 'r') as json_file:
-				data = json.load(json_file)
-			data.append(m[1])
-			with open(save_path, 'w') as json_file:
-				json.dump(data, json_file, indent=2)
-		else:
-			temp_list=[m[1]]
-			with open(save_path, 'w') as json_file:
-				json.dump(temp_list, json_file, indent=2)	
-	
+	compute_michele_metric(evaluator_complete_metric, michele_metric_folder, epoch)	
 	val_loss.append(running_loss)
 	tasknet_save_path = f'{tasknet_save_path}_{epoch}.pt' 
 	create_checkpoint(tasknet, tasknet_optimizer, epoch, running_loss, tasknet_scheduler, tasknet_save_path)

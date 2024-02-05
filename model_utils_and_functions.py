@@ -8,6 +8,9 @@ import numpy as np
 from coco_eval import *
 from coco_eval import _get_iou_types
 import sys
+#import per la funzione di compute_michele_metric
+import json
+from michele_metric.my_evaluators_complete_metric import MyEvaluatorCompleteMetric
 
 def seed_everything(seed):
     random.seed(seed)
@@ -42,34 +45,8 @@ def compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, ap_lo
 	my_ap_evaluator.coco_eval['bbox'].params.recThrs = new_interpolation #necessaria visto che devo prendere i punti solo fino allo ap_score_threshold
 	my_ap_interp_thresh.coco_eval['bbox'].params.recThrs = new_interpolation
 	
-	coco_evaluator.update(res)
-	coco_evaluator.synchronize_between_processes()
-	coco_evaluator.coco_eval['bbox'].evaluate()
-	coco_evaluator.accumulate()
-	
-	orig_stdout = sys.stdout
-	f = open(ap_log_path, 'a')
-	sys.stdout = f
-	print(f'AP for Epoch {epoch}')
-	coco_evaluator.summarize()
-	
-	sys.stdout = orig_stdout
-	f.close()
-	
-	my_ap_evaluator.update(res)
-	my_ap_evaluator.synchronize_between_processes()
-	my_ap_evaluator.coco_eval['bbox'].evaluate()
-	my_ap_evaluator.accumulate()
-	
-	orig_stdout = sys.stdout
-	f = open(my_ap_log_path, 'a')
-	sys.stdout = f
-	print(f'AP for Epoch {epoch} with all predictions but curve interpolation, score thresh: {ap_score_threshold}')
-	my_ap_evaluator.summarize()
-	
-	sys.stdout = orig_stdout
-	f.close()
-	
+	execute_coco_eval(ap_log_path, f'AP for Epoch {epoch}', coco_evaluator, res)
+	execute_coco_eval(my_ap_log_path, f'AP for Epoch {epoch} with all predictions but curve interpolation, score thresh: {ap_score_threshold}', my_ap_evaluator, res)
 	#per filtrare solo le pred con score pari a ap_score_threshold o superiore
 	for image_id, pred in res.items():
 		filtered_boxes = []
@@ -89,33 +66,47 @@ def compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, ap_lo
                 	res[image_id] = {'boxes': torch.empty((0,4)).to(device),
                 			 'labels': torch.empty((0,)).to(device),
                 			 'scores': torch.empty((0,)).to(device)}
-	my_ap_nointerp_thresh.update(res)
-	my_ap_nointerp_thresh.synchronize_between_processes()
-	my_ap_nointerp_thresh.coco_eval['bbox'].evaluate()
-	my_ap_nointerp_thresh.accumulate()
-	
+	execute_coco_eval(my_ap_nointerp_thresh_path, f'AP for Epoch {epoch} with only pred above score thresh: {ap_score_threshold}', my_ap_nointerp_thresh, res)
+	execute_coco_eval(my_ap_interp_thresh_path, f'AP for Epoch {epoch} with only pred above score thresh and curve interpolation, score thresh: {ap_score_threshold}', my_ap_interp_thresh, res)
+
+def execute_coco_eval(ap_log_path, print_msg, coco_evaluator, res):
+	coco_evaluator.update(res)
+	coco_evaluator.synchronize_between_processes()
+	coco_evaluator.coco_eval['bbox'].evaluate()
+	coco_evaluator.accumulate()	
 	orig_stdout = sys.stdout
-	f = open(my_ap_nointerp_thresh_path, 'a')
+	f = open(ap_log_path, 'a')
 	sys.stdout = f
-	print(f'AP for Epoch {epoch} with only pred above score thresh: {ap_score_threshold}')
-	my_ap_nointerp_thresh.summarize()
-	
+	print(print_msg)
+	coco_evaluator.summarize()	
 	sys.stdout = orig_stdout
 	f.close()
-	
-	my_ap_interp_thresh.update(res)
-	my_ap_interp_thresh.synchronize_between_processes()
-	my_ap_interp_thresh.coco_eval['bbox'].evaluate()
-	my_ap_interp_thresh.accumulate()
-	
-	orig_stdout = sys.stdout
-	f = open(my_ap_interp_thresh_path, 'a')
-	sys.stdout = f
-	print(f'AP for Epoch {epoch} with only pred above score thresh and curve interpolation, score thresh: {ap_score_threshold}')
-	my_ap_interp_thresh.summarize()
-	
-	sys.stdout = orig_stdout
-	f.close()
+
+def compute_michele_metric(evaluator_complete_metric, michele_metric_folder, epoch):
+	#iou_threshold=0.5
+	#confidence_threshold=0.5
+	complete_metrics = {}
+	for iou_threshold in np.arange(0.5, 0.76, 0.25): #np.arange(0.5, 0.96, 0.05):
+		for confidence_threshold in np.arange(0.5, 0.76, 0.25): #np.arange(0.5, 0.96, 0.05):
+			iou_threshold = round(iou_threshold, 2)
+			confidence_threshold = round(confidence_threshold, 2)
+			complete_metrics[(iou_threshold, confidence_threshold)] = evaluator_complete_metric.get_metrics(iou_threshold=iou_threshold, confidence_threshold=confidence_threshold, door_no_door_task=False, plot_curves=False)
+	#complete_metrics[(iou_threshold, confidence_threshold)] = evaluator_complete_metric.get_metrics(iou_threshold=iou_threshold, confidence_threshold=confidence_threshold, door_no_door_task=False, plot_curves=False)
+	#print(complete_metrics)
+	filtered_metrics = {key: value['1'] for key, value in complete_metrics.items()} #prendo solo label persone
+	for m in filtered_metrics.items():
+		save_path=f'{michele_metric_folder}/iou{m[0][0]}_score{m[0][1]}.json'
+		m[1]['epoch'] = epoch #aggiungo il campo epoca cosi recupero più facilmente
+		if epoch>1:
+			with open(save_path, 'r') as json_file:
+				data = json.load(json_file)
+			data.append(m[1])
+			with open(save_path, 'w') as json_file:
+				json.dump(data, json_file, indent=2)
+		else:
+			temp_list=[m[1]]
+			with open(save_path, 'w') as json_file:
+				json.dump(temp_list, json_file, indent=2)
 
 def create_checkpoint(model, optimizer, current_epoch, current_loss, scheduler, model_save_path):
 	torch.save({
