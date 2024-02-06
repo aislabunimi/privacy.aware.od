@@ -113,7 +113,8 @@ def plot_results(img, prob, boxes):
         text = f'{p:0.3f}'
         ax.text(xmin, ymin, text, fontsize=15,
                 bbox=dict(facecolor='yellow', alpha=0.5))
-	
+
+from pytorch_msssim import ms_ssim, MS_SSIM	
 def compare_two_results_unet(unet, tasknet, device, img_file_path, name_path_save, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler): 
 
 	unet.eval() #metto il modello in evaluate
@@ -133,23 +134,30 @@ def compare_two_results_unet(unet, tasknet, device, img_file_path, name_path_sav
 	img_primo_plot = img.squeeze(0)
 	img_primo_plot = unnormalize(img_primo_plot)
 	nms_pred = apply_nms(res_tasknet[0], iou_thresh=0.1)
-	plt.subplot(1, 3, 1)
-	plt.title('Original Image', fontsize=18)
-	plot_results(img_primo_plot, nms_pred['scores'], nms_pred['boxes'])
-	
-	plt.subplot(1, 3, 2)	
+		
 	load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler)
 	out = unet(img)
-	#out_to_plot = transforms.functional.convert_image_dtype(out[0], torch.uint8)
+	#preparo poi per calcolo msssim
+	ms_ssim_module = MS_SSIM(data_range=1, size_average=True, channel=3)
+	trans_r = transforms.Resize((out.shape[2], out.shape[3]), antialias=False)
+	orig_img = trans_r(img)
+	orig_img = unnormalize(orig_img)
+	
+	img_primo_plot = trans_r(img_primo_plot) #per fare img uguale a quelle ricostruite
+	plt.subplot(1, 3, 1)
+	plt.title('Original Image', fontsize=16)	
+	plot_results(img_primo_plot, nms_pred['scores'], nms_pred['boxes'])
+	
+	plt.subplot(1, 3, 2)
 	out_to_plot = unnormalize(out)
 	reconstructed = tasknet(out)
 	pred_recon = reconstructed[0]
 	nms_pred_recon = apply_nms(pred_recon, iou_thresh=0.1) #per applicare nms e salvare l'ultima box
 	filename = os.path.basename(unet_weights_load)
-	name = os.path.splitext(filename)[0]
-	plt.title(f'Reconstructed by {name}', fontsize=18)
+	name = os.path.splitext(filename)[0]	
+	ms_ssim_score = ms_ssim_module(out_to_plot, orig_img)
+	plt.title(f'{name}, MS_SSIM: {ms_ssim_score:0.3f}', fontsize=16)
 	plot_results(out_to_plot, nms_pred_recon['scores'], nms_pred_recon['boxes'])
-	
 	plt.subplot(1, 3, 3)
 	load_checkpoint(unet, unet_weights_to_compare, unet_optimizer, unet_scheduler)
 	out = unet(img)
@@ -160,7 +168,8 @@ def compare_two_results_unet(unet, tasknet, device, img_file_path, name_path_sav
 	nms_pred_recon = apply_nms(pred_recon, iou_thresh=0.1) #per applicare nms e salvare l'ultima box
 	filename = os.path.basename(unet_weights_to_compare)
 	name = os.path.splitext(filename)[0]
-	plt.title(f'Reconstructed by {name}', fontsize=18)
+	ms_ssim_score = ms_ssim_module(out_to_plot, orig_img)
+	plt.title(f'{name}, MS_SSIM: {ms_ssim_score:0.3f}', fontsize=16)
 	plot_results(out_to_plot, nms_pred_recon['scores'], nms_pred_recon['boxes'])
 	
 	plt.subplots_adjust(wspace=0.05)
