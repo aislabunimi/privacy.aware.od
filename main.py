@@ -100,8 +100,9 @@ elif not train_backward_on_disturbed_sets:
 		rpn_n_top_iou_to_keep=1, rpn_iou_neg_thresh=0.5, rpn_n_top_neg_to_keep=5,
 		rpn_n_top_absolute_bg_to_keep=0, rpn_absolute_bg_score_thresh=0.75,
 		rpn_use_not_overlapping_proposals=True, rpn_overlapping_prop_thresh=0.6,
-		box_batch_size_per_image=512, box_positive_fraction=0.25)
+		box_batch_size_per_image=512, box_positive_fraction=0.25, box_bg_iou_thresh=0.5)
 	"""
+	commento su ultimo campo: rpn_iou_neg_thresh must be equal to box_bg_iou_thresh. Otherwise what is selected by the custom filter proposal may not be considered negative by the ROI heads.
 	commento su ultimi due campi: sono del sampler degli indici delle proposal. Valore di default rispettivi: 512, 0.25. Il primo ti dice quante proposal tenere al massimo, scelte a caso. Il secondo ti dice: di quelle 512 proposal quante al massimo sono positive? Il sampler nel codice fa una roba del genere. Immaginiamo di avere 1 positiva (con IoU >0.5, il Roi head le discrimina così) e tenere 1000 negative (IoU<0.5).
 num_pos = int(self.batch_size_per_image * self.positive_fraction)   #num_pos = 512*0.25 -> 128
 # protect against not enough positive examples

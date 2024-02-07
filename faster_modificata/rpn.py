@@ -209,6 +209,7 @@ class RegionProposalNetwork(torch.nn.Module):
         labels = []
         matched_gt_boxes = [] #questo è un tensore contenente le gt boxes che le anchors matchano
         #in particolare i tensori saranno lunghi quante sono le anchors delle img, es 185460             
+        #COME FUNZIONA: a ciascuna ancora viene associato un gt. Rispetto a tale gt, verrà poi calcolato il box regression. Quindi se ho 100000 ancore, per ognuna di esse avrò il gt
         for anchors_per_image, targets_per_image in zip(anchors, targets):
             gt_boxes = targets_per_image["boxes"]
             #Se non c'è nessuna GT box nel targets, allora l'immagine è "vuota", non contiene alcun oggetto
@@ -481,6 +482,7 @@ class RegionProposalNetwork(torch.nn.Module):
            	tensor_neg_taken=torch.empty(0, dtype=torch.int32).to(device)
            for match_matrix_each_gt in match_quality_matrix: #itero per GT			
               iou_values , iou_indices = torch.sort(match_matrix_each_gt, 0, descending=True)
+              #l'indice qui è rispetto alla pos originale in match_matrix_each_gt! es: iou_indices[:0] da 145, il top iou è la prop con indice 145 in match_matrix_each_gt
               """
               Premessa 1 (attivare proposals): ordinerei tutte le proposals per ogni target in base a IOU con esso (tralasciando condifence e label), seleziono le prime n e le passo alla loss
               """
@@ -500,8 +502,11 @@ class RegionProposalNetwork(torch.nn.Module):
               """
               Commento mio: in realtà il modello lavora con objectness score e filtra solo in base a quello se è persona o meno. Questo vuol dire che non so mai se una persona è persona, ma solo se soddisfa la soglia di threshold messa dal matcher. Siccome la label non mi interessa, a sto punto ordino per confidence tutte le bbox che hanno iou<0.5 e propago quelle, che so già che sono background
               """
-              neg_iou_indices = iou_indices[iou_values[iou_indices] < self.iou_neg_thresh] #gli indici che soddisfano IoU. L'ordine IoU non è conservato, a me va bene perché tanto poi faccio il sort per score
+              neg_iou_indices = iou_indices[match_matrix_each_gt[iou_indices] < self.iou_neg_thresh] #gli indici che soddisfano IoU. L'ordine IoU è conservato, ma tanto poi faccio il sort per score
               neg_iou_indices, _ = torch.sort(neg_iou_indices, 0, descending=False) #riordino per score
+              #print(neg_iou_indices)
+              #print(match_matrix_each_gt[neg_iou_indices])
+              #print(scores[neg_iou_indices])
               top_fpiou=neg_iou_indices[:self.n_top_neg_to_keep]
               for index_fpiou in top_fpiou:       			
                  if index_fpiou not in tensor_taken:
@@ -584,8 +589,129 @@ class RegionProposalNetwork(torch.nn.Module):
                           break
                        tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
            tensor_taken = torch.unique(tensor_taken, dim=0) #rimuovo indici doppi per non far contare 2 volte stessa proposal
+           tensor_taken, _ = torch.sort(tensor_taken, 0, descending=False) #per sicurezza riordino
         #print(len(gt_boxes_in_image))
         return tensor_taken
+
+    def assign_targets_to_anchors_custom(
+        self, anchors: List[Tensor], targets: List[Dict[str, Tensor]]
+    ) -> Tuple[List[Tensor], List[Tensor]]:
+
+        #2 liste di tensori. Lista perché ogni tensore che contiene la label intesa come bg, fg o niente.
+        labels = []
+        matched_gt_boxes = [] #questo è un tensore contenente le gt boxes che le anchors matchano
+        indexes = []
+        indexes_offset = []
+        #in particolare i tensori saranno lunghi quante sono le anchors delle img, es 185460             
+        #COME FUNZIONA: a ciascuna ancora viene associato un gt. Rispetto a tale gt, verrà poi calcolato il box regression. Quindi se ho 100000 ancore, per ognuna di esse avrò il gt
+        n_offset=0 #in base al batch size alla fine, quante len(anchors) devo sommare
+        for anchors_per_image, targets_per_image in zip(anchors, targets):
+            gt_boxes = targets_per_image["boxes"]
+            #DEFINISCO INDEX OFFSET DA USARE POI PER RECUPERE SOLO L'OBJECTNESS E PREDBBOX DELTA CHE MI SERVONO
+            tot_offset=0
+            if n_offset>0:
+               for a in range(0, n_offset):
+                  tot_offset+=len(anchors[n_offset])
+            #print(tot_offset)
+            #Se non c'è nessuna GT box nel targets, allora l'immagine è "vuota", non contiene alcun oggetto
+            if gt_boxes.numel() == 0:
+                # Background image (negative example)
+                #allora faccio un tensore di zero sia per gt boxes che labels, non ci sarà alcun match a prescindere
+                device = anchors_per_image.device
+                matched_gt_boxes_per_image = torch.zeros(anchors_per_image.shape, dtype=torch.float32, device=device)
+                labels_per_image = torch.zeros((anchors_per_image.shape[0],), dtype=torch.float32, device=device)
+            else:
+                match_quality_matrix = self.box_similarity(gt_boxes, anchors_per_image)
+                #ottengo IoU ancore e gt. In base a questo assegno ogni ancora a una Gt.
+                device = anchors_per_image.device
+                tensor_taken=torch.empty(0, dtype=torch.int32).to(device) #gli indici
+                #matched_gt_taken=torch.empty(0, dtype=torch.float32).to(device)
+                #labels_taken=torch.empty(0, dtype=torch.float32).to(device)
+                for i, match_matrix_each_gt in enumerate(match_quality_matrix):
+                   """
+                   Premessa 1: tengo quella con IoU più alta. 
+                   """
+                   iou_values , iou_indices = torch.sort(match_matrix_each_gt, 0, descending=True)
+                   pos_iou_indices = iou_indices[match_matrix_each_gt[iou_indices] >= self.proposal_matcher.high_threshold]
+                   top_prop=iou_indices[:2]
+                   for index_prop in top_prop:
+                      if index_prop not in tensor_taken:
+                         tensor_taken = torch.cat([tensor_taken, index_prop.unsqueeze(0)])
+                         #matched_gt_taken = torch.cat([matched_gt_taken, gt_boxes[i].unsqueeze(0)])
+                         #labels_taken= torch.cat([labels_taken, torch.ones((), dtype=torch.float32).to(device).unsqueeze(0)])
+                      else:   #se è già preso, allora cerco il prossimo index
+                         next_index = next((i for i in iou_indices if i not in tensor_taken), None)
+                         if next_index is None: #se è None vuol dire che non ho trovato un indice
+                            break
+                         tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])
+                   """
+                   Premessa 2: tengo quelle con iou più alto sotto soglia di 0.3
+                   """
+                   neg_iou_indices = iou_indices[match_matrix_each_gt[iou_indices] < self.proposal_matcher.low_threshold]
+                   #riordinarle non mi serve, voglio quelle negative con iou maggiore
+                   top_fpiou=neg_iou_indices[:5]
+                   for index_fpiou in top_fpiou:       			
+                      if index_fpiou not in tensor_taken:
+                         tensor_taken = torch.cat([tensor_taken, index_fpiou.unsqueeze(0)])
+                         #matched_gt_taken = torch.cat([matched_gt_taken, gt_boxes[i].unsqueeze(0)])
+                         #labels_taken= torch.cat([labels_taken, torch.zeros((), dtype=torch.float32).to(device).unsqueeze(0)])
+                      else:
+                         next_index = next((i for i in neg_iou_indices if i not in tensor_taken), None) 
+                         if next_index is None: #se è None vuol dire che non ho trovato un indice
+                            break 
+                         tensor_taken = torch.cat([tensor_taken, next_index.unsqueeze(0)])  
+                   #fine selezione matrix. Ora devo tenere nella matrice solo le prop selezionate, rifarle riclassificare
+                
+                #RIMAPPARE INDICI RISPETTO A OBJECTNESS
+                #tensor_taken = tensor_taken + tot_offset
+                tensor_taken_offset = tensor_taken + tot_offset
+                #FARE SORTING CON INDICI DECRESCENTI OTTENUTI QUA, ottengo indices che USO PER SORTARE GLI ALTRI DUE TENSORI. NEL MIO CASO MI BASTA RIORDINARE ORDINE CRESCENTE PER AVERE ORDINAMENTO SIMILE ALL'ORIGINALE
+                tensor_taken = torch.unique(tensor_taken, dim=0) #rimuovo indici doppi
+                tensor_taken_offset = torch.unique(tensor_taken_offset, dim=0)
+                tensor_taken, _ = torch.sort(tensor_taken, 0, descending=False) #per sicurezza riordino
+                tensor_taken_offset, _ = torch.sort(tensor_taken_offset, 0, descending=False)
+                
+                #RIOTTENGO LE LABEL GIUSTE FACENDO NUOVA MATRIX
+                match_quality_matrix = self.box_similarity(gt_boxes, anchors_per_image[tensor_taken])
+                matched_idxs = self.proposal_matcher(match_quality_matrix)
+                #print(matched_idxs)
+                # get the targets corresponding GT for each proposal
+                # NB: need to clamp the indices because we can have a single
+                # GT in the image, and matched_idxs can be -2, which goes
+                # out of bounds
+                matched_gt_boxes_per_image = gt_boxes[matched_idxs.clamp(min=0)]
+                #print(matched_gt_boxes_per_image)
+
+                #qui ottengo un tensore lungo quanto tutte le anchors, es 185460
+                #ad ogni id delle anchors c'è False o True se rispetta la condizione
+                labels_per_image = matched_idxs >= 0          
+                
+                #nel convertirlo a float32, i False diventano 0; i True diventano 1.
+                #questo 1 lo uso come valore di inizializzazione delle label
+                #qui mi interessa solo distinguere fra anchors positive e negative, non che classe c'è dentro
+                labels_per_image = labels_per_image.to(dtype=torch.float32)
+
+                # Background (negative examples)
+                # Qui etichetto le anchors associate al background, ovvero con threshold che non supera il minimo per poterle considerare associate alle GT box
+                bg_indices = matched_idxs == self.proposal_matcher.BELOW_LOW_THRESHOLD
+                labels_per_image[bg_indices] = 0.0
+
+                # discard indices that are between thresholds
+                #tutte quelle anchors che non superano la thresh per considerarle positive, cioè che overlappano con le GT box ma solo parzialmente e non abbastanza per considerarle positive
+                inds_to_discard = matched_idxs == self.proposal_matcher.BETWEEN_THRESHOLDS
+                labels_per_image[inds_to_discard] = -1.0
+            #gli indici che non ho toccato nelle 2 operazioni precedenti saranno quelli delle anchors positive
+            n_offset=n_offset+1
+            labels.append(labels_per_image)
+            matched_gt_boxes.append(matched_gt_boxes_per_image)
+            #labels.append(labels_taken)
+            #matched_gt_boxes.append(matched_gt_taken)
+            indexes.append(tensor_taken)
+            indexes_offset.append(tensor_taken_offset)
+        #print(labels)
+        #print(matched_gt_boxes)
+        return labels, matched_gt_boxes, indexes, indexes_offset
+
     
     def forward(
         self,
@@ -677,27 +803,38 @@ class RegionProposalNetwork(torch.nn.Module):
         #PASSO 3: solo in training, alleno il modello a migliorare le anchors.
         if self.training:
             if targets is None:
-                raise ValueError("targets should not be None")
-            #distinguo fra le anchors positive e le negative. Per ogni anchors segno la matched box corrispondente
-            labels, matched_gt_boxes = self.assign_targets_to_anchors(anchors, targets)
+                raise ValueError("targets should not be None")           
+            if self.use_custom_filter_proposals:
+               labels, matched_gt_boxes, indexes, indexes_offset = self.assign_targets_to_anchors_custom(anchors, targets)
+               device = anchors[0].device
+               #my_anchors=torch.empty(0, dtype=torch.int32).to(device)
+               my_anchors=[]
+               for anchors_in_image, indexes_in_image in zip(anchors, indexes):
+                  #my_anchors = torch.cat([my_anchors, anchors_in_image[indexes_in_image].unsqueeze(0)])
+                  my_anchors.append(anchors_in_image[indexes_in_image])
+               my_objectness=torch.empty(0, dtype=torch.float32).to(device)
+               my_pred_bbox_deltas = torch.empty(0, dtype=torch.float32).to(device)
+               for indexes in indexes_offset:
+                  my_objectness = torch.cat((my_objectness, objectness[indexes]), dim=0)
+                  my_pred_bbox_deltas = torch.cat((my_pred_bbox_deltas, pred_bbox_deltas[indexes]), dim=0)
+               regression_targets = self.box_coder.encode(matched_gt_boxes, my_anchors)          
+               loss_objectness, loss_rpn_box_reg = self.compute_loss(
+                my_objectness, my_pred_bbox_deltas, labels, regression_targets)           
+            else:
+               #distinguo fra le anchors positive e le negative. Per ogni anchors segno la matched box corrispondente
+               labels, matched_gt_boxes = self.assign_targets_to_anchors(anchors, targets)
+               #Encode a set of proposals with respect to some reference boxes Args:
+               #reference_boxes (Tensor): reference boxes
+               #proposals (Tensor): boxes to be encoded
+               regression_targets = self.box_coder.encode(matched_gt_boxes, anchors)
+               #calcolo della loss effettiva. Quella di objectness rappresenta quanto le mie anchors sono
+               #"buone", ovvero ad es con quanto score la mia anchors positiva è effettivamente giusto che sia positiva secondo il GT
+               #quella di box_reg rappresenta quanto sono buone le mie anchors boxes positive come bbox di oggetti
+               loss_objectness, loss_rpn_box_reg = self.compute_loss(objectness, pred_bbox_deltas, labels, regression_targets)
             
-            #passo necessario solo per manipolare le manipolare il set di bbox nella forma che si aspetta la funzione di loss
-            #Encode a set of proposals with respect to some reference boxes Args:
-            #reference_boxes (Tensor): reference boxes
-            #proposals (Tensor): boxes to be encoded
-            regression_targets = self.box_coder.encode(matched_gt_boxes, anchors)
-            
-            #calcolo della loss effettiva. Quella di objectness rappresenta quanto le mie anchors sono
-            #"buone", ovvero ad es con quanto score la mia anchors positiva è effettivamente giusto che sia positiva secondo il GT
-            #quella di box_reg rappresenta quanto sono buone le mie anchors boxes positive come bbox di oggetti
-            loss_objectness, loss_rpn_box_reg = self.compute_loss(
-                objectness, pred_bbox_deltas, labels, regression_targets
-            )
-            #loss_objectness, loss_rpn_box_reg = self.compute_loss_mio(
-            #    objectness, pred_bbox_deltas, labels, regression_targets, proposals, objectness, images.image_sizes, num_anchors_per_level
-            #)
             losses = {
                 "loss_objectness": loss_objectness,
                 "loss_rpn_box_reg": loss_rpn_box_reg,
             }
+            #print(losses)
         return boxes, losses
