@@ -186,7 +186,7 @@ class RoIHeads(nn.Module):
         #2 liste vuote. La label qui conterrà le label dell'oggetto preso dalla GT.
         labels = []
         matched_idxs = [] #questo è un tensore contenente le gt boxes che le anchors matchano
-        #indexes = []
+        indexes = []
         #indexes_offset = []
         #n_offset=0 #in base al batch size alla fine, quante len(anchors) devo sommare
         for proposals_in_image, gt_boxes_in_image, gt_labels_in_image in zip(proposals, gt_boxes, gt_labels):
@@ -233,7 +233,7 @@ class RoIHeads(nn.Module):
                 my_neg = torch.where(labels_in_image == 0)[0]
                 #print(my_pos)
 
-                n_gt = len(gt_boxes)
+                n_gt = len(gt_boxes_in_image)
                 device = proposals_in_image.device
                 tensor_taken=torch.empty(0, dtype=torch.int64).to(device)
                 matched_gt_taken=torch.empty(0, dtype=torch.float32).to(device)
@@ -244,16 +244,25 @@ class RoIHeads(nn.Module):
                 """ Premessa 1 (attivare proposals): ordinerei tutte le proposals per ogni target in base a IOU con esso (tralasciando condifence e label), seleziono le prime n e le passo alla loss """
                 #estraggo i valori positivi
                 matched_vals, matches_idx = only_pos.max(dim=0)
-                sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True)          
+                #print(only_pos)
+                #print(matched_vals, matches_idx)
+                sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True)
+                #print(sort_ma_val, sort_ma_val_idx)      
                 my_pos_sort = my_pos[sort_ma_val_idx]
                 matches_idx_sort = matches_idx[sort_ma_val_idx]
+                #print(my_pos_sort, matches_idx_sort)
                 for val in range(0, n_gt):
                    index = (matches_idx_sort == val)
+                   #print(index)
                    true_idx = torch.where(index)[0]
+                   #print(true_idx)
                    #le ultime n sono il gt. Quindi il primo indice per ogni gt lo devo tenere comunque perché così funziona l'originale, e poi prenderne altri n
-                   true_idx = true_idx[:1+self.n_top_iou_to_keep]        
+                   true_idx = true_idx[:1+self.n_top_iou_to_keep]
+                   #print(my_pos_sort[true_idx])
+                   
                    tensor_taken = torch.cat([tensor_taken, my_pos_sort[true_idx]])
-                
+                #print(tensor_taken)
+                #x=input()
                 """ Premessa 2 (sopprimere predicitions FPiou): considero solo le bbox con label 1 (persona), le ordino per confidence  e seleziono le prime t con iou < di 0.5 (qui è lo standard) """
                 #Ora negativi
                 matched_vals, matches_idx = only_neg.max(dim=0) #prima sono ordinati per score
@@ -268,14 +277,25 @@ class RoIHeads(nn.Module):
                    tensor_taken = torch.cat([tensor_taken, my_neg_sort[true_idx]])
                 #risorto le anchors, le matched gt boxes rispettive e labels
                 tensor_taken, orig_order = torch.sort(tensor_taken, descending=False)
+                #print(tensor_taken)
                 my_clamped = clamped_matched_idxs_in_image[tensor_taken]
+                #print(my_clamped)
                 my_labels = labels_in_image[tensor_taken]
+                #print(my_labels)
+                #x=input()
+                
+                #mask = torch.ones_like(labels_in_image, dtype=torch.bool)
+                #mask[tensor_taken] = False
+                # Set values to -1 where indexes are NOT present in 'tensor_taken'
+                #labels_in_image[mask] = -1
+                #print(labels_in_image)
 
             #matched_idxs.append(clamped_matched_idxs_in_image)
             #labels.append(labels_in_image)
             matched_idxs.append(my_clamped)
             labels.append(my_labels)
-        return matched_idxs, labels
+            indexes.append(tensor_taken)
+        return matched_idxs, labels, indexes
 
     def subsample(self, labels):
         # type: (List[Tensor]) -> List[Tensor]
@@ -326,7 +346,12 @@ class RoIHeads(nn.Module):
         # get matching gt indices for each proposal
         #
         if self.use_custom_filter_proposals:
-           matched_idxs, labels = self.assign_targets_to_proposals_custom_v2(proposals, gt_boxes, gt_labels)
+           matched_idxs, labels, indexes = self.assign_targets_to_proposals_custom_v2(proposals, gt_boxes, gt_labels)
+           #ora estraggo solo le prop che userò
+           my_proposals=[]
+           for proposals_in_image, indexes_in_image in zip(proposals, indexes):
+              my_proposals.append(proposals_in_image[indexes_in_image])
+           proposals = my_proposals
         else:
            matched_idxs, labels = self.assign_targets_to_proposals(proposals, gt_boxes, gt_labels)
  
@@ -345,7 +370,7 @@ class RoIHeads(nn.Module):
             if gt_boxes_in_image.numel() == 0:
                 gt_boxes_in_image = torch.zeros((1, 4), dtype=dtype, device=device)
             matched_gt_boxes.append(gt_boxes_in_image[matched_idxs[img_id]])
-
+      
         regression_targets = self.box_coder.encode(matched_gt_boxes, proposals)
         return proposals, matched_idxs, labels, regression_targets
 
