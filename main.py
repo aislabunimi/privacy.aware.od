@@ -64,7 +64,6 @@ save_disturbed_dataset=False
 keep_original_size=False #quando generi il dataset disturbato, deve essere a True se mi serve per il comparison con la tasknet plain, se no a False se devo fare train backward
 #split_size_train_set = 0 #necessario per quando si fa il train backward. Se a 0 nessuno split. Non è possibile usare lo stesso dataset per train perché le img ricostruite dal train potrebbero contenere più info rispetto a quelle generate dal validation. Quindi tengo i primi n elementi per train del modello con la tasknet, poi genero di disturbati quelli da n in poi, e userò solo quelli per trainare il backward. Questo se voglio usare coco indoor.
 train_backward_on_disturbed_sets=False
-use_custom_filter_proposals=True #se usare il mio filter proposal custom o meno nell'rpn della faster
 num_epochs = 50 #setto numero delle epoche
 
 ###### MODELLI
@@ -96,10 +95,11 @@ elif not train_backward_on_disturbed_sets:
 		rpn_pre_nms_top_n_train=2000, rpn_pre_nms_top_n_test=1000,
 		rpn_post_nms_top_n_train=2000, rpn_post_nms_top_n_test=1000,
 		rpn_nms_thresh=0.7, rpn_fg_iou_thresh=0.7, rpn_bg_iou_thresh=0.3,
-		rpn_score_thresh=0.0, rpn_use_custom_filter_proposals=use_custom_filter_proposals,
-		rpn_n_top_iou_to_keep=1, rpn_iou_neg_thresh=0.5, rpn_n_top_neg_to_keep=5,
+		rpn_score_thresh=0.0, rpn_use_custom_filter_anchors=True,
+		rpn_n_top_iou_to_keep=1, rpn_n_top_neg_to_keep=5,
 		rpn_n_top_absolute_bg_to_keep=0, rpn_absolute_bg_score_thresh=0.75,
-		rpn_use_not_overlapping_proposals=True, rpn_overlapping_prop_thresh=0.6,
+		rpn_use_not_overlapping_proposals=False, rpn_overlapping_prop_thresh=0.6,
+		box_use_custom_filter_proposals=True, box_n_top_iou_to_keep=1, box_n_top_neg_to_keep=5,
 		box_batch_size_per_image=512, box_positive_fraction=0.25, box_bg_iou_thresh=0.5)
 	"""
 	commento su ultimo campo: rpn_iou_neg_thresh must be equal to box_bg_iou_thresh. Otherwise what is selected by the custom filter proposal may not be considered negative by the ROI heads.

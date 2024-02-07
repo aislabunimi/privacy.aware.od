@@ -72,6 +72,9 @@ class RoIHeads(nn.Module):
         score_thresh,
         nms_thresh,
         detections_per_img,
+        use_custom_filter_proposals=True,
+        n_top_iou_to_keep=1, 
+        n_top_neg_to_keep=5,
         # Mask
         mask_roi_pool=None,
         mask_head=None,
@@ -99,6 +102,11 @@ class RoIHeads(nn.Module):
         self.score_thresh = score_thresh
         self.nms_thresh = nms_thresh
         self.detections_per_img = detections_per_img
+        
+        #miei parametri
+        self.use_custom_filter_proposals = use_custom_filter_proposals
+        self.n_top_iou_to_keep = n_top_iou_to_keep
+        self.n_top_neg_to_keep = n_top_neg_to_keep
 
         #per me inutili, tengo per backward compatibility
         self.mask_roi_pool = mask_roi_pool
@@ -172,6 +180,103 @@ class RoIHeads(nn.Module):
             labels.append(labels_in_image)
         return matched_idxs, labels
 
+
+    def assign_targets_to_proposals_custom_v2(self, proposals, gt_boxes, gt_labels):
+        # type: (List[Tensor], List[Tensor], List[Tensor]) -> Tuple[List[Tensor], List[Tensor]]
+        #2 liste vuote. La label qui conterrà le label dell'oggetto preso dalla GT.
+        labels = []
+        matched_idxs = [] #questo è un tensore contenente le gt boxes che le anchors matchano
+        #indexes = []
+        #indexes_offset = []
+        #n_offset=0 #in base al batch size alla fine, quante len(anchors) devo sommare
+        for proposals_in_image, gt_boxes_in_image, gt_labels_in_image in zip(proposals, gt_boxes, gt_labels):
+
+            if gt_boxes_in_image.numel() == 0:
+                # Background image
+                #img vuota sensa oggetti se dal GT vedo che non ci sono box. Allora tensore tutto a 0
+                device = proposals_in_image.device
+                clamped_matched_idxs_in_image = torch.zeros(
+                    (proposals_in_image.shape[0],), dtype=torch.int64, device=device
+                )
+                labels_in_image = torch.zeros((proposals_in_image.shape[0],), dtype=torch.int64, device=device)
+                my_clamped = clamped_matched_idxs_in_image
+                my_labels = labels_in_image
+            else:
+                #  set to self.box_similarity when https://github.com/pytorch/pytorch/issues/27495 lands
+               
+                #calcolo IoU di ogni proposal rispetto al GT. Ottengo matrice di M gt x N prop.
+                match_quality_matrix = box_ops.box_iou(gt_boxes_in_image, proposals_in_image)
+                matched_idxs_in_image = self.proposal_matcher(match_quality_matrix)
+                #otterrò un tensor([ 0, -1, -1,  0,  1,  2]) ad esempio
+                #il -1 indica che la prop non è associata a nessuna GT; 0 indica che la prop è associata alla prima GT; 1 alla seconda; 2 alla terza .... ci saranno n valori in base alle n gt possibili.
+
+                clamped_matched_idxs_in_image = matched_idxs_in_image.clamp(min=0)
+                #il -1 da quello che c'è scritto nel codice originale dà un errore con la parte sotto, quindi preparo questa variabile settando quei valori a 0
+                #è un numero 0, 1, 2 che rappresenta per ogni proposal a quale gt deve essere associata, sia le prop positive che le neg
+                
+                labels_in_image = gt_labels_in_image[clamped_matched_idxs_in_image]
+                #creo un tensore dove nel mio caso metterò tutti 1, perché ho solo classe persona. è come se partissi immaginando che tutte le proposal hanno label 1, e poi vado a filtrare i valori sotto
+                labels_in_image = labels_in_image.to(dtype=torch.int64)
+
+                # Label background (below the low threshold) #setto label di quegli indici a 0
+                bg_inds = matched_idxs_in_image == self.proposal_matcher.BELOW_LOW_THRESHOLD
+                labels_in_image[bg_inds] = 0
+
+                # Label ignore proposals (between low and high thresholds) #-1 sono indici ignorati
+                ignore_inds = matched_idxs_in_image == self.proposal_matcher.BETWEEN_THRESHOLDS
+                labels_in_image[ignore_inds] = -1  # -1 is ignored by sampler
+                
+                #original_index = torch.arange(len(proposals_in_image)) #rappresenta gli indici originali per perscare i corrispondenti clamped_matched e labels
+                #IDEA: RECUPERO INDICI CON LABEL=1 che sono negativi o del primo gt o dell'altro
+                my_pos = torch.where(labels_in_image >= 1)[0]
+                #questi sono negativi o primo gt o degli altri
+                my_neg = torch.where(labels_in_image == 0)[0]
+                #print(my_pos)
+
+                n_gt = len(gt_boxes)
+                device = proposals_in_image.device
+                tensor_taken=torch.empty(0, dtype=torch.int64).to(device)
+                matched_gt_taken=torch.empty(0, dtype=torch.float32).to(device)
+                labels_taken=torch.empty(0, dtype=torch.float32).to(device)
+                only_pos = match_quality_matrix[:, my_pos]
+                only_neg = match_quality_matrix[:, my_neg]
+                
+                """ Premessa 1 (attivare proposals): ordinerei tutte le proposals per ogni target in base a IOU con esso (tralasciando condifence e label), seleziono le prime n e le passo alla loss """
+                #estraggo i valori positivi
+                matched_vals, matches_idx = only_pos.max(dim=0)
+                sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True)          
+                my_pos_sort = my_pos[sort_ma_val_idx]
+                matches_idx_sort = matches_idx[sort_ma_val_idx]
+                for val in range(0, n_gt):
+                   index = (matches_idx_sort == val)
+                   true_idx = torch.where(index)[0]
+                   #le ultime n sono il gt. Quindi il primo indice per ogni gt lo devo tenere comunque perché così funziona l'originale, e poi prenderne altri n
+                   true_idx = true_idx[:1+self.n_top_iou_to_keep]        
+                   tensor_taken = torch.cat([tensor_taken, my_pos_sort[true_idx]])
+                
+                """ Premessa 2 (sopprimere predicitions FPiou): considero solo le bbox con label 1 (persona), le ordino per confidence  e seleziono le prime t con iou < di 0.5 (qui è lo standard) """
+                #Ora negativi
+                matched_vals, matches_idx = only_neg.max(dim=0) #prima sono ordinati per score
+                sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True) #ordina per iou          
+                sort_ma_val_idx, _ = torch.sort(sort_ma_val_idx, descending=False) #più facile poi da gestire, ordinati per score adesso
+                my_neg_sort = my_neg[sort_ma_val_idx]
+                matches_idx_sort = matches_idx[sort_ma_val_idx]
+                for val in range(0, n_gt):
+                   index = (matches_idx_sort == val)
+                   true_idx = torch.where(index)[0]
+                   true_idx = true_idx[:self.n_top_neg_to_keep]        
+                   tensor_taken = torch.cat([tensor_taken, my_neg_sort[true_idx]])
+                #risorto le anchors, le matched gt boxes rispettive e labels
+                tensor_taken, orig_order = torch.sort(tensor_taken, descending=False)
+                my_clamped = clamped_matched_idxs_in_image[tensor_taken]
+                my_labels = labels_in_image[tensor_taken]
+
+            #matched_idxs.append(clamped_matched_idxs_in_image)
+            #labels.append(labels_in_image)
+            matched_idxs.append(my_clamped)
+            labels.append(my_labels)
+        return matched_idxs, labels
+
     def subsample(self, labels):
         # type: (List[Tensor]) -> List[Tensor]
         sampled_pos_inds, sampled_neg_inds = self.fg_bg_sampler(labels) #2 maschere binarie dove è 1 se è indice pos ed è stato scelto oppure 0 se non lo è. Le labels originale con -1 verranno ignorate.
@@ -219,7 +324,12 @@ class RoIHeads(nn.Module):
         proposals = self.add_gt_proposals(proposals, gt_boxes)
 
         # get matching gt indices for each proposal
-        matched_idxs, labels = self.assign_targets_to_proposals(proposals, gt_boxes, gt_labels)
+        #
+        if self.use_custom_filter_proposals:
+           matched_idxs, labels = self.assign_targets_to_proposals_custom_v2(proposals, gt_boxes, gt_labels)
+        else:
+           matched_idxs, labels = self.assign_targets_to_proposals(proposals, gt_boxes, gt_labels)
+ 
         # sample a fixed proportion of positive-negative proposals
         #queste rispettano i due parametri di batch_size e pos_fraction. Di default sono a 512 e 0.25, quindi verranno prese 128 pos e il resto delle 512 a neg. Questo a patto che ce ne siano abbastanza di pos e neg; altrimenti, ne vengono tenute le n pos e le restanti 512 - npos sono negative.
         sampled_inds = self.subsample(labels)

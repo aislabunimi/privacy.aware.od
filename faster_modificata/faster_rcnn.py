@@ -93,14 +93,17 @@ class FasterRCNN(GeneralizedRCNN):
         box_batch_size_per_image=512, #int, numero di proposals che sono campionate (sampled) durante il training della classification head.
         box_positive_fraction=0.25, #float, rapporto di proposals positive in un mini-batch durante training of the RPN
         bbox_reg_weights=None, #(Tuple[float, float, float, float]), pesi per l'encoding/decoding delle bbox
-        rpn_use_custom_filter_proposals=False, #per usare il filter proposal custom. I parametri sotto vengono usati solo se questa variabile è a true
-        rpn_n_top_iou_to_keep=1, #quante proposal con top iou da tenere
-        rpn_iou_neg_thresh=0.5, #thresh per considerare negative delle prop
-        rpn_n_top_neg_to_keep=8, #quante proposal negative con iou al di sotto del thresh imposto sopra da tenere
+        rpn_use_custom_filter_anchors=False, #per usare il filter proposal custom. I parametri sotto vengono usati solo se questa variabile è a true
+        rpn_n_top_iou_to_keep=1, #quante anchors positive con top iou da tenere
+        #rpn_iou_neg_thresh=0.5, #thresh per considerare negative delle prop. Old.
+        rpn_n_top_neg_to_keep=5, #quante anchors negative con iou al di sotto del thresh imposto sopra da tenere
         rpn_n_top_absolute_bg_to_keep=1, #quante proposal che sono sicuramente nel bg (cioè iou 0.0 con tutto) tengo
         rpn_absolute_bg_score_thresh=0.75,
 	rpn_use_not_overlapping_proposals=False, 
 	rpn_overlapping_prop_thresh=0.6,
+	box_use_custom_filter_proposals=False,
+	box_n_top_iou_to_keep=1, 
+	box_n_top_neg_to_keep=5,
         **kwargs,
     ):
 
@@ -151,9 +154,9 @@ class FasterRCNN(GeneralizedRCNN):
             rpn_post_nms_top_n,
             rpn_nms_thresh,
             score_thresh=rpn_score_thresh,
-            use_custom_filter_proposals=rpn_use_custom_filter_proposals, #parametri miei
+            use_custom_filter_anchors=rpn_use_custom_filter_anchors, #parametri miei
             n_top_iou_to_keep=rpn_n_top_iou_to_keep,
-            iou_neg_thresh=rpn_iou_neg_thresh,
+            #iou_neg_thresh=rpn_iou_neg_thresh,
             n_top_neg_to_keep=rpn_n_top_neg_to_keep,
             n_top_absolute_bg_to_keep=rpn_n_top_absolute_bg_to_keep,
             absolute_bg_score_thresh=rpn_absolute_bg_score_thresh,
@@ -188,6 +191,9 @@ class FasterRCNN(GeneralizedRCNN):
             box_score_thresh,
             box_nms_thresh,
             box_detections_per_img,
+            box_use_custom_filter_proposals,
+            box_n_top_iou_to_keep, 
+            box_n_top_neg_to_keep,
         )
 
         #Trasformazioni di default se non applicate prima

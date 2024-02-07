@@ -144,9 +144,9 @@ class RegionProposalNetwork(torch.nn.Module):
         post_nms_top_n: Dict[str, int],
         nms_thresh: float,
         score_thresh: float = 0.0,
-        use_custom_filter_proposals: bool=False,
+        use_custom_filter_anchors: bool=False,
         n_top_iou_to_keep: int=1,
-        iou_neg_thresh: float=0.5,
+        #iou_neg_thresh: float=0.5,
         n_top_neg_to_keep: int=8,
         n_top_absolute_bg_to_keep: int=2,
         absolute_bg_score_thresh: float = 0.75,
@@ -169,9 +169,9 @@ class RegionProposalNetwork(torch.nn.Module):
         
         #se voglio usare il mio filter proposals sarà a true
         
-        self.use_custom_filter_proposals = use_custom_filter_proposals
+        self.use_custom_filter_anchors = use_custom_filter_anchors
         self.n_top_iou_to_keep = n_top_iou_to_keep
-        self.iou_neg_thresh = iou_neg_thresh
+        #self.iou_neg_thresh = iou_neg_thresh
         self.n_top_neg_to_keep = n_top_neg_to_keep
         self.n_top_absolute_bg_to_keep = n_top_absolute_bg_to_keep           
         self.absolute_bg_score_thresh = absolute_bg_score_thresh
@@ -477,9 +477,9 @@ class RegionProposalNetwork(torch.nn.Module):
            device = proposals_in_image.device
            n_gt_in_image=len(gt_boxes_in_image)
            #n_gt_now=0 #cosi sono sicuro di controllare per ogni gt. In realtà non lo posso fare perché l'assegnamento proposal a gt è basato solo sulla thresh di iou
-           tensor_taken=torch.empty(0, dtype=torch.int32).to(device) #per non prendere 2 volte le stesse proposals. Può capitare in teoria, ma è raro. Con le negative se se ne tengono tante questo controllo rallenta molto le performance. Allora rimuovo le negative duplicate e basta
+           tensor_taken=torch.empty(0, dtype=torch.int64).to(device) #per non prendere 2 volte le stesse proposals. Può capitare in teoria, ma è raro. Con le negative se se ne tengono tante questo controllo rallenta molto le performance. Allora rimuovo le negative duplicate e basta
            if self.use_not_overlapping_proposals:
-           	tensor_neg_taken=torch.empty(0, dtype=torch.int32).to(device)
+           	tensor_neg_taken=torch.empty(0, dtype=torch.int64).to(device)
            for match_matrix_each_gt in match_quality_matrix: #itero per GT			
               iou_values , iou_indices = torch.sort(match_matrix_each_gt, 0, descending=True)
               #l'indice qui è rispetto alla pos originale in match_matrix_each_gt! es: iou_indices[:0] da 145, il top iou è la prop con indice 145 in match_matrix_each_gt
@@ -624,7 +624,7 @@ class RegionProposalNetwork(torch.nn.Module):
                 match_quality_matrix = self.box_similarity(gt_boxes, anchors_per_image)
                 #ottengo IoU ancore e gt. In base a questo assegno ogni ancora a una Gt.
                 device = anchors_per_image.device
-                tensor_taken=torch.empty(0, dtype=torch.int32).to(device) #gli indici
+                tensor_taken=torch.empty(0, dtype=torch.int64).to(device) #gli indici
                 #matched_gt_taken=torch.empty(0, dtype=torch.float32).to(device)
                 #labels_taken=torch.empty(0, dtype=torch.float32).to(device)
                 for i, match_matrix_each_gt in enumerate(match_quality_matrix):
@@ -712,6 +712,116 @@ class RegionProposalNetwork(torch.nn.Module):
         #print(matched_gt_boxes)
         return labels, matched_gt_boxes, indexes, indexes_offset
 
+    def assign_targets_to_anchors_custom_v2(
+        self, anchors: List[Tensor], targets: List[Dict[str, Tensor]]
+    ) -> Tuple[List[Tensor], List[Tensor]]:
+
+        #2 liste di tensori. Lista perché ogni tensore che contiene la label intesa come bg, fg o niente.
+        labels = []
+        matched_gt_boxes = [] #questo è un tensore contenente le gt boxes che le anchors matchano
+        indexes = [] #servono per essere retrocompatibile con il codice dell'rpn.py
+        indexes_offset = [] #serve per batch_size>1, perchè l'objectness sono indici tutti insieme delle img
+        n_offset=0 #in base al batch size alla fine, quante len(anchors) devo sommare
+        for anchors_per_image, targets_per_image in zip(anchors, targets):
+            gt_boxes = targets_per_image["boxes"]
+            
+            tot_offset=0
+            if n_offset>0:
+               for a in range(0, n_offset):
+                  tot_offset+=len(anchors[n_offset])
+            
+            #Se non c'è nessuna GT box nel targets, allora l'immagine è "vuota", non contiene alcun oggetto
+            if gt_boxes.numel() == 0:
+                # Background image (negative example)
+                #allora faccio un tensore di zero sia per gt boxes che labels, non ci sarà alcun match a prescindere
+                device = anchors_per_image.device
+                matched_gt_boxes_per_image = torch.zeros(anchors_per_image.shape, dtype=torch.float32, device=device)
+                labels_per_image = torch.zeros((anchors_per_image.shape[0],), dtype=torch.float32, device=device)
+                my_labels = labels_per_image
+                my_matched_gt_boxes = matched_gt_boxes_per_image
+                tensor_taken=torch.empty(0, dtype=torch.int64).to(device)
+                tensor_taken_offset=torch.empty(0, dtype=torch.int64).to(device)
+            else:
+                match_quality_matrix = self.box_similarity(gt_boxes, anchors_per_image)
+                #ottengo IoU ancore e gt. In base a questo assegno ogni ancora a una Gt.
+                matched_idxs = self.proposal_matcher(match_quality_matrix)
+                matched_gt_boxes_per_image = gt_boxes[matched_idxs.clamp(min=0)]
+                labels_per_image = matched_idxs >= 0          
+                labels_per_image = labels_per_image.to(dtype=torch.float32)
+                # Background (negative examples)
+                bg_indices = matched_idxs == self.proposal_matcher.BELOW_LOW_THRESHOLD
+                labels_per_image[bg_indices] = 0.0
+                # discard indices that are between thresholds
+                inds_to_discard = matched_idxs == self.proposal_matcher.BETWEEN_THRESHOLDS
+                labels_per_image[inds_to_discard] = -1.0
+                #IDEA: prendo indici con label 1 che sono positivi, con label 0 che sono negativi
+                my_pos = torch.where(labels_per_image == 1.0)[0] #[0] per evitare che venga considerato tupla
+                my_neg = torch.where(labels_per_image == 0.0)[0]
+                
+                n_gt = len(gt_boxes)
+                device = anchors_per_image.device
+                tensor_taken=torch.empty(0, dtype=torch.int64).to(device) #tensori di inizializzazione
+                matched_gt_taken=torch.empty(0, dtype=torch.float32).to(device)
+                labels_taken=torch.empty(0, dtype=torch.float32).to(device)
+                only_pos = match_quality_matrix[:, my_pos] #recupero solo i valori di IoU positivi e neg
+                only_neg = match_quality_matrix[:, my_neg] #questi sono in matrice NxM dove N numero gt
+                # Per ogni anchor, trovo la best match gt, ovvero quella con IoU maggiore fra le gt. Prima lo faccio con i pos, poi con i neg. Non ci possono essere duplicati da rimuovere qui
+                matched_vals, matches_idx = only_pos.max(dim=0) #matches_idx rappresenta il gt a cui associare l'anchor; se è 0 significa che l'anchor ha max IoU con il gt 0.
+                sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True) #Ora li ordino in modo che così sono ordinate per IoU max          
+                my_pos_sort = my_pos[sort_ma_val_idx] #riordino i positivi rispetto a tale ordine
+                matches_idx_sort = matches_idx[sort_ma_val_idx] #riordino anche gli id
+                """
+                n_gt -> 2
+                only_pos -> tensor([[0.7189, 0.1421, 0.0642, 0.7189, 0.7069], [0.1407, 0.6593, 0.6593, 0.1407, 0.1358]], device='cuda:0')
+                matched_vals -> tensor([0.7189, 0.6593, 0.6593, 0.7189, 0.7069], device='cuda:0')
+                matches_idx -> tensor([0, 1, 1, 0, 0], device='cuda:0') #questo indica che di tutte le anchors positive, 2 (quelle con 1) matchano meglio con la gt 1 
+                sort_ma_val_idx -> tensor([0, 3, 4, 1, 2], device='cuda:0') #rappresenta come gli indici originali (0,1, 2... 4) si trovano ora nel nuovo ordine (0, 3 ... 2). Lo uso poi per riordinare 
+                my_pos_sort -> tensor([217123, 217174, 217225, 217139, 217142], device='cuda:0')
+                matches_idx_sort -> tensor([0, 0, 0, 1, 1], device='cuda:0')
+                """
+                for val in range(0, n_gt): #per ogni gt
+                   index = (matches_idx_sort == val) #cerco nel matched id quelli corrispondenti alla gt attuale; è una maschera booleana
+                   true_idx = torch.where(index)[0] #prendo solo i valori a true
+                   true_idx = true_idx[:self.n_top_iou_to_keep]  #ne tengo i primi n (avranno iou più alta)      
+                   tensor_taken = torch.cat([tensor_taken, my_pos_sort[true_idx]]) #salvo indicid da tenere
+                   for i in range(0, self.n_top_iou_to_keep): #ora aggiungo n matched gt e labels quante n anchors tengo. Questo lo faccio per fare la label e definire la matched gt box dell'anchors. Nelle positive potrei anche non farlo, ma nelle negative sono obbligato perché rpn.py di default considera le negative come tutte associate alla prima matched_gt_box
+                      matched_gt_taken = torch.cat([matched_gt_taken, gt_boxes[val].unsqueeze(0)])
+                      labels_taken= torch.cat([labels_taken, torch.tensor(1.0, dtype=torch.float32, device=device).unsqueeze(0)])
+                      
+                #Ragionamento analogo per i negativi                  
+                matched_vals, matches_idx = only_neg.max(dim=0)
+                sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True)          
+                my_neg_sort = my_neg[sort_ma_val_idx]
+                matches_idx_sort = matches_idx[sort_ma_val_idx]
+                for val in range(0, n_gt):
+                   index = (matches_idx_sort == val)
+                   true_idx = torch.where(index)[0]
+                   true_idx = true_idx[:self.n_top_neg_to_keep]        
+                   tensor_taken = torch.cat([tensor_taken, my_neg_sort[true_idx]])
+                   for i in range(0, self.n_top_neg_to_keep):
+                      matched_gt_taken = torch.cat([matched_gt_taken, gt_boxes[val].unsqueeze(0)])
+                      labels_taken= torch.cat([labels_taken, torch.tensor(0.0, dtype=torch.float32, device=device).unsqueeze(0)])
+                
+                #riordino gli indici delle anchors secondo ordine originale, poi riordino anche le matched gt boxes e labels rispettive allo stesso modo
+                tensor_taken, orig_order = torch.sort(tensor_taken, descending=False)
+                my_matched_gt_boxes = matched_gt_taken[orig_order]
+                my_labels = labels_taken[orig_order]
+                
+                tensor_taken_offset = tensor_taken + tot_offset
+                
+                #Ora tutti ordinati per IoU. Alla fine di tutto riordino per score
+            #gli indici che non ho toccato nelle 2 operazioni precedenti saranno quelli delle anchors positive
+            #incremento offset per prossima img nel batch
+            n_offset=n_offset+1
+            #labels.append(labels_per_image)
+            #matched_gt_boxes.append(matched_gt_boxes_per_image)
+            #mie append
+            labels.append(my_labels)
+            matched_gt_boxes.append(my_matched_gt_boxes)
+            indexes.append(tensor_taken)
+            indexes_offset.append(tensor_taken_offset)       
+        return labels, matched_gt_boxes, indexes, indexes_offset
+
     
     def forward(
         self,
@@ -766,6 +876,7 @@ class RegionProposalNetwork(torch.nn.Module):
         #a eliminare quelle che non soddisfano certe condizioni: seleziono solo le migliori box per livello
         #rimuovo le bbox piccole e con score basso; applico nms e infine tengo solo le predizioni migliori
         #boxes, scores, _ = self.filter_proposals_mia(proposals, objectness, images.image_sizes, num_anchors_per_level, targets)
+        """
         if self.use_custom_filter_proposals:
         	if self.training:
         		boxes, scores = self.filter_proposals_custom(proposals, objectness, images.image_sizes, num_anchors_per_level, targets)
@@ -774,8 +885,11 @@ class RegionProposalNetwork(torch.nn.Module):
         		#self.score_thresh = 0.0
         		boxes, scores = self.filter_proposals(proposals, objectness, images.image_sizes, num_anchors_per_level)
         		#self.score_thresh = temp
-        else:
-        	boxes, scores = self.filter_proposals(proposals, objectness, images.image_sizes, num_anchors_per_level)
+        """
+        #else:
+        
+        boxes, scores = self.filter_proposals(proposals, objectness, images.image_sizes, num_anchors_per_level)
+        #	boxes, scores = self.filter_proposals(proposals, objectness, images.image_sizes, num_anchors_per_level)
         
         """
         import matplotlib.pyplot as plt
@@ -804,10 +918,11 @@ class RegionProposalNetwork(torch.nn.Module):
         if self.training:
             if targets is None:
                 raise ValueError("targets should not be None")           
-            if self.use_custom_filter_proposals:
-               labels, matched_gt_boxes, indexes, indexes_offset = self.assign_targets_to_anchors_custom(anchors, targets)
+            if self.use_custom_filter_anchors:
+               #labels, matched_gt_boxes, indexes, indexes_offset = self.assign_targets_to_anchors_custom(anchors, targets)
+               labels, matched_gt_boxes, indexes, indexes_offset = self.assign_targets_to_anchors_custom_v2(anchors, targets)
                device = anchors[0].device
-               #my_anchors=torch.empty(0, dtype=torch.int32).to(device)
+               #my_anchors=torch.empty(0, dtype=torch.int64).to(device)
                my_anchors=[]
                for anchors_in_image, indexes_in_image in zip(anchors, indexes):
                   #my_anchors = torch.cat([my_anchors, anchors_in_image[indexes_in_image].unsqueeze(0)])
