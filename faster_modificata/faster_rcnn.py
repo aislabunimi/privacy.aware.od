@@ -99,12 +99,14 @@ class FasterRCNN(GeneralizedRCNN):
         rpn_n_top_neg_to_keep=5, #quante anchors negative con iou al di sotto del thresh imposto sopra da tenere
         rpn_n_top_bg_to_keep=1, #quante proposal che sono sicuramente nel bg (cioè iou 0.0 con tutto) tengo
         rpn_absolute_bg_score_thresh=0.75,
+        rpn_objectness_bg_thresh=0.0,
 	rpn_use_not_overlapping_proposals=False, 
 	rpn_overlapping_prop_thresh=0.6,
 	box_use_custom_filter_proposals=False,
 	box_n_top_pos_to_keep=1, 
 	box_n_top_neg_to_keep=5,
 	box_n_top_bg_to_keep=0,
+	box_obj_bg_score_thresh=0.9,
         **kwargs,
     ):
 
@@ -163,6 +165,7 @@ class FasterRCNN(GeneralizedRCNN):
             absolute_bg_score_thresh=rpn_absolute_bg_score_thresh,
             use_not_overlapping_proposals=rpn_use_not_overlapping_proposals, 
             overlapping_prop_thresh=rpn_overlapping_prop_thresh,
+            objectness_bg_thresh=rpn_objectness_bg_thresh,
         )
 
         #SETTING vari per l'head della faster
@@ -196,6 +199,7 @@ class FasterRCNN(GeneralizedRCNN):
             box_n_top_pos_to_keep, 
             box_n_top_neg_to_keep,
             box_n_top_bg_to_keep,
+            box_obj_bg_score_thresh,
         )
 
         #Trasformazioni di default se non applicate prima

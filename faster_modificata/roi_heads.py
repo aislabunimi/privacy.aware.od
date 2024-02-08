@@ -76,6 +76,7 @@ class RoIHeads(nn.Module):
         n_top_pos_to_keep=1, 
         n_top_neg_to_keep=5,
         n_top_bg_to_keep=0,
+        obj_bg_score_thresh=0.9,
         # Mask
         mask_roi_pool=None,
         mask_head=None,
@@ -109,6 +110,7 @@ class RoIHeads(nn.Module):
         self.n_top_pos_to_keep = n_top_pos_to_keep
         self.n_top_neg_to_keep = n_top_neg_to_keep
         self.n_top_bg_to_keep = n_top_bg_to_keep
+        self.obj_bg_score_thresh = obj_bg_score_thresh
 
         #per me inutili, tengo per backward compatibility
         self.mask_roi_pool = mask_roi_pool
@@ -183,15 +185,13 @@ class RoIHeads(nn.Module):
         return matched_idxs, labels
 
 
-    def assign_targets_to_proposals_custom_v2(self, proposals, gt_boxes, gt_labels):
+    def assign_targets_to_proposals_custom_v2(self, proposals, gt_boxes, gt_labels, obj_score):
         # type: (List[Tensor], List[Tensor], List[Tensor]) -> Tuple[List[Tensor], List[Tensor]]
         #2 liste vuote. La label qui conterrà le label dell'oggetto preso dalla GT.
         labels = []
         matched_idxs = [] #questo è un tensore contenente le gt boxes che le anchors matchano
         indexes = []
-        #indexes_offset = []
-        #n_offset=0 #in base al batch size alla fine, quante len(anchors) devo sommare
-        for proposals_in_image, gt_boxes_in_image, gt_labels_in_image in zip(proposals, gt_boxes, gt_labels):
+        for proposals_in_image, gt_boxes_in_image, gt_labels_in_image, obj_score_in_image in zip(proposals, gt_boxes, gt_labels, obj_score):
 
             if gt_boxes_in_image.numel() == 0:
                 # Background image
@@ -233,13 +233,10 @@ class RoIHeads(nn.Module):
                 my_pos = torch.where(labels_in_image >= 1)[0]
                 #questi sono negativi o primo gt o degli altri
                 my_neg = torch.where(labels_in_image == 0)[0]
-                #print(my_pos)
 
                 n_gt = len(gt_boxes_in_image)
                 device = proposals_in_image.device
                 tensor_taken=torch.empty(0, dtype=torch.int64).to(device)
-                matched_gt_taken=torch.empty(0, dtype=torch.float32).to(device)
-                labels_taken=torch.empty(0, dtype=torch.float32).to(device)
                 only_pos = match_quality_matrix[:, my_pos]
                 only_neg = match_quality_matrix[:, my_neg]
                 
@@ -267,28 +264,51 @@ class RoIHeads(nn.Module):
                 sort_ma_val_idx_score, _ = torch.sort(sort_ma_val_idx, descending=False) #più facile poi da gestire, ordinati per score adesso
                 my_neg_sort = my_neg[sort_ma_val_idx_score]
                 matches_idx_sort = matches_idx[sort_ma_val_idx_score]
+                neg_already_taken=torch.empty(0, dtype=torch.int64).to(device)
                 for val in range(0, n_gt):
                    index = (matches_idx_sort == val)
                    true_idx = torch.where(index)[0]
                    true_idx = true_idx[:self.n_top_neg_to_keep]        
                    tensor_taken = torch.cat([tensor_taken, my_neg_sort[true_idx]])
+                   neg_already_taken = torch.cat([neg_already_taken, my_neg_sort[true_idx]])
                 
                 """ Premessa 3 Full background (IoU zero con tutti gli oggetti). Ordinate per score """
                 if self.n_top_bg_to_keep>0:
-                   bg_mask = (sort_ma_val == 0.0)
+                   
+                   bg_mask = (sort_ma_val == 0.0) #IoU pari a 0
                    bg_ma_val_idx = sort_ma_val_idx[bg_mask]
+
+                   #elimino le neg già prese
+                   neg_taken_mask = torch.isin(bg_ma_val_idx, neg_already_taken)
+                   bg_ma_val_idx = bg_ma_val_idx[~neg_taken_mask]
+                   
+                   my_obj = obj_score_in_image[bg_ma_val_idx]
+                   
                    bg_ma_val_idx, _ = torch.sort(bg_ma_val_idx, descending=False)
                    my_bg_sort = my_neg[bg_ma_val_idx]
                    bg_matches_idx = matches_idx[bg_ma_val_idx]
                    #in teoria sono già ordinati per score, perché avendo tutti IoU zero quando vengono riordinati per IoU rimarranno prima le prima occorrenze (ovvero quelli con score più alto). Li ho riordinati  per sicurezza
                    #le background proposal sono tutte associate al primo gt. Quindi ne recupero n*bg_to_keep
-                   index = (bg_matches_idx == 0) #giusto di sicurezza
-                   true_idx = torch.where(index)[0]
-                   true_idx = true_idx[:self.n_top_bg_to_keep*n_gt]        
+                   #index = (bg_matches_idx == 0) #giusto di sicurezza
+                   #true_idx = torch.where(index)[0]
+                   #true_idx = true_idx[:self.n_top_bg_to_keep*n_gt]        
+                   #tensor_taken = torch.cat([tensor_taken, my_bg_sort[true_idx]])
+                   thresh = torch.nonzero(my_obj>=self.obj_bg_score_thresh).flatten()
+                   #true_idx = torch.arange(len(bg_matches_idx)) #sono già ordinati
+                   #true_idx = true_idx[:self.n_top_bg_to_keep*n_gt]
+                   true_idx = thresh[:self.n_top_bg_to_keep*n_gt]
                    tensor_taken = torch.cat([tensor_taken, my_bg_sort[true_idx]])
-                
+                   #for i in true_idx:
+                   #   if my_bg_sort[i] not in tensor_taken: #guardia contro i doppi che potrebbero capitare (se già presi fra i negativi sopra)
+                   #      tensor_taken = torch.cat([tensor_taken, my_bg_sort[i].unsqueeze(0)])
+                   #   else: #per assicura di prendere n bg se ci sono; se trovo duplicato passo a prossima
+                   #      next_index = next((i for i in thresh if my_bg_sort[i] not in tensor_taken), None)
+                   #      if next_index is None: #se è None vuol dire che non ho trovato un indice
+                   #         break
+                   #      tensor_taken = torch.cat([tensor_taken, my_bg_sort[next_index].unsqueeze(0)])
+
                 #risorto le anchors, le matched gt boxes rispettive e labels
-                tensor_taken = torch.unique(tensor_taken, dim=0) #rimuovo indici doppi per non far contare 2 volte stessa proposal. Potrebbe capitare forse se selezionando le bg si prende una con score alto già presa prima
+                
                 tensor_taken, orig_order = torch.sort(tensor_taken, descending=False)
                 my_clamped = clamped_matched_idxs_in_image[tensor_taken]
                 my_labels = labels_in_image[tensor_taken]
@@ -337,6 +357,7 @@ class RoIHeads(nn.Module):
         self,
         proposals,  # type: List[Tensor]
         targets,  # type: Optional[List[Dict[str, Tensor]]]
+        obj_score, #aggiunto da me
     ):
         # type: (...) -> Tuple[List[Tensor], List[Tensor], List[Tensor], List[Tensor]]
         self.check_targets(targets)
@@ -355,7 +376,7 @@ class RoIHeads(nn.Module):
         # get matching gt indices for each proposal
         #
         if self.use_custom_filter_proposals:
-           matched_idxs, labels, indexes = self.assign_targets_to_proposals_custom_v2(proposals, gt_boxes, gt_labels)
+           matched_idxs, labels, indexes = self.assign_targets_to_proposals_custom_v2(proposals, gt_boxes, gt_labels, obj_score)
            #ora estraggo solo le prop che userò
            my_proposals=[]
            for proposals_in_image, indexes_in_image in zip(proposals, indexes):
@@ -449,6 +470,7 @@ class RoIHeads(nn.Module):
         proposals,  # type: List[Tensor]
         image_shapes,  # type: List[Tuple[int, int]]
         targets=None,  # type: Optional[List[Dict[str, Tensor]]]
+        obj_score=None,
     ):
         # type: (...) -> Tuple[List[Dict[str, Tensor]], Dict[str, Tensor]]
         """
@@ -472,7 +494,8 @@ class RoIHeads(nn.Module):
 
         #PASSO 0: preparo il necessario per il training. Recupero le proposals positive e negative
         if self.training:
-            proposals, matched_idxs, labels, regression_targets = self.select_training_samples(proposals, targets)
+            #proposals, matched_idxs, labels, regression_targets = self.select_training_samples(proposals, targets)
+            proposals, matched_idxs, labels, regression_targets = self.select_training_samples(proposals, targets, obj_score) #aggiungo io obj score; proviene da rpn ed è quanto è probabile che ogni box contenga oggetto
         else:
             labels = None
             regression_targets = None

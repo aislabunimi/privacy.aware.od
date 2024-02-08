@@ -150,6 +150,7 @@ class RegionProposalNetwork(torch.nn.Module):
         n_top_neg_to_keep: int=8,
         n_top_bg_to_keep: int=0,
         absolute_bg_score_thresh: float = 0.75,
+        objectness_bg_thresh: float = 0.00,
         use_not_overlapping_proposals: bool=False,
         overlapping_prop_thresh: float=0.6,
     ) -> None:
@@ -177,6 +178,7 @@ class RegionProposalNetwork(torch.nn.Module):
         self.absolute_bg_score_thresh = absolute_bg_score_thresh
         self.use_not_overlapping_proposals = use_not_overlapping_proposals
         self.overlapping_prop_thresh = overlapping_prop_thresh
+        self.objectness_bg_thresh = objectness_bg_thresh
 
         self.fg_bg_sampler = det_utils.BalancedPositiveNegativeSampler(batch_size_per_image, positive_fraction) # This class samples batches, ensuring that they contain a fixed proportion of positives
         # estrae casualmente un numero di sample positivi (con oggetto) e negativi (senza) che rispettano la proporzione
@@ -713,7 +715,7 @@ class RegionProposalNetwork(torch.nn.Module):
         return labels, matched_gt_boxes, indexes, indexes_offset
 
     def assign_targets_to_anchors_custom_v2(
-        self, anchors: List[Tensor], targets: List[Dict[str, Tensor]]
+        self, anchors: List[Tensor], targets: List[Dict[str, Tensor]], objectness: Tensor
     ) -> Tuple[List[Tensor], List[Tensor]]:
 
         #2 liste di tensori. Lista perché ogni tensore che contiene la label intesa come bg, fg o niente.
@@ -763,7 +765,7 @@ class RegionProposalNetwork(torch.nn.Module):
                 tensor_taken=torch.empty(0, dtype=torch.int64).to(device) #tensori di inizializzazione
                 matched_gt_taken=torch.empty(0, dtype=torch.float32).to(device)
                 labels_taken=torch.empty(0, dtype=torch.float32).to(device)
-                "Premessa 1: anchors positive (con IoU sopra al matcher"
+                "Premessa 1: anchors positive (con IoU sopra al matcher)"
                 only_pos = match_quality_matrix[:, my_pos] #recupero solo i valori di IoU positivi e neg
                 only_neg = match_quality_matrix[:, my_neg] #questi sono in matrice NxM dove N numero gt
                 # Per ogni anchor, trovo la best match gt, ovvero quella con IoU maggiore fra le gt. Prima lo faccio con i pos, poi con i neg. Non ci possono essere duplicati da rimuovere qui
@@ -788,40 +790,75 @@ class RegionProposalNetwork(torch.nn.Module):
                    for i in range(0, self.n_top_pos_to_keep): #ora aggiungo n matched gt e labels quante n anchors tengo. Questo lo faccio per fare la label e definire la matched gt box dell'anchors. Nelle positive potrei anche non farlo, ma nelle negative sono obbligato perché rpn.py di default considera le negative come tutte associate alla prima matched_gt_box
                       matched_gt_taken = torch.cat([matched_gt_taken, gt_boxes[val].unsqueeze(0)])
                       labels_taken= torch.cat([labels_taken, torch.tensor(1.0, dtype=torch.float32, device=device).unsqueeze(0)])
-                      
-                "Premessa 2: Anchors negative (IoU sotto al matcher). Ordinate per IoU"                 
+     
+                "Premessa 2: Anchors negative (IoU sotto al matcher). Ordinate per IoU, poi riordinate per Objectness score maggiore"                 
                 matched_vals, matches_idx = only_neg.max(dim=0)
-                sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True)          
-                my_neg_sort = my_neg[sort_ma_val_idx]
-                matches_idx_sort = matches_idx[sort_ma_val_idx]
+                sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True) 
+                #estraggo objectness. Non ha senso normalizzarla tra 0 e 1 e non è possibile usare una thresh di score sopra il quale prendere un objectness (l'objectness ha valori molto random e imprevedibili.
+                #min_value = my_objectness.min()
+                #max_value = my_objectness.max()
+                #norm_obj = (my_objectness - min_value) / (max_value - min_value)  
+                objectness = objectness.flatten()
+                my_obj = objectness[sort_ma_val_idx+tot_offset]
+                my_obj_sort, my_obj_sort_idx = torch.sort(my_obj, descending=True) #sort per score, diverso dall'originale
+                #my_neg_sort = my_neg[sort_ma_val_idx]
+                #matches_idx_sort = matches_idx[sort_ma_val_idx]
+                my_neg_sort = my_neg[my_obj_sort_idx]
+                matches_idx_sort = matches_idx[my_obj_sort_idx]
+                neg_already_taken=torch.empty(0, dtype=torch.int64).to(device)
                 for val in range(0, n_gt):
                    index = (matches_idx_sort == val)
                    true_idx = torch.where(index)[0]
-                   true_idx = true_idx[:self.n_top_neg_to_keep]        
+                   true_idx = true_idx[:self.n_top_neg_to_keep]   
                    tensor_taken = torch.cat([tensor_taken, my_neg_sort[true_idx]])
+                   neg_already_taken = torch.cat([neg_already_taken, my_neg_sort[true_idx]])
                    for i in range(0, self.n_top_neg_to_keep):
                       matched_gt_taken = torch.cat([matched_gt_taken, gt_boxes[val].unsqueeze(0)])
                       labels_taken= torch.cat([labels_taken, torch.tensor(0.0, dtype=torch.float32, device=device).unsqueeze(0)])
                 
-                "Premessa 3: Anchors nel background completo (IoU=0.0). Riordinate secondo ordine originale"
+                "Premessa 3: Anchors nel background completo (IoU=0.0). Riordinate secondo ordine originale, poi riordinate secondo Objectness score maggiore"
                 if self.n_top_bg_to_keep>0:
+                   
                    bg_mask = (sort_ma_val == 0.0)
                    bg_ma_val_idx = sort_ma_val_idx[bg_mask]
-                   bg_ma_val_idx, _ = torch.sort(bg_ma_val_idx, descending=False)
-                   my_bg_sort = my_neg[bg_ma_val_idx]
-                   bg_matches_idx = matches_idx[bg_ma_val_idx]
-                   #in teoria sono già ordinati per score, perché avendo tutti IoU zero quando vengono riordinati per IoU rimarranno prima le prima occorrenze (ovvero quelli con score più alto). Li ho riordinati  per sicurezza
-                   #le background proposal sono tutte associate al primo gt. Quindi ne recupero n*bg_to_keep
-                   index = (bg_matches_idx == 0) #giusto di sicurezza
-                   true_idx = torch.where(index)[0]
-                   true_idx = true_idx[:self.n_top_bg_to_keep*n_gt]        
+                   #bg_ma_val_idx, _ = torch.sort(bg_ma_val_idx, descending=False) #per ordine originale
+                   #in teoria sono già ordinati come ordine originale, perché avendo tutti IoU zero quando vengono riordinati per IoU rimarranno prima le prima occorrenze (ovvero quelli con score più alto). Li ho riordinati  per sicurezza
+                   
+                   #elimino le neg già prese
+                   neg_taken_mask = torch.isin(bg_ma_val_idx, neg_already_taken)
+                   bg_ma_val_idx = bg_ma_val_idx[~neg_taken_mask]
+                   
+                   my_obj = objectness[bg_ma_val_idx+tot_offset]
+                   my_obj_sort, my_obj_sort_idx = torch.sort(my_obj, descending=True) #sort per score, diverso dall'originale
+                   #my_bg_sort = my_neg[bg_ma_val_idx]
+                   #bg_matches_idx = matches_idx[bg_ma_val_idx]
+                   my_bg_sort = my_neg[my_obj_sort_idx]
+                   bg_matches_idx = matches_idx[my_obj_sort_idx]
+                   #tengo tutti i valori dell'array sopra a una soglia di objectness
+                   thresh = torch.nonzero(my_obj_sort>=self.objectness_bg_thresh).flatten()
+                   #i true idx li prendo da quelli che soddisfano la soglia             
+                   #le background proposal sono tutte associate a un gt a caso. Quindi ne recupero n*bg_to_keep
+                   #true_idx = torch.arange(len(bg_matches_idx)) #sono già ordinati
+                   #true_idx = true_idx[:self.n_top_bg_to_keep*n_gt]
+                   true_idx = thresh[:self.n_top_bg_to_keep*n_gt]
                    tensor_taken = torch.cat([tensor_taken, my_bg_sort[true_idx]])
                    for i in range(0, self.n_top_bg_to_keep*n_gt): #prendo la prima come fa di default l'rpn in questo caso
                       matched_gt_taken = torch.cat([matched_gt_taken, gt_boxes[0].unsqueeze(0)])
                       labels_taken= torch.cat([labels_taken, torch.tensor(0.0, dtype=torch.float32, device=device).unsqueeze(0)])
+                   #for i in true_idx:
+                   #   if my_bg_sort[i] not in tensor_taken: #guardia contro i doppi che potrebbero capitare (se già presi fra i negativi sopra)
+                   #      tensor_taken = torch.cat([tensor_taken, my_bg_sort[i].unsqueeze(0)])
+                   #      matched_gt_taken = torch.cat([matched_gt_taken, gt_boxes[0].unsqueeze(0)])
+                   #      labels_taken= torch.cat([labels_taken, torch.tensor(0.0, dtype=torch.float32, device=device).unsqueeze(0)])
+                   #   else: #per assicura di prendere n bg se ci sono; se trovo duplicato passo a prossima
+                   #      next_index = next((i for i in thresh if my_bg_sort[i] not in tensor_taken), None)
+                   #      if next_index is None: #se è None vuol dire che non ho trovato un indice
+                   #         break
+                   #      tensor_taken = torch.cat([tensor_taken, my_bg_sort[next_index].unsqueeze(0)])
+                   #      matched_gt_taken = torch.cat([matched_gt_taken, gt_boxes[0].unsqueeze(0)])
+                   #      labels_taken= torch.cat([labels_taken, torch.tensor(0.0, dtype=torch.float32, device=device).unsqueeze(0)])
                 
                 #riordino gli indici delle anchors secondo ordine originale, poi riordino anche le matched gt boxes e labels rispettive allo stesso modo
-                tensor_taken = torch.unique(tensor_taken, dim=0) #rimuovo indici doppi per non far contare 2 volte stessa proposal
                 tensor_taken, orig_order = torch.sort(tensor_taken, descending=False)
                 my_matched_gt_boxes = matched_gt_taken[orig_order]
                 my_labels = labels_taken[orig_order]
@@ -906,7 +943,6 @@ class RegionProposalNetwork(torch.nn.Module):
         		#self.score_thresh = temp
         """
         #else:
-        
         boxes, scores = self.filter_proposals(proposals, objectness, images.image_sizes, num_anchors_per_level)
         #	boxes, scores = self.filter_proposals(proposals, objectness, images.image_sizes, num_anchors_per_level)
         
@@ -939,7 +975,7 @@ class RegionProposalNetwork(torch.nn.Module):
                 raise ValueError("targets should not be None")           
             if self.use_custom_filter_anchors:
                #labels, matched_gt_boxes, indexes, indexes_offset = self.assign_targets_to_anchors_custom(anchors, targets)
-               labels, matched_gt_boxes, indexes, indexes_offset = self.assign_targets_to_anchors_custom_v2(anchors, targets)
+               labels, matched_gt_boxes, indexes, indexes_offset = self.assign_targets_to_anchors_custom_v2(anchors, targets, objectness)
                device = anchors[0].device
                #my_anchors=torch.empty(0, dtype=torch.int64).to(device)
                my_anchors=[]
@@ -971,4 +1007,5 @@ class RegionProposalNetwork(torch.nn.Module):
                 "loss_rpn_box_reg": loss_rpn_box_reg,
             }
             #print(losses)
-        return boxes, losses
+        #return boxes, losses
+        return boxes, scores, losses #scores aggiunto io
