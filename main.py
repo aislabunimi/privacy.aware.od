@@ -96,10 +96,11 @@ elif not train_backward_on_disturbed_sets:
 		rpn_post_nms_top_n_train=2000, rpn_post_nms_top_n_test=1000,
 		rpn_nms_thresh=0.7, rpn_fg_iou_thresh=0.7, rpn_bg_iou_thresh=0.3,
 		rpn_score_thresh=0.0, rpn_use_custom_filter_anchors=True,
-		rpn_n_top_iou_to_keep=1, rpn_n_top_neg_to_keep=5,
-		rpn_n_top_absolute_bg_to_keep=0, rpn_absolute_bg_score_thresh=0.75,
+		rpn_n_top_pos_to_keep=1, rpn_n_top_neg_to_keep=5,
+		rpn_n_top_bg_to_keep=0, rpn_absolute_bg_score_thresh=0.75,
 		rpn_use_not_overlapping_proposals=False, rpn_overlapping_prop_thresh=0.6,
-		box_use_custom_filter_proposals=True, box_n_top_iou_to_keep=1, box_n_top_neg_to_keep=5,
+		box_use_custom_filter_proposals=True, box_n_top_pos_to_keep=1, box_n_top_neg_to_keep=5, 
+		box_n_top_bg_to_keep=0,
 		box_batch_size_per_image=512, box_positive_fraction=0.25, box_bg_iou_thresh=0.5)
 	"""
 	commento su ultimo campo: rpn_iou_neg_thresh must be equal to box_bg_iou_thresh. Otherwise what is selected by the custom filter proposal may not be considered negative by the ROI heads.

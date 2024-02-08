@@ -145,10 +145,10 @@ class RegionProposalNetwork(torch.nn.Module):
         nms_thresh: float,
         score_thresh: float = 0.0,
         use_custom_filter_anchors: bool=False,
-        n_top_iou_to_keep: int=1,
+        n_top_pos_to_keep: int=1,
         #iou_neg_thresh: float=0.5,
         n_top_neg_to_keep: int=8,
-        n_top_absolute_bg_to_keep: int=2,
+        n_top_bg_to_keep: int=0,
         absolute_bg_score_thresh: float = 0.75,
         use_not_overlapping_proposals: bool=False,
         overlapping_prop_thresh: float=0.6,
@@ -170,10 +170,10 @@ class RegionProposalNetwork(torch.nn.Module):
         #se voglio usare il mio filter proposals sarà a true
         
         self.use_custom_filter_anchors = use_custom_filter_anchors
-        self.n_top_iou_to_keep = n_top_iou_to_keep
+        self.n_top_pos_to_keep = n_top_pos_to_keep
         #self.iou_neg_thresh = iou_neg_thresh
         self.n_top_neg_to_keep = n_top_neg_to_keep
-        self.n_top_absolute_bg_to_keep = n_top_absolute_bg_to_keep           
+        self.n_top_bg_to_keep = n_top_bg_to_keep           
         self.absolute_bg_score_thresh = absolute_bg_score_thresh
         self.use_not_overlapping_proposals = use_not_overlapping_proposals
         self.overlapping_prop_thresh = overlapping_prop_thresh
@@ -763,6 +763,7 @@ class RegionProposalNetwork(torch.nn.Module):
                 tensor_taken=torch.empty(0, dtype=torch.int64).to(device) #tensori di inizializzazione
                 matched_gt_taken=torch.empty(0, dtype=torch.float32).to(device)
                 labels_taken=torch.empty(0, dtype=torch.float32).to(device)
+                "Premessa 1: anchors positive (con IoU sopra al matcher"
                 only_pos = match_quality_matrix[:, my_pos] #recupero solo i valori di IoU positivi e neg
                 only_neg = match_quality_matrix[:, my_neg] #questi sono in matrice NxM dove N numero gt
                 # Per ogni anchor, trovo la best match gt, ovvero quella con IoU maggiore fra le gt. Prima lo faccio con i pos, poi con i neg. Non ci possono essere duplicati da rimuovere qui
@@ -782,13 +783,13 @@ class RegionProposalNetwork(torch.nn.Module):
                 for val in range(0, n_gt): #per ogni gt
                    index = (matches_idx_sort == val) #cerco nel matched id quelli corrispondenti alla gt attuale; è una maschera booleana
                    true_idx = torch.where(index)[0] #prendo solo i valori a true
-                   true_idx = true_idx[:self.n_top_iou_to_keep]  #ne tengo i primi n (avranno iou più alta)      
+                   true_idx = true_idx[:self.n_top_pos_to_keep]  #ne tengo i primi n (avranno iou più alta)      
                    tensor_taken = torch.cat([tensor_taken, my_pos_sort[true_idx]]) #salvo indicid da tenere
-                   for i in range(0, self.n_top_iou_to_keep): #ora aggiungo n matched gt e labels quante n anchors tengo. Questo lo faccio per fare la label e definire la matched gt box dell'anchors. Nelle positive potrei anche non farlo, ma nelle negative sono obbligato perché rpn.py di default considera le negative come tutte associate alla prima matched_gt_box
+                   for i in range(0, self.n_top_pos_to_keep): #ora aggiungo n matched gt e labels quante n anchors tengo. Questo lo faccio per fare la label e definire la matched gt box dell'anchors. Nelle positive potrei anche non farlo, ma nelle negative sono obbligato perché rpn.py di default considera le negative come tutte associate alla prima matched_gt_box
                       matched_gt_taken = torch.cat([matched_gt_taken, gt_boxes[val].unsqueeze(0)])
                       labels_taken= torch.cat([labels_taken, torch.tensor(1.0, dtype=torch.float32, device=device).unsqueeze(0)])
                       
-                #Ragionamento analogo per i negativi                  
+                "Premessa 2: Anchors negative (IoU sotto al matcher). Ordinate per IoU"                 
                 matched_vals, matches_idx = only_neg.max(dim=0)
                 sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True)          
                 my_neg_sort = my_neg[sort_ma_val_idx]
@@ -802,7 +803,25 @@ class RegionProposalNetwork(torch.nn.Module):
                       matched_gt_taken = torch.cat([matched_gt_taken, gt_boxes[val].unsqueeze(0)])
                       labels_taken= torch.cat([labels_taken, torch.tensor(0.0, dtype=torch.float32, device=device).unsqueeze(0)])
                 
+                "Premessa 3: Anchors nel background completo (IoU=0.0). Riordinate secondo ordine originale"
+                if self.n_top_bg_to_keep>0:
+                   bg_mask = (sort_ma_val == 0.0)
+                   bg_ma_val_idx = sort_ma_val_idx[bg_mask]
+                   bg_ma_val_idx, _ = torch.sort(bg_ma_val_idx, descending=False)
+                   my_bg_sort = my_neg[bg_ma_val_idx]
+                   bg_matches_idx = matches_idx[bg_ma_val_idx]
+                   #in teoria sono già ordinati per score, perché avendo tutti IoU zero quando vengono riordinati per IoU rimarranno prima le prima occorrenze (ovvero quelli con score più alto). Li ho riordinati  per sicurezza
+                   #le background proposal sono tutte associate al primo gt. Quindi ne recupero n*bg_to_keep
+                   index = (bg_matches_idx == 0) #giusto di sicurezza
+                   true_idx = torch.where(index)[0]
+                   true_idx = true_idx[:self.n_top_bg_to_keep*n_gt]        
+                   tensor_taken = torch.cat([tensor_taken, my_bg_sort[true_idx]])
+                   for i in range(0, self.n_top_bg_to_keep*n_gt): #prendo la prima come fa di default l'rpn in questo caso
+                      matched_gt_taken = torch.cat([matched_gt_taken, gt_boxes[0].unsqueeze(0)])
+                      labels_taken= torch.cat([labels_taken, torch.tensor(0.0, dtype=torch.float32, device=device).unsqueeze(0)])
+                
                 #riordino gli indici delle anchors secondo ordine originale, poi riordino anche le matched gt boxes e labels rispettive allo stesso modo
+                tensor_taken = torch.unique(tensor_taken, dim=0) #rimuovo indici doppi per non far contare 2 volte stessa proposal
                 tensor_taken, orig_order = torch.sort(tensor_taken, descending=False)
                 my_matched_gt_boxes = matched_gt_taken[orig_order]
                 my_labels = labels_taken[orig_order]

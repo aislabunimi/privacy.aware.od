@@ -73,8 +73,9 @@ class RoIHeads(nn.Module):
         nms_thresh,
         detections_per_img,
         use_custom_filter_proposals=True,
-        n_top_iou_to_keep=1, 
+        n_top_pos_to_keep=1, 
         n_top_neg_to_keep=5,
+        n_top_bg_to_keep=0,
         # Mask
         mask_roi_pool=None,
         mask_head=None,
@@ -105,8 +106,9 @@ class RoIHeads(nn.Module):
         
         #miei parametri
         self.use_custom_filter_proposals = use_custom_filter_proposals
-        self.n_top_iou_to_keep = n_top_iou_to_keep
+        self.n_top_pos_to_keep = n_top_pos_to_keep
         self.n_top_neg_to_keep = n_top_neg_to_keep
+        self.n_top_bg_to_keep = n_top_bg_to_keep
 
         #per me inutili, tengo per backward compatibility
         self.mask_roi_pool = mask_roi_pool
@@ -244,45 +246,52 @@ class RoIHeads(nn.Module):
                 """ Premessa 1 (attivare proposals): ordinerei tutte le proposals per ogni target in base a IOU con esso (tralasciando condifence e label), seleziono le prime n e le passo alla loss """
                 #estraggo i valori positivi
                 matched_vals, matches_idx = only_pos.max(dim=0)
-                #print(only_pos)
-                #print(matched_vals, matches_idx)
-                sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True)
-                #print(sort_ma_val, sort_ma_val_idx)      
+                sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True)      
                 my_pos_sort = my_pos[sort_ma_val_idx]
-                matches_idx_sort = matches_idx[sort_ma_val_idx]
-                #print(my_pos_sort, matches_idx_sort)
+                matches_idx_sort = matches_idx[sort_ma_val_idx]            
+                #le prime n sono il gt. I gt li devo tenere comunque perché così funziona l'originale, e poi prenderne altri n. Allora li seleziono rimuovendo le prime n_gt occorrenze, e recuperando tali n_gt occorrenze subito dopo il for
+                my_pos_sort_without_gt = my_pos_sort[n_gt:]
+                matches_idx_without_gt = matches_idx_sort[n_gt:]
                 for val in range(0, n_gt):
-                   index = (matches_idx_sort == val)
-                   #print(index)
+                   index = (matches_idx_without_gt == val)
                    true_idx = torch.where(index)[0]
-                   #print(true_idx)
-                   #le ultime n sono il gt. Quindi il primo indice per ogni gt lo devo tenere comunque perché così funziona l'originale, e poi prenderne altri n
-                   true_idx = true_idx[:1+self.n_top_iou_to_keep]
-                   #print(my_pos_sort[true_idx])
-                   
-                   tensor_taken = torch.cat([tensor_taken, my_pos_sort[true_idx]])
-                #print(tensor_taken)
-                #x=input()
+                   true_idx = true_idx[:self.n_top_pos_to_keep]
+                   tensor_taken = torch.cat([tensor_taken, my_pos_sort_without_gt[true_idx]])
+
+                tensor_taken = torch.cat([tensor_taken, my_pos_sort[:n_gt]])
+                
                 """ Premessa 2 (sopprimere predicitions FPiou): considero solo le bbox con label 1 (persona), le ordino per confidence  e seleziono le prime t con iou < di 0.5 (qui è lo standard) """
                 #Ora negativi
                 matched_vals, matches_idx = only_neg.max(dim=0) #prima sono ordinati per score
                 sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True) #ordina per iou          
-                sort_ma_val_idx, _ = torch.sort(sort_ma_val_idx, descending=False) #più facile poi da gestire, ordinati per score adesso
-                my_neg_sort = my_neg[sort_ma_val_idx]
-                matches_idx_sort = matches_idx[sort_ma_val_idx]
+                sort_ma_val_idx_score, _ = torch.sort(sort_ma_val_idx, descending=False) #più facile poi da gestire, ordinati per score adesso
+                my_neg_sort = my_neg[sort_ma_val_idx_score]
+                matches_idx_sort = matches_idx[sort_ma_val_idx_score]
                 for val in range(0, n_gt):
                    index = (matches_idx_sort == val)
                    true_idx = torch.where(index)[0]
                    true_idx = true_idx[:self.n_top_neg_to_keep]        
                    tensor_taken = torch.cat([tensor_taken, my_neg_sort[true_idx]])
+                
+                """ Premessa 3 Full background (IoU zero con tutti gli oggetti). Ordinate per score """
+                if self.n_top_bg_to_keep>0:
+                   bg_mask = (sort_ma_val == 0.0)
+                   bg_ma_val_idx = sort_ma_val_idx[bg_mask]
+                   bg_ma_val_idx, _ = torch.sort(bg_ma_val_idx, descending=False)
+                   my_bg_sort = my_neg[bg_ma_val_idx]
+                   bg_matches_idx = matches_idx[bg_ma_val_idx]
+                   #in teoria sono già ordinati per score, perché avendo tutti IoU zero quando vengono riordinati per IoU rimarranno prima le prima occorrenze (ovvero quelli con score più alto). Li ho riordinati  per sicurezza
+                   #le background proposal sono tutte associate al primo gt. Quindi ne recupero n*bg_to_keep
+                   index = (bg_matches_idx == 0) #giusto di sicurezza
+                   true_idx = torch.where(index)[0]
+                   true_idx = true_idx[:self.n_top_bg_to_keep*n_gt]        
+                   tensor_taken = torch.cat([tensor_taken, my_bg_sort[true_idx]])
+                
                 #risorto le anchors, le matched gt boxes rispettive e labels
+                tensor_taken = torch.unique(tensor_taken, dim=0) #rimuovo indici doppi per non far contare 2 volte stessa proposal. Potrebbe capitare forse se selezionando le bg si prende una con score alto già presa prima
                 tensor_taken, orig_order = torch.sort(tensor_taken, descending=False)
-                #print(tensor_taken)
                 my_clamped = clamped_matched_idxs_in_image[tensor_taken]
-                #print(my_clamped)
                 my_labels = labels_in_image[tensor_taken]
-                #print(my_labels)
-                #x=input()
                 
                 #mask = torch.ones_like(labels_in_image, dtype=torch.bool)
                 #mask[tensor_taken] = False
