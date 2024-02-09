@@ -50,8 +50,8 @@ ap_comparison_save_path='plotted_results/comparison_ap.png'
 #models
 unet_save_path = "model_weights/model"
 tasknet_save_path = "tasknet_weights/tasknet"
-unet_weights_load= "model_weights/model_4.pt"
-unet_weights_to_compare= "model_weights/model_50.pt"
+unet_weights_load= "model_weights/model_25.pt"
+unet_weights_to_compare= "model_weights/model_45.pt"
 tasknet_weights_load= "tasknet_weights/tasknet_10.pt"
 #Test images:
 image_save_prefix='test'
@@ -79,6 +79,8 @@ tasknet.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
 tasknet.to(device)
 tasknet_optimizer = torch.optim.SGD(tasknet.parameters(), lr=0.005, momentum=0.9, weight_decay=0.0005, nesterov=True)
 tasknet_scheduler = torch.optim.lr_scheduler.StepLR(tasknet_optimizer, step_size=3, gamma=0.1)
+
+
 load_checkpoint(tasknet, tasknet_weights_load, tasknet_optimizer, tasknet_scheduler)
 load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler)
 
@@ -109,13 +111,18 @@ plot_ap(f'{my_ap_nointerp_thresh_extracted[:-4]}_cocoiou.txt', f'{my_ap_nointerp
 extract_iou50_ap(f'{my_ap_interp_thresh_path[:-4]}_iou.txt', f'{my_ap_interp_thresh_extracted[:-4]}_cocoiou.txt', standard_ap=False, coco_iou_modified=True) #My AP, preds that satisfies threshold score, with interpolation
 plot_ap(f'{my_ap_interp_thresh_extracted[:-4]}_cocoiou.txt', f'{my_ap_interp_thresh_save_name[:-4]}_cocoiou.png', best_ap_value_for_comparison=None, best_recall_value_for_comparison=None, model_name='Unet with Plain Tasknet', ap_plot_title=ap_plot_title)
 
+
 """
 plot_compare_between_two_ap(ap_standard_extracted, 'results/ap_overlap.txt', ap_model_name='Unet without overlapping prop, iou=0.6', ap_to_compare_model_name='Unet with overlapping prop (old method)', plotted_comparison_save_path=ap_comparison_save_path, ap_plot_title=ap_plot_title)
 """
+
 """
 from plot_utils.ms_ssim import plot_ms_ssim_score
 plot_ms_ssim_score(ms_ssim_score_log_path="results/ms_ssim_score_log.txt", ms_ssim_save_name='plotted_results/ms_ssim_score.png')
 """
+
+from plot_utils.lpips_score import plot_lpips_score
+plot_lpips_score(lpips_score_log_path="results/lpips_score_log.txt", lpips_save_name="plotted_results/lpips_score.png")
 
 plot_michele_metric(michele_metric_file_list, michele_metric_file_save_list)
 
