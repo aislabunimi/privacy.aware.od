@@ -31,35 +31,39 @@ unet_weights_load= "model_weights/model_50.pt"
 unet_weights_to_compare= "model_weights/model_50.pt"
 tasknet_weights_load= "tasknet_weights/tasknet_10.pt"
 #Config DATASET
-#train_img_folder = '/home/alberti/coco_person/train/images' #Questi per trainare la tasknet su 65k
-#train_ann_file = '/home/alberti/coco_person/train/train.json'
-#val_img_folder = '/home/alberti/coco_person/val/images'
-#val_ann_file = '/home/alberti/coco_person/val/val.json'
-train_img_folder = '/home/alberti/coco_people_indoor/train/images'
-#train_img_folder = '/home/math0012/Tesi_magistrale/open_images_v7/images'
-train_ann_file = '/home/alberti/coco_people_indoor/train/train.json'
-val_img_folder = '/home/alberti/coco_people_indoor/val/images'
-val_ann_file = '/home/alberti/coco_people_indoor/val/val.json'
-disturbed_train_img_gen='/home/math0012/Tesi_magistrale/open_images_v7/images'
-disturbed_train_ann_gen='/home/math0012/Tesi_magistrale/open_images_v7/open_images_id_list.json'
-#disturbed_train_img_gen='/home/alberti/coco_people_indoor/train/images'
-#disturbed_train_ann_gen='/home/alberti/coco_people_indoor/train/train.json'
 use_coco_train_for_generating_disturbed_set=False #se metti questo a true, allora stai usando il dataset di train di coco per generare il disturbato. Vanno cambiati i due path sopra
+if use_coco_train_for_generating_disturbed_set:
+	disturbed_train_img_gen='/home/alberti/coco_people_indoor/train/images'
+	disturbed_train_ann_gen='/home/alberti/coco_people_indoor/train/train.json'
+else:
+	disturbed_train_img_gen='/home/math0012/Tesi_magistrale/open_images_v7/images'
+	disturbed_train_ann_gen='/home/math0012/Tesi_magistrale/open_images_v7/open_images_id_list.json'
 disturbed_train_img_folder='disturbed_dataset/train'
 disturbed_train_ann='disturbed_dataset/train.json'
 disturbed_val_img_folder='disturbed_dataset/val'
 disturbed_val_ann='disturbed_dataset/val.json'
-#train_batch_size=8 #8 batch size usata nella tasknet
-#val_batch_size=8 #8 batch size usata nella tasknet
-train_batch_size=4
-val_batch_size=4
+
+train_only_tasknet=False #se voglio trainare solo faster rcnn
+if train_only_tasknet:
+	train_batch_size=8 #8 batch size usata nella tasknet
+	val_batch_size=8 #8 batch size usata nella tasknet
+	train_img_folder = '/home/alberti/coco_person/train/images' #Questi per trainare la tasknet su 65k
+	train_ann_file = '/home/alberti/coco_person/train/train.json'
+	val_img_folder = '/home/alberti/coco_person/val/images'
+	val_ann_file = '/home/alberti/coco_person/val/val.json'
+else:
+	train_batch_size=4
+	val_batch_size=4
+	train_img_folder = '/home/alberti/coco_people_indoor/train/images'
+	#train_img_folder = '/home/math0012/Tesi_magistrale/open_images_v7/images'
+	train_ann_file = '/home/alberti/coco_people_indoor/train/train.json'
+	val_img_folder = '/home/alberti/coco_people_indoor/val/images'
+	val_ann_file = '/home/alberti/coco_people_indoor/val/val.json'
 resize_scales_transform = [200, 300, 400, 500, 600]
 use_dataset_subset=0
-#resize_scales_transform = [200]
 #use_dataset_subset=10 #se è 0 uso tutto il dataset, se è n uso esattamente n elementi dal dataset
 #Config Execution mode of the Architecture
 resume_training=False
-train_only_tasknet=False
 save_disturbed_dataset=False
 keep_original_size=False #quando generi il dataset disturbato, deve essere a True se mi serve per il comparison con la tasknet plain, se no a False se devo fare train backward
 #split_size_train_set = 0 #necessario per quando si fa il train backward. Se a 0 nessuno split. Non è possibile usare lo stesso dataset per train perché le img ricostruite dal train potrebbero contenere più info rispetto a quelle generate dal validation. Quindi tengo i primi n elementi per train del modello con la tasknet, poi genero di disturbati quelli da n in poi, e userò solo quelli per trainare il backward. Questo se voglio usare coco indoor.
@@ -95,16 +99,17 @@ elif not train_backward_on_disturbed_sets:
 		rpn_pre_nms_top_n_train=2000, rpn_pre_nms_top_n_test=1000,
 		rpn_post_nms_top_n_train=2000, rpn_post_nms_top_n_test=1000,
 		rpn_nms_thresh=0.7, rpn_fg_iou_thresh=0.7, rpn_bg_iou_thresh=0.3,
-		rpn_score_thresh=0.0, rpn_use_custom_filter_anchors=True,
+		rpn_score_thresh=0.0, rpn_use_custom_filter_anchors=False,
 		rpn_n_top_pos_to_keep=1, rpn_n_top_neg_to_keep=5,
-		rpn_n_top_bg_to_keep=0, rpn_absolute_bg_score_thresh=0.75,
+		rpn_n_top_bg_to_keep=1, rpn_absolute_bg_score_thresh=0.75, rpn_objectness_bg_thresh=0.0,
 		rpn_use_not_overlapping_proposals=False, rpn_overlapping_prop_thresh=0.6,
-		box_use_custom_filter_proposals=True, box_n_top_pos_to_keep=1, box_n_top_neg_to_keep=5, 
-		box_n_top_bg_to_keep=0,
+		box_use_custom_filter_proposals=True, box_n_top_pos_to_keep=4, box_n_top_neg_to_keep=8, 
+		box_n_top_bg_to_keep=0, box_obj_bg_score_thresh=0.9,
 		box_batch_size_per_image=512, box_positive_fraction=0.25, box_bg_iou_thresh=0.5)
 	"""
+	comemnto su rpn_objectness_bg_thresh: la objectness varia da -25 a 10 o più. Se è 0 o superiore rappresenta la confidence dell'ancora che contenga un oggetto.
 	commento su ultimo campo: rpn_iou_neg_thresh must be equal to box_bg_iou_thresh. Otherwise what is selected by the custom filter proposal may not be considered negative by the ROI heads.
-	commento su ultimi due campi: sono del sampler degli indici delle proposal. Valore di default rispettivi: 512, 0.25. Il primo ti dice quante proposal tenere al massimo, scelte a caso. Il secondo ti dice: di quelle 512 proposal quante al massimo sono positive? Il sampler nel codice fa una roba del genere. Immaginiamo di avere 1 positiva (con IoU >0.5, il Roi head le discrimina così) e tenere 1000 negative (IoU<0.5).
+	commento su penultimi due campi: sono del sampler degli indici delle proposal. Valore di default rispettivi: 512, 0.25. Il primo ti dice quante proposal tenere al massimo, scelte a caso. Il secondo ti dice: di quelle 512 proposal quante al massimo sono positive? Il sampler nel codice fa una roba del genere. Immaginiamo di avere 1 positiva (con IoU >0.5, il Roi head le discrimina così) e tenere 1000 negative (IoU<0.5).
 num_pos = int(self.batch_size_per_image * self.positive_fraction)   #num_pos = 512*0.25 -> 128
 # protect against not enough positive examples
 num_pos = min(positive.numel(), num_pos)   # num_pos = min(1, 128) -> 1
