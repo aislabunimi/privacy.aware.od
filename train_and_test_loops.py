@@ -75,6 +75,8 @@ def train_model(train_dataloader, epoch, device, train_loss, model, tasknet, mod
 	return running_loss
 
 from piq import LPIPS
+
+from lpips.lpips import LPIPS
 def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_log_path, ap_score_threshold, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, michele_metric_folder): #funzione che si occupa del test
 	model.eval()
 	batch_size = len(val_dataloader) #recupero la batch size
@@ -86,7 +88,9 @@ def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, t
 	std = torch.tensor([0.229, 0.224, 0.225]).to(device)
 	unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
 	#ms_ssim_module = MS_SSIM(data_range=1, size_average=True, channel=3, weights=[0.0448, 0.2856, 0.3001, 0.2363, 0.1333], K=(0.01, 0.07)) #size average fa la media fra ms_ssim delle img nel batch. Metto k2=0.07 anzichè il default 0.03 per "normalizzare" i valori ed evitare casi in cui ms_ssim=0
-	lpips_loss_fn = LPIPS(reduction='mean', mean=[0., 0., 0.], std=[1., 1., 1.]) #mean e std settati così, in questo modo la vggnet non rinormalizza visto che i miei input sono già normalizzati
+	#lpips_loss_fn = LPIPS(reduction='mean', mean=[0., 0., 0.], std=[1., 1., 1.]) #mean e std settati così, in questo modo la vggnet non rinormalizza visto che i miei input sono già normalizzati
+	
+	lpips_model = LPIPS(net='vgg', model_path='lpips/lpips_my_weights.pth').to(device)	
 	lpips_score = 0
 	with torch.no_grad(): #non calcolo il gradiente, sto testando e bassa
 		for imgs, targets in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):
@@ -130,16 +134,21 @@ def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, t
 			plt.clf()
 			"""
 			
-			trans = transforms.Resize((reconstructed.shape[2], reconstructed.shape[3]), antialias=False)
-			orig_imgs = trans(imgs)
+			#trans = transforms.Resize((reconstructed.shape[2], reconstructed.shape[3]), antialias=False)
+			#orig_imgs = trans(imgs)
 			#reconstructed=unnormalize(reconstructed)
 			#orig_imgs=unnormalize(orig_imgs)
 			#alcuni valori possono capitare negativi. Il clamping lo faccio per essere sicuro di riportare il tutto alle condizioni necessarie per poter usare l'ms_sssim
 			#reconstructed = torch.clamp(reconstructed, min=0, max=1)
 			#orig_imgs = torch.clamp(orig_imgs, min=0, max=1)
 			#ms_ssim_score += ms_ssim_module(reconstructed, orig_imgs)
-			lpips_score += (1 - lpips_loss_fn(reconstructed, orig_imgs)) #essendo score, non loss.
-				
+			#lpips_score += lpips_loss_fn(reconstructed, orig_imgs) #lpips può essere anche sopra 1 come valore
+			trans_te = transforms.Resize((64, 64), antialias=False)
+			reconstructed = trans_te(reconstructed)
+			orig_imgs = trans_te(imgs)
+			lpips_loss = lpips_model(reconstructed, orig_imgs)
+			lpips_score += (torch.mean(lpips_loss)).item()
+			
 			true_loss=reconstructed_losses
 			running_loss += true_loss.item()	
 	
@@ -161,7 +170,7 @@ def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, t
 	create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
 	return running_loss
 
-def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, epoch, device, model, train_img_folder, train_ann, val_img_folder, val_ann, keep_original_size, use_coco_train): #funzione che si occupa di generare il dataset disturbato
+def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, device, model, train_img_folder, train_ann, val_img_folder, val_ann, keep_original_size, use_coco_train): #funzione che si occupa di generare il dataset disturbato
 	model.eval()
 	#Prima genero il disturbed training
 	batch_size = len(train_dataloader_gen_disturbed) #recupero la batch size
@@ -172,7 +181,7 @@ def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_ge
 	std = torch.tensor([0.229, 0.224, 0.225]).to(device)
 	unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
 	with torch.no_grad():
-		for imgs, targets in tqdm(train_dataloader_gen_disturbed, desc=f'Epoch {epoch} - Generating disturbed train images from dataset'):
+		for imgs, targets in tqdm(train_dataloader_gen_disturbed, desc=f'Generating disturbed train images from dataset'):
 			imgs, _ = imgs.decompose()
 			imgs = imgs.to(device)
 			reconstructed = model(imgs)
@@ -183,6 +192,10 @@ def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_ge
 					orig_size = [imgs.shape[2], imgs.shape[3]]
 					trans = transforms.Resize(orig_size, antialias=False)
 					reconstructed = trans(reconstructed)
+				#train_lpips=True
+				#if train_lpips:
+				#	trans = transforms.Resize((64, 64), antialias=False)
+				#	reconstructed = trans(reconstructed)
 				reconstructed = unnormalize(reconstructed)
 				#alcuni valori possono capitare negativi. Il clamping lo faccio per essere sicuro di riportare il tutto alle condizioni necessarie
 				reconstructed = torch.clamp(reconstructed, min=0, max=1)
@@ -211,7 +224,7 @@ def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_ge
 	coco = get_coco_api_from_dataset(val_dataloader_gen_disturbed.dataset)
 	disturbed_list = []
 	with torch.no_grad():
-		for imgs, targets in tqdm(val_dataloader_gen_disturbed, desc=f'Epoch {epoch} - Generating disturbed val images from dataset'):
+		for imgs, targets in tqdm(val_dataloader_gen_disturbed, desc=f'Generating disturbed val images from dataset'):
 			imgs, _ = imgs.decompose()
 			imgs = imgs.to(device)
 			reconstructed = model(imgs)
@@ -221,6 +234,10 @@ def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_ge
 				orig_size = [imgs.shape[2], imgs.shape[3]]
 				trans = transforms.Resize(orig_size, antialias=False)
 				reconstructed = trans(reconstructed)
+			#train_lpips=True
+			#if train_lpips:
+			#	trans = transforms.Resize((64, 64), antialias=False)
+			#	reconstructed = trans(reconstructed)
 			reconstructed = unnormalize(reconstructed)
 			reconstructed = torch.clamp(reconstructed, min=0, max=1)
 			save_image(reconstructed, os.path.join(val_img_folder, path))

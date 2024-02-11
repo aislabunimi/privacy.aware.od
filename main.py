@@ -133,13 +133,6 @@ Quindi:se voglio tenere tutte le negative, devo aumentare il 512 a un valore mag
 	tasknet_optimizer = torch.optim.SGD(tasknet.parameters(), lr=0.005, momentum=0.9, weight_decay=0.0005, nesterov=True)
 	tasknet_scheduler = torch.optim.lr_scheduler.StepLR(tasknet_optimizer, step_size=3, gamma=0.1)
 
-unet_optimizer = torch.optim.SGD(unet.parameters(), lr=0.005,
-                                momentum=0.9, weight_decay=0.0005, nesterov=True)
-#unet_optimizer = torch.optim.Adam(unet.parameters(), lr=0.001, weight_decay=0)
-unet_scheduler = torch.optim.lr_scheduler.StepLR(unet_optimizer,
-                                                   step_size=10,
-                                                   gamma=0.5)
-
 train_loss = [] # Lista che conserva la training loss. Mi serve se voglio vedere l'andamento della loss
 val_loss = [] #Lista che conversa la test loss
 log = {'TRAIN_LOSS': [], 'VAL_LOSS': []}
@@ -200,5 +193,8 @@ else:
     		with open(loss_log_path, 'a') as file:
     			loss_log_append = f"{epoch} {log['TRAIN_LOSS'][epoch-1]} {log['VAL_LOSS'][epoch-1]}\n"
     			file.write(loss_log_append)
-    			
+
+if save_disturbed_dataset:
+	generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, device, unet, disturbed_train_img_folder, disturbed_train_ann, disturbed_val_img_folder, disturbed_val_ann, keep_original_size, use_coco_train_for_generating_disturbed_set)
+   			
 print("Done!")
