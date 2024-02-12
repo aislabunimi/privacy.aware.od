@@ -12,11 +12,11 @@ def plot_michele_metric(file_list, file_save_list):
 		#getting data, calculating percentage of tp, fp and fpiou over total_detections
 		epochs = [entry['epoch'] for entry in data]
 		total_detections = [entry['total_detections'] for entry in data]
-		TP_percentage = [(entry['TP'] / entry['total_detections']) for entry in data]
+		TP_percentage = [(entry['TP'] / entry['total_detections']) if entry['total_detections'] != 0 else 0 for entry in data]
 		#FP_percentage = [(entry['FP'] / entry['total_detections']) for entry in data]
 		#gli FP non ha senso printarli, perché le pred della faster sono sempre con label 1 di persona, non potrà mai fare una pred con label di background!
-		TPm_percentage = [(entry['TPm'] / entry['total_detections']) for entry in data]
-		FPiou_percentage = [(entry['FPiou'] / entry['total_detections']) for entry in data]
+		TPm_percentage = [(entry['TPm'] / entry['total_detections']) if entry['total_detections'] != 0 else 0 for entry in data]
+		FPiou_percentage = [(entry['FPiou'] / entry['total_detections']) if entry['total_detections'] != 0 else 0 for entry in data]
 	
 		#plotting now the curves
 		plt.figure(figsize=(15, 10))

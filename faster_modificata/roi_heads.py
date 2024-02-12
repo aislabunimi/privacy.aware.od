@@ -256,7 +256,6 @@ class RoIHeads(nn.Module):
                    tensor_taken = torch.cat([tensor_taken, my_pos_sort_without_gt[true_idx]])
 
                 tensor_taken = torch.cat([tensor_taken, my_pos_sort[:n_gt]])
-                
                 """ Premessa 2 (sopprimere predicitions FPiou): considero solo le bbox con label 1 (persona), le ordino per confidence  e seleziono le prime t con iou < di 0.5 (qui è lo standard) """
                 #Ora negativi
                 matched_vals, matches_idx = only_neg.max(dim=0) #prima sono ordinati per score
@@ -334,6 +333,21 @@ class RoIHeads(nn.Module):
             img_sampled_inds = torch.where(pos_inds_img | neg_inds_img)[0] #si fa un or fra le due maschere e si scelgono solo quegli indici che sono stati presi dal sampler o come pos o come neg o come entrambi.
             sampled_inds.append(img_sampled_inds)
         return sampled_inds
+    """
+	commento su sampler degli indici delle proposal. Valore di default dei campi: 512, 0.25. Il primo ti dice quante proposal tenere al massimo, scelte a caso. Il secondo ti dice: di quelle 512 proposal quante al massimo sono positive? Il sampler nel codice fa una roba del genere. Immaginiamo di avere 1 positiva (con IoU >0.5, il Roi head le discrimina così) e tenere 1000 negative (IoU<0.5).
+num_pos = int(self.batch_size_per_image * self.positive_fraction)   #num_pos = 512*0.25 -> 128
+# protect against not enough positive examples
+num_pos = min(positive.numel(), num_pos)   # num_pos = min(1, 128) -> 1
+num_neg = self.batch_size_per_image - num_pos    # num_neg = 512 - 1 -> 511
+# protect against not enough negative examples
+num_neg = min(negative.numel(), num_neg)    # num_neg = min(1000, 511) -> 511
+
+# randomly select positive and negative examples
+perm1 = torch.randperm(positive.numel(), device=positive.device)[:num_pos] #1 a caso fra le 1 pos che ho
+perm2 = torch.randperm(negative.numel(), device=negative.device)[:num_neg] #511 a caso fra le 1000 neg che ho
+
+Quindi:se voglio tenere tutte le negative, devo aumentare il 512 a un valore maggiore, ad esempio 2000, visto che di negative con basso IoU ne ho molte
+    """
 
     def add_gt_proposals(self, proposals, gt_boxes):
         # type: (List[Tensor], List[Tensor]) -> List[Tensor]

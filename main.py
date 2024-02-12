@@ -30,6 +30,7 @@ tasknet_save_path = "tasknet_weights/tasknet"
 unet_weights_load= "model_weights/model_50.pt"
 unet_weights_to_compare= "model_weights/model_50.pt"
 tasknet_weights_load= "tasknet_weights/tasknet_10.pt"
+my_recons_classifier_weights='my_recons_classifier/my_recons_classifier_weights.pt'
 #Config DATASET
 use_coco_train_for_generating_disturbed_set=False #se metti questo a true, allora stai usando il dataset di train di coco per generare il disturbato. Vanno cambiati i due path sopra
 if use_coco_train_for_generating_disturbed_set:
@@ -100,30 +101,16 @@ elif not train_backward_on_disturbed_sets:
 		rpn_post_nms_top_n_train=2000, rpn_post_nms_top_n_test=1000,
 		rpn_nms_thresh=0.7, rpn_fg_iou_thresh=0.7, rpn_bg_iou_thresh=0.3,
 		rpn_score_thresh=0.0, rpn_use_custom_filter_anchors=False,
-		rpn_n_top_pos_to_keep=1, rpn_n_top_neg_to_keep=5,
-		rpn_n_top_bg_to_keep=1, rpn_absolute_bg_score_thresh=0.75, rpn_objectness_bg_thresh=0.0,
+		rpn_n_top_pos_to_keep=1, rpn_n_top_neg_to_keep=2,
+		rpn_n_top_bg_to_keep=0, rpn_absolute_bg_score_thresh=0.75, rpn_objectness_bg_thresh=0.0,
 		rpn_use_not_overlapping_proposals=False, rpn_overlapping_prop_thresh=0.6,
-		box_use_custom_filter_proposals=True, box_n_top_pos_to_keep=4, box_n_top_neg_to_keep=8, 
-		box_n_top_bg_to_keep=0, box_obj_bg_score_thresh=0.9,
-		box_batch_size_per_image=512, box_positive_fraction=0.25, box_bg_iou_thresh=0.5)
+		box_use_custom_filter_proposals=True, box_n_top_pos_to_keep=3, box_n_top_neg_to_keep=6, 
+		box_n_top_bg_to_keep=0, box_obj_bg_score_thresh=0.9)
 	"""
 	comemnto su rpn_objectness_bg_thresh: la objectness varia da -25 a 10 o più. Se è 0 o superiore rappresenta la confidence dell'ancora che contenga un oggetto.
-	commento su ultimo campo: rpn_iou_neg_thresh must be equal to box_bg_iou_thresh. Otherwise what is selected by the custom filter proposal may not be considered negative by the ROI heads.
-	commento su penultimi due campi: sono del sampler degli indici delle proposal. Valore di default rispettivi: 512, 0.25. Il primo ti dice quante proposal tenere al massimo, scelte a caso. Il secondo ti dice: di quelle 512 proposal quante al massimo sono positive? Il sampler nel codice fa una roba del genere. Immaginiamo di avere 1 positiva (con IoU >0.5, il Roi head le discrimina così) e tenere 1000 negative (IoU<0.5).
-num_pos = int(self.batch_size_per_image * self.positive_fraction)   #num_pos = 512*0.25 -> 128
-# protect against not enough positive examples
-num_pos = min(positive.numel(), num_pos)   # num_pos = min(1, 128) -> 1
-num_neg = self.batch_size_per_image - num_pos    # num_neg = 512 - 1 -> 511
-# protect against not enough negative examples
-num_neg = min(negative.numel(), num_neg)    # num_neg = min(1000, 511) -> 511
-
-# randomly select positive and negative examples
-perm1 = torch.randperm(positive.numel(), device=positive.device)[:num_pos] #1 a caso fra le 1 pos che ho
-perm2 = torch.randperm(negative.numel(), device=negative.device)[:num_neg] #511 a caso fra le 1000 neg che ho
-
-Quindi:se voglio tenere tutte le negative, devo aumentare il 512 a un valore maggiore, ad esempio 2000, visto che di negative con basso IoU ne ho molte
+	commento su questi parametri della faster: box_batch_size_per_image=512, box_positive_fraction=0.25, box_bg_iou_thresh=0.5
+	Vedere file roi heads.py dove c'è il subsample
 	"""
-
 	num_classes = 2  # 1 class (person) + background
 	# get number of input features for the classifier
 	in_features = tasknet.roi_heads.box_predictor.cls_score.in_features
@@ -132,6 +119,9 @@ Quindi:se voglio tenere tutte le negative, devo aumentare il 512 a un valore mag
 	tasknet.to(device)
 	tasknet_optimizer = torch.optim.SGD(tasknet.parameters(), lr=0.005, momentum=0.9, weight_decay=0.0005, nesterov=True)
 	tasknet_scheduler = torch.optim.lr_scheduler.StepLR(tasknet_optimizer, step_size=3, gamma=0.1)
+
+#Instazio il mio classificatore per vedere il livello di ricostruzione
+my_recons_classifier = load_my_recons_classifier(my_recons_classifier_weights, device)
 
 train_loss = [] # Lista che conserva la training loss. Mi serve se voglio vedere l'andamento della loss
 val_loss = [] #Lista che conversa la test loss
@@ -144,6 +134,7 @@ if train_backward_on_disturbed_sets: #carico i dataloader appositi del dataset d
 	disturbed_train_dataloader, disturbed_val_dataloader = load_disturbed_dataset(disturbed_train_img_folder, disturbed_train_ann, disturbed_val_img_folder, disturbed_val_ann, train_img_folder, val_img_folder, train_batch_size, val_batch_size, resize_scales_transform, use_dataset_subset)
 else:
 	train_dataloader, val_dataloader= load_dataset(train_img_folder, train_ann_file, val_img_folder, val_ann_file, train_batch_size, val_batch_size, save_disturbed_dataset, train_only_tasknet, resize_scales_transform, use_dataset_subset) #, split_size_train_set)
+
 
 if resume_training:
 	completed_epochs = load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler) #3 arg, il modello, il save path e l'optimizer
@@ -176,9 +167,7 @@ elif (not train_backward_on_disturbed_sets):
 	for epoch in range(1, num_epochs+1): #itero ora facendo un train e un test per ogni epoca
     		log['TRAIN_LOSS'].append(train_model(train_dataloader, epoch, device, train_loss, unet, tasknet, unet_optimizer))
     		unet_scheduler.step()
-    		log['VAL_LOSS'].append(val_model(val_dataloader, epoch, device, val_loss, unet, unet_save_path, tasknet, unet_optimizer, unet_scheduler, ap_log_path, ap_score_threshold, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, michele_metric_folder))
-    		if((num_epochs-epoch)==0 and save_disturbed_dataset): #serve se sono arrivato all'ultima epoca e voglio salvare il dataset disturbato
-    			generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, epoch, device, unet, disturbed_train_img_folder, disturbed_train_ann, disturbed_val_img_folder, disturbed_val_ann, keep_original_size, use_coco_train_for_generating_disturbed_set)
+    		log['VAL_LOSS'].append(val_model(val_dataloader, epoch, device, val_loss, unet, unet_save_path, tasknet, unet_optimizer, unet_scheduler, ap_log_path, ap_score_threshold, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, michele_metric_folder, my_recons_classifier))
     		print(f'EPOCH {epoch} SUMMARY: ' + ', '.join([f'{k}: {v[epoch-1]}' for k, v in log.items()]))
     		with open(loss_log_path, 'a') as file:
     			loss_log_append = f"{epoch} {log['TRAIN_LOSS'][epoch-1]} {log['VAL_LOSS'][epoch-1]}\n"

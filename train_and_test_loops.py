@@ -74,10 +74,9 @@ def train_model(train_dataloader, epoch, device, train_loss, model, tasknet, mod
 	train_loss.append(running_loss)
 	return running_loss
 
-from piq import LPIPS
-
 from lpips.lpips import LPIPS
-def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_log_path, ap_score_threshold, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, michele_metric_folder): #funzione che si occupa del test
+from model_utils_and_functions import compute_my_recons_classifier_pred, save_my_recons_classifier_dict
+def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_log_path, ap_score_threshold, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, michele_metric_folder, my_recons_classifier): #funzione che si occupa del test
 	model.eval()
 	batch_size = len(val_dataloader) #recupero la batch size
 	running_loss = 0 # Initializing variable for storing  loss 
@@ -89,6 +88,10 @@ def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, t
 	unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
 	#ms_ssim_module = MS_SSIM(data_range=1, size_average=True, channel=3, weights=[0.0448, 0.2856, 0.3001, 0.2363, 0.1333], K=(0.01, 0.07)) #size average fa la media fra ms_ssim delle img nel batch. Metto k2=0.07 anzichè il default 0.03 per "normalizzare" i valori ed evitare casi in cui ms_ssim=0
 	#lpips_loss_fn = LPIPS(reduction='mean', mean=[0., 0., 0.], std=[1., 1., 1.]) #mean e std settati così, in questo modo la vggnet non rinormalizza visto che i miei input sono già normalizzati
+	
+	my_rec_class_dict = {}
+	my_rec_class_dict['epoch']=epoch
+	my_rec_class_dict['total']=0	
 	
 	lpips_model = LPIPS(net='vgg', model_path='lpips/lpips_my_weights.pth').to(device)	
 	lpips_score = 0
@@ -149,6 +152,10 @@ def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, t
 			lpips_loss = lpips_model(reconstructed, orig_imgs)
 			lpips_score += (torch.mean(lpips_loss)).item()
 			
+			#Prima di passare reconstructed, ricordarsi che:
+			#1 deve essere normalizzato come ImageNet
+			#2 deve essere resizato a 64x64
+			compute_my_recons_classifier_pred(my_recons_classifier, reconstructed, my_rec_class_dict)			
 			true_loss=reconstructed_losses
 			running_loss += true_loss.item()	
 	
@@ -165,6 +172,10 @@ def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, t
 	lpips_path = "results/lpips_score_log.txt"
 	with open(lpips_path, 'a') as file:
 		file.write(f"{epoch} {lpips_score}\n")
+	
+	my_recons_classifier_path = f"{michele_metric_folder}/my_recons_classifier_log.json"
+	save_my_recons_classifier_dict(my_recons_classifier_path, epoch, my_rec_class_dict)
+	
 	val_loss.append(running_loss)
 	model_save_path = f'{model_save_path}_{epoch}.pt'   
 	create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)

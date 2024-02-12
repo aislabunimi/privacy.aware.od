@@ -14,7 +14,7 @@ from plot_utils.extract_iou50_values import extract_iou50_ap
 from plot_utils.plot_michele_metric import plot_michele_metric
 from plot_utils.compare_ap import plot_compare_between_two_ap
 from plot_utils.plot_images import *
-
+from plot_utils.plot_my_recons_classifier_metric import plot_my_recons_classifier_metric
 ###### CONFIG
 seed_everything(0) #per rendere deterministico l'esperimento
 #nota: upsample_bilinear2d_backward_out_cuda della unet non è deterministico
@@ -50,8 +50,8 @@ ap_comparison_save_path='plotted_results/comparison_ap.png'
 #models
 unet_save_path = "model_weights/model"
 tasknet_save_path = "tasknet_weights/tasknet"
-unet_weights_load= "model_weights/model_25.pt"
-unet_weights_to_compare= "model_weights/model_45.pt"
+unet_weights_load= "model_weights/model_20_sel_anchors.pt"
+unet_weights_to_compare= "model_weights/model_20_all_anchors.pt"
 tasknet_weights_load= "tasknet_weights/tasknet_10.pt"
 #Test images:
 image_save_prefix='test'
@@ -83,6 +83,13 @@ tasknet_scheduler = torch.optim.lr_scheduler.StepLR(tasknet_optimizer, step_size
 
 load_checkpoint(tasknet, tasknet_weights_load, tasknet_optimizer, tasknet_scheduler)
 load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler)
+"""
+extract_iou50_ap('results/ap_anchors.txt', 'results/ap_anchors_e.txt', standard_ap=True, coco_iou_modified=True) #standard AP, all preds, no interp
+
+extract_iou50_ap('results/ap_noanchors.txt', 'results/ap_noanchors_e.txt', standard_ap=True, coco_iou_modified=True) #standard AP, all preds, no interp
+
+plot_compare_between_two_ap('results/ap_anchors_e.txt', 'results/ap_noanchors_e.txt', ap_model_name='Unet with anchors selection', ap_to_compare_model_name='Unet with all anchors', plotted_comparison_save_path=ap_comparison_save_path, ap_plot_title=ap_plot_title)
+"""
 
 plot_model_loss(loss_log_path, loss_save_name) #loss
 
@@ -125,6 +132,8 @@ from plot_utils.lpips_score import plot_lpips_score
 plot_lpips_score(lpips_score_log_path="results/lpips_score_log.txt", lpips_save_name="plotted_results/lpips_score.png")
 
 plot_michele_metric(michele_metric_file_list, michele_metric_file_save_list)
+
+plot_my_recons_classifier_metric('results/my_recons_classifier_log.json', 'plotted_results/my_recons_classifier.png')
 
 #Plotting per le img
 for img in image_name_list:
