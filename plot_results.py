@@ -14,7 +14,7 @@ from plot_utils.extract_iou50_values import extract_iou50_ap
 from plot_utils.plot_michele_metric import plot_michele_metric
 from plot_utils.compare_ap import plot_compare_between_two_ap
 from plot_utils.plot_images import *
-from plot_utils.plot_my_recons_classifier_metric import plot_my_recons_classifier_metric
+from plot_utils.plot_my_recons_classifier_metric import plot_my_recons_classifier_metric, plot_my_recons_classifier_metric_probs
 ###### CONFIG
 seed_everything(0) #per rendere deterministico l'esperimento
 #nota: upsample_bilinear2d_backward_out_cuda della unet non è deterministico
@@ -50,7 +50,7 @@ ap_comparison_save_path='plotted_results/comparison_ap.png'
 #models
 unet_save_path = "model_weights/model"
 tasknet_save_path = "tasknet_weights/tasknet"
-unet_weights_load= "model_weights/model_20_sel_anchors.pt"
+unet_weights_load= "model_weights/model_15.pt"
 unet_weights_to_compare= "model_weights/model_20_all_anchors.pt"
 tasknet_weights_load= "tasknet_weights/tasknet_10.pt"
 #Test images:
@@ -134,6 +134,7 @@ plot_lpips_score(lpips_score_log_path="results/lpips_score_log.txt", lpips_save_
 plot_michele_metric(michele_metric_file_list, michele_metric_file_save_list)
 
 plot_my_recons_classifier_metric('results/my_recons_classifier_log.json', 'plotted_results/my_recons_classifier.png')
+plot_my_recons_classifier_metric_probs('results/my_recons_classifier_log.json', 'plotted_results/my_recons_classifier_probs.png')
 
 #Plotting per le img
 for img in image_name_list:

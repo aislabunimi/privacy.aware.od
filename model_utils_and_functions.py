@@ -124,6 +124,59 @@ def compute_michele_metric(evaluator_complete_metric, michele_metric_folder, epo
 			with open(save_path, 'w') as json_file:
 				json.dump(temp_list, json_file, indent=2)
 
+def load_my_recons_classifier(my_recons_classifier_weights, device):
+   vgg16 = torchvision.models.vgg16()
+   num_classes=4
+   vgg16.classifier[-1] = torch.nn.Linear(in_features=4096, out_features=num_classes)
+   vgg16_optimizer = torch.optim.SGD(vgg16.parameters(), lr=0.001, momentum=0.9, weight_decay=0.0005, nesterov=True)
+   vgg16_scheduler = torch.optim.lr_scheduler.StepLR(vgg16_optimizer, step_size=10, gamma=0.5)
+   load_checkpoint(vgg16, my_recons_classifier_weights, vgg16_optimizer, vgg16_scheduler)
+   vgg16.to(device)
+   vgg16.eval()
+   return vgg16
+   
+def save_my_recons_classifier_dict(classifier_path, epoch, my_rec_class_dict):
+   for value in range(0,4):
+      if value not in my_rec_class_dict:
+         my_rec_class_dict[value] = 0
+   if epoch>1:
+      with open(classifier_path, 'r') as json_file:
+         data = json.load(json_file)
+      data.append(my_rec_class_dict)
+      with open(classifier_path, 'w') as json_file:
+         json.dump(data, json_file, indent=2)
+   else:
+      temp_list=[my_rec_class_dict]
+      with open(classifier_path, 'w') as json_file:
+         json.dump(temp_list, json_file, indent=2)
+
+def compute_my_recons_classifier_pred(my_recons_classifier, reconstructed, my_rec_class_dict):
+   outputs = my_recons_classifier(reconstructed)
+   _, predicted = torch.max(outputs.data, 1)
+   values, occurrences = torch.unique(predicted, return_counts=True)
+   my_rec_class_dict['total']+=len(reconstructed)
+   for value, occurrence in zip(values, occurrences):
+      value_item = value.item()
+      occurrence_item = occurrence.item()
+      if value_item in my_rec_class_dict:
+         my_rec_class_dict[value_item] += occurrence_item
+      else:
+         my_rec_class_dict[value_item] = occurrence_item
+   outputs = torch.nn.functional.softmax(outputs) #ottengo le prob per ogni classe
+   if 'prob0tot' not in my_rec_class_dict:
+      my_rec_class_dict['prob0tot']=0
+   if 'prob1tot' not in my_rec_class_dict:
+      my_rec_class_dict['prob1tot']=0
+   if 'prob2tot' not in my_rec_class_dict:
+      my_rec_class_dict['prob2tot']=0
+   if 'prob3tot' not in my_rec_class_dict:
+      my_rec_class_dict['prob3tot']=0
+   for prob0, prob1, prob2, prob3 in outputs:
+      my_rec_class_dict['prob0tot'] += prob0.item()
+      my_rec_class_dict['prob1tot'] += prob1.item()
+      my_rec_class_dict['prob2tot'] += prob2.item()
+      my_rec_class_dict['prob3tot'] += prob3.item()
+
 def create_checkpoint(model, optimizer, current_epoch, current_loss, scheduler, model_save_path):
 	torch.save({
             'epoch': current_epoch,
