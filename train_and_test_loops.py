@@ -76,7 +76,7 @@ def train_model(train_dataloader, epoch, device, train_loss, model, tasknet, mod
 
 from lpips.lpips import LPIPS
 from model_utils_and_functions import compute_my_recons_classifier_pred, save_my_recons_classifier_dict
-def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_log_path, ap_score_threshold, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, michele_metric_folder, my_recons_classifier): #funzione che si occupa del test
+def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_log_path, ap_score_threshold, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, michele_metric_folder, my_recons_classifier, my_regressor): #funzione che si occupa del test
 	model.eval()
 	batch_size = len(val_dataloader) #recupero la batch size
 	running_loss = 0 # Initializing variable for storing  loss 
@@ -91,7 +91,8 @@ def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, t
 	
 	my_rec_class_dict = {}
 	my_rec_class_dict['epoch']=epoch
-	my_rec_class_dict['total']=0	
+	my_rec_class_dict['total']=0
+	recon_rate=0
 	
 	lpips_model = LPIPS(net='vgg', model_path='lpips/lpips_my_weights.pth').to(device)	
 	lpips_score = 0
@@ -156,6 +157,8 @@ def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, t
 			#1 deve essere normalizzato come ImageNet
 			#2 deve essere resizato a 64x64
 			compute_my_recons_classifier_pred(my_recons_classifier, reconstructed, my_rec_class_dict)			
+			recon_rate += torch.mean(my_regressor(reconstructed)).item()
+			
 			true_loss=reconstructed_losses
 			running_loss += true_loss.item()	
 	
@@ -172,6 +175,10 @@ def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, t
 	lpips_path = "results/lpips_score_log.txt"
 	with open(lpips_path, 'a') as file:
 		file.write(f"{epoch} {lpips_score}\n")
+	recon_rate /= batch_size
+	recon_path= "results/recon_rate_log.txt"
+	with open(recon_path, 'a') as file:
+		file.write(f"{epoch} {recon_rate}\n")
 	
 	my_recons_classifier_path = f"{michele_metric_folder}/my_recons_classifier_log.json"
 	save_my_recons_classifier_dict(my_recons_classifier_path, epoch, my_rec_class_dict)

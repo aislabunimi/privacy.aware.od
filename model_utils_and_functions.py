@@ -177,6 +177,37 @@ def compute_my_recons_classifier_pred(my_recons_classifier, reconstructed, my_re
       my_rec_class_dict['prob2tot'] += prob2.item()
       my_rec_class_dict['prob3tot'] += prob3.item()
 
+import torch.nn as nn
+class CNNRegression(nn.Module):
+    def __init__(self):
+        super(CNNRegression, self).__init__()
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
+        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
+        self.fc1 = nn.Linear(128 * 8 * 8, 128)
+        self.fc2 = nn.Linear(128, 1)  
+
+    def forward(self, x):
+        x = torch.relu(self.conv1(x))
+        x = nn.functional.max_pool2d(x, 2)
+        x = torch.relu(self.conv2(x))
+        x = nn.functional.max_pool2d(x, 2)
+        x = torch.relu(self.conv3(x))
+        x = nn.functional.max_pool2d(x, 2)
+        x = x.view(-1, 128 * 8 * 8)
+        x = torch.relu(self.fc1(x))
+        x = torch.sigmoid(self.fc2(x)) 
+        return x
+     
+def load_my_regressor(my_regressor_weights, device):
+   model = CNNRegression()  
+   optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+   scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
+   load_checkpoint(model, my_regressor_weights, optimizer, scheduler)
+   model.to(device)
+   model.eval()
+   return model
+
 def create_checkpoint(model, optimizer, current_epoch, current_loss, scheduler, model_save_path):
 	torch.save({
             'epoch': current_epoch,

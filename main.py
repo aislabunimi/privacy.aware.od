@@ -31,6 +31,7 @@ unet_weights_load= "model_weights/model_50.pt"
 unet_weights_to_compare= "model_weights/model_50.pt"
 tasknet_weights_load= "tasknet_weights/tasknet_10.pt"
 my_recons_classifier_weights='my_recons_classifier/my_recons_classifier_weights.pt'
+my_regressor_weights='my_recons_classifier/my_regressor_weights.pt'
 #Config DATASET
 use_coco_train_for_generating_disturbed_set=False #se metti questo a true, allora stai usando il dataset di train di coco per generare il disturbato. Vanno cambiati i due path sopra
 if use_coco_train_for_generating_disturbed_set:
@@ -122,6 +123,7 @@ elif not train_backward_on_disturbed_sets:
 
 #Instazio il mio classificatore per vedere il livello di ricostruzione
 my_recons_classifier = load_my_recons_classifier(my_recons_classifier_weights, device)
+my_regressor = load_my_regressor(my_regressor_weights, device)
 
 train_loss = [] # Lista che conserva la training loss. Mi serve se voglio vedere l'andamento della loss
 val_loss = [] #Lista che conversa la test loss
@@ -167,7 +169,7 @@ elif (not train_backward_on_disturbed_sets):
 	for epoch in range(1, num_epochs+1): #itero ora facendo un train e un test per ogni epoca
     		log['TRAIN_LOSS'].append(train_model(train_dataloader, epoch, device, train_loss, unet, tasknet, unet_optimizer))
     		unet_scheduler.step()
-    		log['VAL_LOSS'].append(val_model(val_dataloader, epoch, device, val_loss, unet, unet_save_path, tasknet, unet_optimizer, unet_scheduler, ap_log_path, ap_score_threshold, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, michele_metric_folder, my_recons_classifier))
+    		log['VAL_LOSS'].append(val_model(val_dataloader, epoch, device, val_loss, unet, unet_save_path, tasknet, unet_optimizer, unet_scheduler, ap_log_path, ap_score_threshold, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, michele_metric_folder, my_recons_classifier, my_regressor))
     		print(f'EPOCH {epoch} SUMMARY: ' + ', '.join([f'{k}: {v[epoch-1]}' for k, v in log.items()]))
     		with open(loss_log_path, 'a') as file:
     			loss_log_append = f"{epoch} {log['TRAIN_LOSS'][epoch-1]} {log['VAL_LOSS'][epoch-1]}\n"
