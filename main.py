@@ -78,7 +78,7 @@ num_epochs = 50 #setto numero delle epoche
 #Instanzio il modello e gli iperparametri; lo muovo poi al device
 #primo parametro n canali, secondo n_classes is the number of probabilities you want to get per pixel
 if not train_only_tasknet:
-	unet = UNet(3, 3, False)
+	unet = UNet(n_channels=3, bilinear=False)
 	unet.to(device)
 	unet_optimizer = torch.optim.SGD(unet.parameters(), lr=0.005, momentum=0.9, weight_decay=0.0005, nesterov=True)
 	unet_scheduler = torch.optim.lr_scheduler.StepLR(unet_optimizer, step_size=10, gamma=0.5)
