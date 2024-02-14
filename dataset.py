@@ -5,12 +5,13 @@ from PIL import Image
 from typing import Optional, List
 from torch import Tensor
 from model_utils_and_functions import deterministic_worker, deterministic_generator
-#from plot_utils import *
+#from plot_utils.plot_images import *
 from detr_transforms import * 
 
 ######## Definisco i dataset e i dataloader
 #da DETR qui
 from pycocotools.coco import COCO
+from pycocotools import mask as coco_mask
 
 class CocoDetection(torchvision.datasets.CocoDetection):
     def __init__(self, img_folder, ann_file, transforms, return_masks):
@@ -29,8 +30,7 @@ class CocoDetection(torchvision.datasets.CocoDetection):
         if self._transforms is not None:
             img, target = self._transforms(img, target)
             
-            #img = self._transforms(img)
-        #plot_img_after_transform(img, target["boxes"])    #DEBUG ONLY, serve per verificare che le img transformate hanno le bbox a posto
+        #plot_img_after_transform(img, target["boxes"])    #DEBUG ONLY, serve per verificare che le img transformate hanno le bbox a posto. Le bbox qui sono nel formato xmin, ymin, xmax, ymax
         return img, target
      
     ###__len__ aggiunta io, da DETR non c'era   
@@ -136,21 +136,12 @@ def make_coco_transforms(image_set, scales=None):
         return Compose([
             normalize,
         ])
-        
-    if image_set == 'disturbed_train':
+    
+    if image_set == 'val_resize':
+        first_size = [scales[0]]
         return Compose([
-            #RandomHorizontalFlip(), #L'alternativa è spostare la randomresize nella func nested_tensor DOPO
-            #il padding cosi sarei sicuro che tutte le img del batch abbiano la stessa proporzione di 
-            #padding rispetto all'immagine originale. Oppure fare il randomresize in training nel train loop
-            #RandomResize(scales, max_size=None),
-            #ToTensor(),
+            RandomResize(first_size, max_size=None),
             normalize,
-        ]) #il normalize lo devo fare solo sull'originale che è target, non sul dataset in se che è gia normalizzato
-
-    if image_set == 'disturbed_val':
-        return Compose([
-            normalize,
-            #ToTensor(),
         ])
 
     raise ValueError(f'unknown {image_set}')
@@ -226,13 +217,14 @@ def collate_fn_tasknet(batch):
 
 
 class DisturbedDataset(torch.utils.data.Dataset):
-    def __init__(self, json_file, disturbed_path, orig_path=None, transform=None, is_training=False, resize_scales=None):
+    def __init__(self, json_file, disturbed_path, orig_path=None, transform=None, is_training=False, resize_scales=None, generate_disturbed_dataset=False):
         self.data = json.load(open(json_file))
         self.transform = transform
         self.disturbed_path = disturbed_path
         self.orig_path = orig_path
         self.is_training=is_training
         self.resize_scales=resize_scales
+        self.generate_disturbed_dataset = generate_disturbed_dataset
 
     def __getitem__(self, index):
     	x = self.data[index]['image_path']
@@ -245,7 +237,7 @@ class DisturbedDataset(torch.utils.data.Dataset):
     	if self.transform:
         	
         	#Faccio il horizontal split qui così sia disturbed che il target originale sono specchiati
-        	if self.is_training:
+        	if self.is_training and not self.generate_disturbed_dataset:
         		
         		p_flip = random.random()
         		flip_trans = RandomHorizontalFlip(p=1) #inizializzo oggetto flip in modo da farlo sempre
@@ -256,20 +248,19 @@ class DisturbedDataset(torch.utils.data.Dataset):
         		
         		#Faccio il resize qui così viene scelto lo stesso valore per entrambi e il resize è fatto allo stesso modo
         		#evito il 200 perché potrebbe dare problemi com msssim
-        		scales = [scale for scale in self.resize_scales if scale >= 200]
-        		random_size = random.choice(scales)
+        		#scales = [scale for scale in self.resize_scales if scale >= 200]
+        		random_size = random.choice(self.resize_scales)
         		random_size = [random_size]
         		resize = RandomResize(random_size, max_size=None)
         		disturbed_image, _ = resize(disturbed_image, target=None)
         		orig_image, _ = resize(orig_image, target=None)
         	
         		#Per ultime le transform "normali", cioè a tensore e poi normalize per il target (le orig image)
+        	elif not self.is_training and not self.generate_disturbed_dataset:
+        	   first_size = [self.resize_scales[0]]
+        	   resize = RandomResize(first_size, max_size=None)
         	disturbed_image, _ = self.transform(disturbed_image, target=None)
-        	#normalize = Compose([
-        	#	ToTensor(),
-        	#	Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        	#])
-        	#orig_image, _ = normalize(orig_image, target=None)
+        	
         	if self.orig_path is not None:
         		orig_image, _ = self.transform(orig_image, target=None )
         
@@ -282,7 +273,8 @@ class DisturbedDataset(torch.utils.data.Dataset):
 
 def load_dataset(train_img_folder, train_ann_file, val_img_folder, val_ann_file, train_batch_size, val_batch_size, save_disturbed, train_only_tasknet, resize_scales_transform, use_dataset_subset): #split_size_train_set):
 	train_coco_dataset = CocoDetection(train_img_folder, train_ann_file, transforms=make_coco_transforms('train', resize_scales_transform), return_masks=None)
-	val_coco_dataset = CocoDetection(val_img_folder, val_ann_file, transforms=make_coco_transforms('val'), return_masks=False)
+	val_coco_dataset = CocoDetection(val_img_folder, val_ann_file, transforms=make_coco_transforms('val_resize', resize_scales_transform), return_masks=False)
+	example_coco_dataset = CocoDetection(val_img_folder, val_ann_file, transforms=make_coco_transforms('val_resize', resize_scales_transform), return_masks=False)
 	
 	train_indices = list(range(0, len(train_coco_dataset), 1)) 
 	val_indices = list(range(0, len(val_coco_dataset), 1))
@@ -291,6 +283,8 @@ def load_dataset(train_img_folder, train_ann_file, val_img_folder, val_ann_file,
 		val_coco_dataset = torch.utils.data.Subset(val_coco_dataset, val_indices[:use_dataset_subset])
 	#elif split_size_train_set>0:
 	#	train_coco_dataset = torch.utils.data.Subset(train_coco_dataset, train_indices[:split_size_train_set]) #prendo i primi n elementi	
+	example_indices = list(range(0, len(example_coco_dataset), 1))
+	example_dataset = torch.utils.data.Subset(example_coco_dataset, example_indices[:20])
 	
 	if train_only_tasknet:
 		collate = collate_fn_tasknet
@@ -312,15 +306,23 @@ def load_dataset(train_img_folder, train_ann_file, val_img_folder, val_ann_file,
                                           collate_fn=collate,
                                           worker_init_fn=deterministic_worker,
                                           generator=deterministic_generator())
+	example_dataloader = torch.utils.data.DataLoader(example_dataset,
+                                          batch_size=1,
+                                          shuffle=False,
+                                          num_workers=4,
+                                          pin_memory=True,
+                                          collate_fn=collate,
+                                          worker_init_fn=deterministic_worker,
+                                          generator=deterministic_generator())
 	
-	return train_dataloader, val_dataloader
+	return train_dataloader, val_dataloader, example_dataloader
 	
 def load_dataset_for_generating_disturbed_set(train_img_folder, train_ann_file, val_img_folder, val_ann_file, use_dataset_subset, use_coco_train): #, split_size_train_set):
 	val_coco_dataset = CocoDetection(val_img_folder, val_ann_file, transforms=make_coco_transforms('val'), return_masks=False)
 	if use_coco_train:
 		disturbed_train_dataset_gen = CocoDetection(train_img_folder, train_ann_file, transforms=make_coco_transforms('val'), return_masks=None)
 	else:
-		disturbed_train_dataset_gen = DisturbedDataset(train_ann_file, train_img_folder, transform=make_coco_transforms('disturbed_val'), is_training=False)
+		disturbed_train_dataset_gen = DisturbedDataset(train_ann_file, train_img_folder, transform=make_coco_transforms('val'), is_training=False, generate_disturbed_dataset=True)
 	
 	train_indices = list(range(0, len(disturbed_train_dataset_gen), 1))
 	val_indices = list(range(0, len(val_coco_dataset), 1))
@@ -350,8 +352,8 @@ def load_dataset_for_generating_disturbed_set(train_img_folder, train_ann_file, 
 	return disturbed_train_dataloader_gen, val_dataloader_gen_disturbed
 	
 def load_disturbed_dataset(disturbed_train_img_folder, disturbed_train_ann, disturbed_val_img_folder, disturbed_val_ann, orig_train_folder, orig_val_folder, train_batch_size, val_batch_size, resize_scales_transform, use_dataset_subset):
-	disturbed_train_dataset = DisturbedDataset(disturbed_train_ann, disturbed_train_img_folder, orig_train_folder, transform=make_coco_transforms('disturbed_train', resize_scales_transform), is_training=True, resize_scales=resize_scales_transform)
-	disturbed_val_dataset = DisturbedDataset(disturbed_val_ann, disturbed_val_img_folder, orig_val_folder, transform=make_coco_transforms('disturbed_val'), is_training=False)
+	disturbed_train_dataset = DisturbedDataset(disturbed_train_ann, disturbed_train_img_folder, orig_train_folder, transform=make_coco_transforms('val', resize_scales_transform), is_training=True, resize_scales=resize_scales_transform)
+	disturbed_val_dataset = DisturbedDataset(disturbed_val_ann, disturbed_val_img_folder, orig_val_folder, transform=make_coco_transforms('val', resize_scales_transform), is_training=False)
 	
 	train_indices = list(range(0, len(disturbed_train_dataset), 1))
 	val_indices = list(range(0, len(disturbed_val_dataset), 1)) 

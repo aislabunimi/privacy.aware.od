@@ -11,8 +11,45 @@ import json
 import torchvision.transforms as transforms
 from coco_eval import get_coco_api_from_dataset
 import os
-from pytorch_msssim import ms_ssim, MS_SSIM
+#from pytorch_msssim import ms_ssim, MS_SSIM
 #MS SSIM dovrebbe tenere conto di più di come appare l'img a una persona, rispetto alla sola distribuzione dell'EMD
+
+def adjust_orig_target_to_reconstructed_imgs(targets, imgs, reconstructed):
+   """
+   L'img ricostruita per via della mancanza delle skip connection non ha la stessa dim dell'originale ma perde qualche pixel. 
+   Ad esempio, una img prima di darla all'unet ha shape [200, 250]. Dopo ha shape [192, 256].
+   Si potrebbe verificare che la bbox target originale sfori la nuova img più piccola, dando origine a minor ap.
+   Serve resizare o l'img originale (ma porterebbe a uno stretch), oppure modificare le bbox target e proporzionarle all'img ricostruita.
+   """
+   orig_batch_w, orig_batch_h = imgs.shape[3], imgs.shape[2]
+   rec_batch_w, rec_batch_h =  reconstructed.shape[3], reconstructed.shape[2]
+   for e in targets:
+      for i, box in enumerate(e['boxes']):
+         xm, ym, xM, yM = box.tolist()
+         #x_rec : rec_w = x_res : or_w
+         rec_xm = (rec_batch_w * xm) / orig_batch_w
+         rec_xM = (rec_batch_w * xM) / orig_batch_w
+         rec_ym = (rec_batch_h * ym) / orig_batch_h
+         rec_yM = (rec_batch_h * yM) / orig_batch_h
+         e['boxes'][i] = torch.tensor([rec_xm, rec_ym, rec_xM, rec_yM], device=box.device)
+   return targets
+
+def adjust_outputs_to_cocoeval_api(targets, outputs, reconstructed=None):
+   for t, pred in zip(targets, outputs):
+      orig_h, orig_w = t['orig_size']
+      if reconstructed is not None: #se non è none la sto usando con l'unet
+         rec_batch_h, rec_batch_w = reconstructed.shape[2], reconstructed.shape[3] #qui pred è fatta su img resizata con qualche pixel in meno
+      else: #pred fatta da solo la tasknet
+         rec_batch_h, rec_batch_w = t['size']
+      for i, box in enumerate(pred['boxes']):
+         #x_rec : rec_w = x_res : or_w
+         xm, ym, xM, yM = box.tolist()
+         resized_xm = (orig_w * xm) / rec_batch_w
+         resized_xM = (orig_w * xM) / rec_batch_w
+         resized_ym = (orig_h * ym) / rec_batch_h
+         resized_yM = (orig_h * yM) / rec_batch_h
+         pred['boxes'][i] = torch.tensor([resized_xm, resized_ym, resized_xM, resized_yM], device=box.device)
+   return outputs
 
 def train_model(train_dataloader, epoch, device, train_loss, model, tasknet, model_optimizer): #funzione che si occupa del training
 	model.train()
@@ -26,25 +63,9 @@ def train_model(train_dataloader, epoch, device, train_loss, model, tasknet, mod
 		#print_batch_after_collatefn(imgs, targets, 2) #QUESTO CON DECOMPOSE		
 		tasknet.train()
 		reconstructed = model(imgs)
-		#l'img ricostruita dovuta alla mancanza delle skip connection, non ha la stessa dim dell'originale ma perde qualche pixel
-		#può capitare il seguente caso: 'boxes': tensor[ 20.2250,   0.0000, 249.8900, 200.0000]
-		#nel bbox 249 è la width della bbox, 200 è la height; sotto la width e height sono in ordine inverso
-		#la dimensione originale dell'img prima dell'unet era tensor[200, 250]
-		#dopo all'unet diventa: tensor[192, 256]
-		#quindi ora la bbox in height sforerebbe la dim dell'img, dando origine a un'ap minore e loss maggiore del dovuto. Conviene quindi o resizare le img all'originale per evitare questo inconveniente (ma ci sarebbe uno stretch), oppure modificare le bbox target e proporzionarle all'img ricostruita.
-		#le bboxes quindi saranno leggermente più piccole 
-				
-		orig_batch_w, orig_batch_h = imgs.shape[3], imgs.shape[2]
-		rec_batch_w, rec_batch_h =  reconstructed.shape[3], reconstructed.shape[2]
-
-		for e in targets:
-			for i, box in enumerate(e['boxes']):
-				xm, ym, xM, yM = box.tolist()
-				rec_xm = (rec_batch_w * xm) / orig_batch_w
-				rec_xM = (rec_batch_w * xM) / orig_batch_w
-				rec_ym = (rec_batch_h * ym) / orig_batch_h
-				rec_yM = (rec_batch_h * yM) / orig_batch_h
-				e['boxes'][i] = torch.tensor([rec_xm, rec_ym, rec_xM, rec_yM], device=box.device)
+		
+		#motivo per cui è necessario descritto dalla funzione stessa
+		targets = adjust_orig_target_to_reconstructed_imgs(targets, imgs, reconstructed)
 
 		#import matplotlib.pyplot as plt
 		#import matplotlib.image as mpimg
@@ -76,7 +97,7 @@ def train_model(train_dataloader, epoch, device, train_loss, model, tasknet, mod
 
 from lpips.lpips import LPIPS
 from model_utils_and_functions import compute_my_recons_classifier_pred, save_my_recons_classifier_dict
-def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_log_path, ap_score_threshold, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, michele_metric_folder, my_recons_classifier, my_regressor): #funzione che si occupa del test
+def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_log_path, ap_score_threshold, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, michele_metric_folder, my_recons_classifier, my_regressor, example_dataloader): #funzione che si occupa del test
 	model.eval()
 	batch_size = len(val_dataloader) #recupero la batch size
 	running_loss = 0 # Initializing variable for storing  loss 
@@ -94,7 +115,8 @@ def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, t
 	my_rec_class_dict['total']=0
 	recon_rate=0
 	
-	lpips_model = LPIPS(net='vgg', model_path='lpips/lpips_my_weights.pth').to(device)	
+	#lpips_model = LPIPS(net='vgg', model_path='lpips/lpips_my_weights.pth').to(device)
+	lpips_model = LPIPS().to(device) #alexnet, pesi di default, alla fine sembrano migliori	
 	lpips_score = 0
 	with torch.no_grad(): #non calcolo il gradiente, sto testando e bassa
 		for imgs, targets in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):
@@ -104,22 +126,18 @@ def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, t
 			reconstructed = model(imgs)
 			tasknet.train()
 			
-			orig_batch_w, orig_batch_h = imgs.shape[3], imgs.shape[2]
-			rec_batch_w, rec_batch_h =  reconstructed.shape[3], reconstructed.shape[2]
-			for e in targets:
-				for i, box in enumerate(e['boxes']):
-					xm, ym, xM, yM = box.tolist()
-					rec_xm = (rec_batch_w * xm) / orig_batch_w
-					rec_xM = (rec_batch_w * xM) / orig_batch_w
-					rec_ym = (rec_batch_h * ym) / orig_batch_h
-					rec_yM = (rec_batch_h * yM) / orig_batch_h
-					e['boxes'][i] = torch.tensor([rec_xm, rec_ym, rec_xM, rec_yM], device=box.device)
+			targets = adjust_orig_target_to_reconstructed_imgs(targets, imgs, reconstructed)
 			
 			reconstructed_loss_dict = tasknet(reconstructed, targets)
 			reconstructed_losses = sum(loss for loss in reconstructed_loss_dict.values())		
 			tasknet.eval()
 			outputs = tasknet(reconstructed)
 			outputs = [{k: v.to(device) for k, v in t.items()} for t in outputs]
+			
+			# in validation i target devono poi essere riconvertiti alle dim originali, se no l'AP non va!
+			# i targets che usa l'AP sono gli originali dall'annotation, quindi anche se sopra li avevo resizati non c'è problema visto che quei target vengono ignorati
+			outputs = adjust_outputs_to_cocoeval_api(targets, outputs, reconstructed)
+			
 			res.update({target["image_id"].item(): output for target, output in zip(targets, outputs)})
 			preds=outputs
 			preds = [apply_nms(pred, iou_thresh=0.5, score_thresh=0.01) for pred in outputs]
@@ -186,7 +204,29 @@ def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, t
 	val_loss.append(running_loss)
 	model_save_path = f'{model_save_path}_{epoch}.pt'   
 	create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
+	save_image_examples(example_dataloader, model, epoch, device)
 	return running_loss
+
+def save_image_examples(example_dataloader, model, epoch, device):
+   mean = torch.tensor([0.485, 0.456, 0.406]).to(device)
+   std = torch.tensor([0.229, 0.224, 0.225]).to(device)
+   unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
+   model.eval()
+   coco = get_coco_api_from_dataset(example_dataloader.dataset)
+   with torch.no_grad(): #non calcolo il gradiente, sto testando e bassa
+      for imgs, targets in tqdm(example_dataloader, desc=f'Epoch {epoch} - Saving Validation examples'):
+         imgs, _ = imgs.decompose()
+         imgs = imgs.to(device)
+         reconstructed = model(imgs)
+         coco_image_id = targets[0]["image_id"].item()
+         path = coco.loadImgs(coco_image_id)[0]["file_name"]
+         #path = ''.join(targets)
+         reconstructed = unnormalize(reconstructed)
+         reconstructed = torch.clamp(reconstructed, min=0, max=1)
+         save_dir_path = f'experiments/epoch_{epoch}'
+         if not os.path.exists(save_dir_path):
+            os.makedirs(save_dir_path)
+         save_image(reconstructed, os.path.join(save_dir_path, path))
 
 def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, device, model, train_img_folder, train_ann, val_img_folder, val_ann, keep_original_size, use_coco_train): #funzione che si occupa di generare il dataset disturbato
 	model.eval()
@@ -411,6 +451,8 @@ def val_tasknet(val_dataloader, epoch, device, val_loss, tasknet_save_path, task
 			tasknet.eval()
 			outputs = tasknet(imgs)
 			outputs = [{k: v.to(device) for k, v in t.items()} for t in outputs]
+			
+			outputs = adjust_outputs_to_cocoeval_api(targets, outputs)
 			
 			res.update({target["image_id"].item(): output for target, output in zip(targets, outputs)})
 			preds=outputs

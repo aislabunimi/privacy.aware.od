@@ -33,33 +33,54 @@ def deterministic_generator():
 
 def compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, ap_log_path, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, res):
 	coco = get_coco_api_from_dataset(val_dataloader.dataset)
+
 	iou_types = _get_iou_types(tasknet)
 	coco_evaluator = CocoEvaluator(coco, iou_types) #AP con tutte le pred, curva non interpolata
 	my_ap_evaluator = CocoEvaluator(coco, iou_types) #AP con tutte le pred, curva interpolata
 	my_ap_nointerp_thresh = CocoEvaluator(coco, iou_types) #AP con solo pred superiori score thresh, curva non interpolata
 	my_ap_interp_thresh = CocoEvaluator(coco, iou_types) #AP con solo pred superiori score thresh, curva interpolata
-	coco_evaluator_iou = CocoEvaluator(coco, iou_types) #come coco_evaluator solo limitando iou thresh
-	my_ap_evaluator_iou = CocoEvaluator(coco, iou_types)
-	my_ap_nointerp_thresh_iou = CocoEvaluator(coco, iou_types)
-	my_ap_interp_thresh_iou = CocoEvaluator(coco, iou_types)
+	
+	coco_evaluator_iou50 = CocoEvaluator(coco, iou_types) #come coco_evaluator solo limitando iou thresh
+	my_ap_evaluator_iou50 = CocoEvaluator(coco, iou_types)
+	my_ap_nointerp_thresh_iou50 = CocoEvaluator(coco, iou_types)
+	my_ap_interp_thresh_iou50 = CocoEvaluator(coco, iou_types)
+	
+	coco_evaluator_iou75 = CocoEvaluator(coco, iou_types) #come coco_evaluator solo limitando iou thresh
+	my_ap_evaluator_iou75 = CocoEvaluator(coco, iou_types)
+	my_ap_nointerp_thresh_iou75 = CocoEvaluator(coco, iou_types)
+	my_ap_interp_thresh_iou75 = CocoEvaluator(coco, iou_types)
+	
 	#new_interpolation = np.linspace(.0, (1-ap_score_threshold), int(np.round(((1-ap_score_threshold) - .0) / .01)) + 1, endpoint=True)
 	new_interpolation = np.linspace(.0, (1-ap_score_threshold), int(np.round(((1-ap_score_threshold) - .0) / (1-ap_score_threshold)/.01)) + 1, endpoint=True) #questa fa 101 point sulla nuova curva, quella sopra faceva solo 26 punti. La differenza in AP è però trascurabile, ma mi sembra più corretto i 101 punti piuttosto che 26
-	iou_thresh=[0.5] #se voglio guardare solo quella
+	iou50_thresh=[0.5] #se voglio guardare solo quella
+	iou75_thresh=[0.75]
 	my_ap_evaluator.coco_eval['bbox'].params.recThrs = new_interpolation #necessaria visto che devo prendere i punti solo fino allo ap_score_threshold
 	my_ap_interp_thresh.coco_eval['bbox'].params.recThrs = new_interpolation
 	
-	coco_evaluator_iou.coco_eval['bbox'].params.iouThrs= iou_thresh
-	my_ap_evaluator_iou.coco_eval['bbox'].params.iouThrs= iou_thresh
-	my_ap_nointerp_thresh_iou.coco_eval['bbox'].params.iouThrs= iou_thresh
-	my_ap_interp_thresh_iou.coco_eval['bbox'].params.iouThrs= iou_thresh
-	my_ap_evaluator_iou.coco_eval['bbox'].params.recThrs = new_interpolation
-	my_ap_interp_thresh_iou.coco_eval['bbox'].params.recThrs = new_interpolation
+	coco_evaluator_iou50.coco_eval['bbox'].params.iouThrs= iou50_thresh
+	my_ap_evaluator_iou50.coco_eval['bbox'].params.iouThrs= iou50_thresh
+	my_ap_nointerp_thresh_iou50.coco_eval['bbox'].params.iouThrs= iou50_thresh
+	my_ap_interp_thresh_iou50.coco_eval['bbox'].params.iouThrs= iou50_thresh
+	my_ap_evaluator_iou50.coco_eval['bbox'].params.recThrs = new_interpolation
+	my_ap_interp_thresh_iou50.coco_eval['bbox'].params.recThrs = new_interpolation
+	
+	coco_evaluator_iou75.coco_eval['bbox'].params.iouThrs= iou75_thresh
+	my_ap_evaluator_iou75.coco_eval['bbox'].params.iouThrs= iou75_thresh
+	my_ap_nointerp_thresh_iou75.coco_eval['bbox'].params.iouThrs= iou75_thresh
+	my_ap_interp_thresh_iou75.coco_eval['bbox'].params.iouThrs= iou75_thresh
+	my_ap_evaluator_iou75.coco_eval['bbox'].params.recThrs = new_interpolation
+	my_ap_interp_thresh_iou75.coco_eval['bbox'].params.recThrs = new_interpolation
+	
 	
 	execute_coco_eval(ap_log_path, f'AP for Epoch {epoch}', coco_evaluator, res)
 	execute_coco_eval(my_ap_log_path, f'AP for Epoch {epoch} with all predictions but curve interpolation, score thresh: {ap_score_threshold}', my_ap_evaluator, res)
 	
-	execute_coco_eval(f'{ap_log_path[:-4]}_iou.txt', f'AP for Epoch {epoch}', coco_evaluator_iou, res)
-	execute_coco_eval(f'{my_ap_log_path[:-4]}_iou.txt', f'AP for Epoch {epoch} with all predictions but curve interpolation, score thresh: {ap_score_threshold}', my_ap_evaluator_iou, res)
+	execute_coco_eval(f'{ap_log_path[:-4]}_iou50.txt', f'AP for Epoch {epoch}', coco_evaluator_iou50, res)
+	execute_coco_eval(f'{my_ap_log_path[:-4]}_iou50.txt', f'AP for Epoch {epoch} with all predictions but curve interpolation, score thresh: {ap_score_threshold}', my_ap_evaluator_iou50, res)
+	
+	execute_coco_eval(f'{ap_log_path[:-4]}_iou75.txt', f'AP for Epoch {epoch}', coco_evaluator_iou75, res)
+	execute_coco_eval(f'{my_ap_log_path[:-4]}_iou75.txt', f'AP for Epoch {epoch} with all predictions but curve interpolation, score thresh: {ap_score_threshold}', my_ap_evaluator_iou75, res)
+	
 	#per filtrare solo le pred con score pari a ap_score_threshold o superiore
 	for image_id, pred in res.items():
 		filtered_boxes = []
@@ -82,8 +103,11 @@ def compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, ap_lo
 	execute_coco_eval(my_ap_nointerp_thresh_path, f'AP for Epoch {epoch} with only pred above score thresh: {ap_score_threshold}', my_ap_nointerp_thresh, res)
 	execute_coco_eval(my_ap_interp_thresh_path, f'AP for Epoch {epoch} with only pred above score thresh and curve interpolation, score thresh: {ap_score_threshold}', my_ap_interp_thresh, res)
 	
-	execute_coco_eval(f'{my_ap_nointerp_thresh_path[:-4]}_iou.txt', f'AP for Epoch {epoch} with only pred above score thresh: {ap_score_threshold}', my_ap_nointerp_thresh_iou, res)
-	execute_coco_eval(f'{my_ap_interp_thresh_path[:-4]}_iou.txt', f'AP for Epoch {epoch} with only pred above score thresh and curve interpolation, score thresh: {ap_score_threshold}', my_ap_interp_thresh_iou, res)
+	execute_coco_eval(f'{my_ap_nointerp_thresh_path[:-4]}_iou50.txt', f'AP for Epoch {epoch} with only pred above score thresh: {ap_score_threshold}', my_ap_nointerp_thresh_iou50, res)
+	execute_coco_eval(f'{my_ap_interp_thresh_path[:-4]}_iou50.txt', f'AP for Epoch {epoch} with only pred above score thresh and curve interpolation, score thresh: {ap_score_threshold}', my_ap_interp_thresh_iou50, res)
+	
+	execute_coco_eval(f'{my_ap_nointerp_thresh_path[:-4]}_iou75.txt', f'AP for Epoch {epoch} with only pred above score thresh: {ap_score_threshold}', my_ap_nointerp_thresh_iou75, res)
+	execute_coco_eval(f'{my_ap_interp_thresh_path[:-4]}_iou75.txt', f'AP for Epoch {epoch} with only pred above score thresh and curve interpolation, score thresh: {ap_score_threshold}', my_ap_interp_thresh_iou75, res)
 	
 def execute_coco_eval(ap_log_path, print_msg, coco_evaluator, res):
 	coco_evaluator.update(res)

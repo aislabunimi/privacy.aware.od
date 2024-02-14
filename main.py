@@ -48,20 +48,22 @@ disturbed_val_ann='disturbed_dataset/val.json'
 train_only_tasknet=False #se voglio trainare solo faster rcnn
 if train_only_tasknet:
 	train_batch_size=8 #8 batch size usata nella tasknet
-	val_batch_size=8 #8 batch size usata nella tasknet
+	val_batch_size=8 #8 batch size usata nella tasknet #poi vedo se rifare il test con 1 di batch size
 	train_img_folder = '/home/alberti/coco_person/train/images' #Questi per trainare la tasknet su 65k
 	train_ann_file = '/home/alberti/coco_person/train/train.json'
 	val_img_folder = '/home/alberti/coco_person/val/images'
 	val_ann_file = '/home/alberti/coco_person/val/val.json'
+	resize_scales_transform = [200, 300, 400, 500, 600]
 else:
-	train_batch_size=4
-	val_batch_size=4
+	train_batch_size=8
+	val_batch_size=1  #per evitare problemi di padding di detr
 	train_img_folder = '/home/alberti/coco_people_indoor/train/images'
 	#train_img_folder = '/home/math0012/Tesi_magistrale/open_images_v7/images'
 	train_ann_file = '/home/alberti/coco_people_indoor/train/train.json'
 	val_img_folder = '/home/alberti/coco_people_indoor/val/images'
 	val_ann_file = '/home/alberti/coco_people_indoor/val/val.json'
-resize_scales_transform = [200, 300, 400, 500, 600]
+	resize_scales_transform = [256, 288, 320, 352, 384, 416] #piu piccole, meno memoria
+
 use_dataset_subset=0
 #use_dataset_subset=10 #se è 0 uso tutto il dataset, se è n uso esattamente n elementi dal dataset
 #Config Execution mode of the Architecture
@@ -99,14 +101,14 @@ elif not train_backward_on_disturbed_sets:
 	weights = FasterRCNN_ResNet50_FPN_Weights.DEFAULT
 	tasknet = fasterrcnn_resnet50_fpn_modificata(weights=weights, progress=False,
 		rpn_pre_nms_top_n_train=2000, rpn_pre_nms_top_n_test=1000,
-		rpn_post_nms_top_n_train=2000, rpn_post_nms_top_n_test=1000,
+		rpn_post_nms_top_n_train=500, rpn_post_nms_top_n_test=1000, #valore di default del post:2000
 		rpn_nms_thresh=0.7, rpn_fg_iou_thresh=0.7, rpn_bg_iou_thresh=0.3,
 		rpn_score_thresh=0.0, rpn_use_custom_filter_anchors=False,
 		rpn_n_top_pos_to_keep=1, rpn_n_top_neg_to_keep=2,
 		rpn_n_top_bg_to_keep=0, rpn_absolute_bg_score_thresh=0.75, rpn_objectness_bg_thresh=0.0,
 		rpn_use_not_overlapping_proposals=False, rpn_overlapping_prop_thresh=0.6,
-		box_use_custom_filter_proposals=True, box_n_top_pos_to_keep=3, box_n_top_neg_to_keep=6, 
-		box_n_top_bg_to_keep=0, box_obj_bg_score_thresh=0.9)
+		box_use_custom_filter_proposals=True, box_n_top_pos_to_keep=3, box_n_top_neg_to_keep=3, 
+		box_n_top_bg_to_keep=0, box_obj_bg_score_thresh=0.9, box_batch_size_per_image=10000, box_positive_fraction=0.25)
 	"""
 	comemnto su rpn_objectness_bg_thresh: la objectness varia da -25 a 10 o più. Se è 0 o superiore rappresenta la confidence dell'ancora che contenga un oggetto.
 	commento su questi parametri della faster: box_batch_size_per_image=512, box_positive_fraction=0.25, box_bg_iou_thresh=0.5
@@ -135,7 +137,7 @@ if save_disturbed_dataset:
 if train_backward_on_disturbed_sets: #carico i dataloader appositi del dataset disturbato
 	disturbed_train_dataloader, disturbed_val_dataloader = load_disturbed_dataset(disturbed_train_img_folder, disturbed_train_ann, disturbed_val_img_folder, disturbed_val_ann, train_img_folder, val_img_folder, train_batch_size, val_batch_size, resize_scales_transform, use_dataset_subset)
 else:
-	train_dataloader, val_dataloader= load_dataset(train_img_folder, train_ann_file, val_img_folder, val_ann_file, train_batch_size, val_batch_size, save_disturbed_dataset, train_only_tasknet, resize_scales_transform, use_dataset_subset) #, split_size_train_set)
+	train_dataloader, val_dataloader, example_dataloader= load_dataset(train_img_folder, train_ann_file, val_img_folder, val_ann_file, train_batch_size, val_batch_size, save_disturbed_dataset, train_only_tasknet, resize_scales_transform, use_dataset_subset) #, split_size_train_set)
 
 
 if resume_training:
@@ -169,7 +171,7 @@ elif (not train_backward_on_disturbed_sets):
 	for epoch in range(1, num_epochs+1): #itero ora facendo un train e un test per ogni epoca
     		log['TRAIN_LOSS'].append(train_model(train_dataloader, epoch, device, train_loss, unet, tasknet, unet_optimizer))
     		unet_scheduler.step()
-    		log['VAL_LOSS'].append(val_model(val_dataloader, epoch, device, val_loss, unet, unet_save_path, tasknet, unet_optimizer, unet_scheduler, ap_log_path, ap_score_threshold, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, michele_metric_folder, my_recons_classifier, my_regressor))
+    		log['VAL_LOSS'].append(val_model(val_dataloader, epoch, device, val_loss, unet, unet_save_path, tasknet, unet_optimizer, unet_scheduler, ap_log_path, ap_score_threshold, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, michele_metric_folder, my_recons_classifier, my_regressor, example_dataloader))
     		print(f'EPOCH {epoch} SUMMARY: ' + ', '.join([f'{k}: {v[epoch-1]}' for k, v in log.items()]))
     		with open(loss_log_path, 'a') as file:
     			loss_log_append = f"{epoch} {log['TRAIN_LOSS'][epoch-1]} {log['VAL_LOSS'][epoch-1]}\n"

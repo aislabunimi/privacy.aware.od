@@ -392,18 +392,20 @@ Quindi:se voglio tenere tutte le negative, devo aumentare il 512 a un valore mag
         # get matching gt indices for each proposal
         #
         #if self.use_custom_filter_proposals:
-        if not self.use_custom_filter_proposals:
-           matched_idxs, labels, indexes = self.assign_targets_to_proposals_custom_v2(proposals, gt_boxes, gt_labels, obj_score)
-           #ora estraggo solo le prop che userò
-           my_proposals=[]
-           for proposals_in_image, indexes_in_image in zip(proposals, indexes):
-              my_proposals.append(proposals_in_image[indexes_in_image])
-           proposals = my_proposals
-        else:
-           matched_idxs, labels, match_q_matrixes = self.assign_targets_to_proposals(proposals, gt_boxes, gt_labels) #le match_q_matrixes mi servono poi per il compare
+        #if self.use_custom_filter_proposals:
+        #   matched_idxs, labels, indexes = self.assign_targets_to_proposals_custom_v2(proposals, gt_boxes, gt_labels, obj_score)
+        #   #ora estraggo solo le prop che userò
+        #   my_proposals=[]
+        #   for proposals_in_image, indexes_in_image in zip(proposals, indexes):
+        #      my_proposals.append(proposals_in_image[indexes_in_image])
+        #   proposals = my_proposals
+        #else:
+        #   matched_idxs, labels, match_q_matrixes = self.assign_targets_to_proposals(proposals, gt_boxes, gt_labels) #le match_q_matrixes mi servono poi per il compare
+        matched_idxs, labels, match_q_matrixes = self.assign_targets_to_proposals(proposals, gt_boxes, gt_labels) #le match_q_matrixes mi servono poi per il compare
  
         # sample a fixed proportion of positive-negative proposals
         #queste rispettano i due parametri di batch_size e pos_fraction. Di default sono a 512 e 0.25, quindi verranno prese 128 pos e il resto delle 512 a neg. Questo a patto che ce ne siano abbastanza di pos e neg; altrimenti, ne vengono tenute le n pos e le restanti 512 - npos sono negative.
+        #il gt non è detto che sopravvive
         sampled_inds = self.subsample(labels)
         matched_gt_boxes = []
         num_images = len(proposals)
@@ -526,7 +528,7 @@ Quindi:se voglio tenere tutte le negative, devo aumentare il 512 a un valore mag
         #PASSO 3: calcolo la bbox regression e la probabilità della classe usando l'output sopra. è FastRCNNPredictor
         class_logits, box_regression = self.box_predictor(box_features)
 
-        if self.training:
+        if self.training and self.use_custom_filter_proposals:
            #attenzione, ora proposals contiene anche le gt
            dtype = proposals[0].dtype
            device = proposals[0].device
