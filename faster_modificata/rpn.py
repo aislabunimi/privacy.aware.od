@@ -149,10 +149,7 @@ class RegionProposalNetwork(torch.nn.Module):
         #iou_neg_thresh: float=0.5,
         n_top_neg_to_keep: int=8,
         n_top_bg_to_keep: int=0,
-        absolute_bg_score_thresh: float = 0.75,
         objectness_bg_thresh: float = 0.00,
-        use_not_overlapping_proposals: bool=False,
-        overlapping_prop_thresh: float=0.6,
     ) -> None:
         super().__init__()
         self.anchor_generator = anchor_generator
@@ -172,12 +169,8 @@ class RegionProposalNetwork(torch.nn.Module):
         
         self.use_custom_filter_anchors = use_custom_filter_anchors
         self.n_top_pos_to_keep = n_top_pos_to_keep
-        #self.iou_neg_thresh = iou_neg_thresh
         self.n_top_neg_to_keep = n_top_neg_to_keep
         self.n_top_bg_to_keep = n_top_bg_to_keep           
-        self.absolute_bg_score_thresh = absolute_bg_score_thresh
-        self.use_not_overlapping_proposals = use_not_overlapping_proposals
-        self.overlapping_prop_thresh = overlapping_prop_thresh
         self.objectness_bg_thresh = objectness_bg_thresh
 
         self.fg_bg_sampler = det_utils.BalancedPositiveNegativeSampler(batch_size_per_image, positive_fraction) # This class samples batches, ensuring that they contain a fixed proportion of positives

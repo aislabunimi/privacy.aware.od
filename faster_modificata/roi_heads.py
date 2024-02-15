@@ -72,7 +72,8 @@ class RoIHeads(nn.Module):
         score_thresh,
         nms_thresh,
         detections_per_img,
-        use_custom_filter_proposals=True,
+        use_custom_filter_proposals_objectness=False,
+        use_custom_filter_proposals_scores=False, 
         n_top_pos_to_keep=1, 
         n_top_neg_to_keep=5,
         n_top_bg_to_keep=0,
@@ -106,7 +107,8 @@ class RoIHeads(nn.Module):
         self.detections_per_img = detections_per_img
         
         #miei parametri
-        self.use_custom_filter_proposals = use_custom_filter_proposals
+        self.use_custom_filter_proposals_objectness=use_custom_filter_proposals_objectness
+        self.use_custom_filter_proposals_scores=use_custom_filter_proposals_scores
         self.n_top_pos_to_keep = n_top_pos_to_keep
         self.n_top_neg_to_keep = n_top_neg_to_keep
         self.n_top_bg_to_keep = n_top_bg_to_keep
@@ -388,24 +390,22 @@ Quindi:se voglio tenere tutte le negative, devo aumentare il 512 a un valore mag
         # append ground-truth bboxes to propos
         #Ora proposals conterrà le proposals dell'rpn originale + le GT boxes
         proposals = self.add_gt_proposals(proposals, gt_boxes)
+        
 
         # get matching gt indices for each proposal
-        #
-        #if self.use_custom_filter_proposals:
-        #if self.use_custom_filter_proposals:
-        #   matched_idxs, labels, indexes = self.assign_targets_to_proposals_custom_v2(proposals, gt_boxes, gt_labels, obj_score)
-        #   #ora estraggo solo le prop che userò
-        #   my_proposals=[]
-        #   for proposals_in_image, indexes_in_image in zip(proposals, indexes):
-        #      my_proposals.append(proposals_in_image[indexes_in_image])
-        #   proposals = my_proposals
-        #else:
-        #   matched_idxs, labels, match_q_matrixes = self.assign_targets_to_proposals(proposals, gt_boxes, gt_labels) #le match_q_matrixes mi servono poi per il compare
-        matched_idxs, labels, match_q_matrixes = self.assign_targets_to_proposals(proposals, gt_boxes, gt_labels) #le match_q_matrixes mi servono poi per il compare
+        if self.use_custom_filter_proposals_objectness:
+           matched_idxs, labels, indexes = self.assign_targets_to_proposals_custom_v2(proposals, gt_boxes, gt_labels, obj_score)
+           #ora estraggo solo le prop che userò
+           my_proposals=[]
+           for proposals_in_image, indexes_in_image in zip(proposals, indexes):
+              my_proposals.append(proposals_in_image[indexes_in_image])
+           proposals = my_proposals
+           match_q_matrixes=None
+        else:
+           matched_idxs, labels, match_q_matrixes = self.assign_targets_to_proposals(proposals, gt_boxes, gt_labels) #le match_q_matrixes mi servono poi per il compare
  
         # sample a fixed proportion of positive-negative proposals
         #queste rispettano i due parametri di batch_size e pos_fraction. Di default sono a 512 e 0.25, quindi verranno prese 128 pos e il resto delle 512 a neg. Questo a patto che ce ne siano abbastanza di pos e neg; altrimenti, ne vengono tenute le n pos e le restanti 512 - npos sono negative.
-        #il gt non è detto che sopravvive
         sampled_inds = self.subsample(labels)
         matched_gt_boxes = []
         num_images = len(proposals)
@@ -528,7 +528,7 @@ Quindi:se voglio tenere tutte le negative, devo aumentare il 512 a un valore mag
         #PASSO 3: calcolo la bbox regression e la probabilità della classe usando l'output sopra. è FastRCNNPredictor
         class_logits, box_regression = self.box_predictor(box_features)
 
-        if self.training and self.use_custom_filter_proposals:
+        if self.training and self.use_custom_filter_proposals_scores:
            #attenzione, ora proposals contiene anche le gt
            dtype = proposals[0].dtype
            device = proposals[0].device
@@ -554,7 +554,7 @@ Quindi:se voglio tenere tutte le negative, devo aumentare il 512 a un valore mag
                 raise ValueError("labels cannot be None")
             if regression_targets is None:
                 raise ValueError("regression_targets cannot be None")
-            if self.use_custom_filter_proposals:
+            if self.use_custom_filter_proposals_scores:
                loss_classifier, loss_box_reg = fastrcnn_loss(my_class_logits, my_box_regression, my_labels, my_regression_targets)
             else:
                loss_classifier, loss_box_reg = fastrcnn_loss(class_logits, box_regression, labels, regression_targets)

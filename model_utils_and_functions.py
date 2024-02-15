@@ -31,7 +31,8 @@ def deterministic_generator():
 	g.manual_seed(0)
 	return g
 
-def compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, ap_log_path, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, res):
+def compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, results_dir, res):
+
 	coco = get_coco_api_from_dataset(val_dataloader.dataset)
 
 	iou_types = _get_iou_types(tasknet)
@@ -72,14 +73,14 @@ def compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, ap_lo
 	my_ap_interp_thresh_iou75.coco_eval['bbox'].params.recThrs = new_interpolation
 	
 	
-	execute_coco_eval(ap_log_path, f'AP for Epoch {epoch}', coco_evaluator, res)
-	execute_coco_eval(my_ap_log_path, f'AP for Epoch {epoch} with all predictions but curve interpolation, score thresh: {ap_score_threshold}', my_ap_evaluator, res)
+	execute_coco_eval(f'{results_dir}/standard_ap.txt', f'AP for Epoch {epoch}', coco_evaluator, res)
+	execute_coco_eval(f'{results_dir}/myinterp_ap.txt', f'AP for Epoch {epoch} with all predictions (not filtered by score thresh) but with my curve interpolation, score thresh: {ap_score_threshold}', my_ap_evaluator, res)
 	
-	execute_coco_eval(f'{ap_log_path[:-4]}_iou50.txt', f'AP for Epoch {epoch}', coco_evaluator_iou50, res)
-	execute_coco_eval(f'{my_ap_log_path[:-4]}_iou50.txt', f'AP for Epoch {epoch} with all predictions but curve interpolation, score thresh: {ap_score_threshold}', my_ap_evaluator_iou50, res)
+	execute_coco_eval(f'{results_dir}/standard_ap_iou50.txt', f'AP for Epoch {epoch}', coco_evaluator_iou50, res)
+	execute_coco_eval(f'{results_dir}/myinterp_ap_iou50.txt', f'AP for Epoch {epoch} with all predictions (not filtered by score thresh) but with my curve interpolation, score thresh: {ap_score_threshold}', my_ap_evaluator_iou50, res)
 	
-	execute_coco_eval(f'{ap_log_path[:-4]}_iou75.txt', f'AP for Epoch {epoch}', coco_evaluator_iou75, res)
-	execute_coco_eval(f'{my_ap_log_path[:-4]}_iou75.txt', f'AP for Epoch {epoch} with all predictions but curve interpolation, score thresh: {ap_score_threshold}', my_ap_evaluator_iou75, res)
+	execute_coco_eval(f'{results_dir}/standard_ap_iou75.txt', f'AP for Epoch {epoch}', coco_evaluator_iou75, res)
+	execute_coco_eval(f'{results_dir}/myinterp_ap_iou75.txt', f'AP for Epoch {epoch} with all predictions (not filtered by score thresh) but with my curve interpolation, score thresh: {ap_score_threshold}', my_ap_evaluator_iou75, res)
 	
 	#per filtrare solo le pred con score pari a ap_score_threshold o superiore
 	for image_id, pred in res.items():
@@ -100,14 +101,14 @@ def compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, ap_lo
                 	res[image_id] = {'boxes': torch.empty((0,4)).to(device),
                 			 'labels': torch.empty((0,)).to(device),
                 			 'scores': torch.empty((0,)).to(device)}
-	execute_coco_eval(my_ap_nointerp_thresh_path, f'AP for Epoch {epoch} with only pred above score thresh: {ap_score_threshold}', my_ap_nointerp_thresh, res)
-	execute_coco_eval(my_ap_interp_thresh_path, f'AP for Epoch {epoch} with only pred above score thresh and curve interpolation, score thresh: {ap_score_threshold}', my_ap_interp_thresh, res)
+	execute_coco_eval(f'{results_dir}/standard_ap_scoreabovethresh.txt', f'AP for Epoch {epoch} with only pred above score thresh: {ap_score_threshold}', my_ap_nointerp_thresh, res)
+	execute_coco_eval(f'{results_dir}/myinterp_ap_scoreabovethresh.txt', f'AP for Epoch {epoch} with only pred above score thresh and my curve interpolation, score thresh: {ap_score_threshold}', my_ap_interp_thresh, res)
 	
-	execute_coco_eval(f'{my_ap_nointerp_thresh_path[:-4]}_iou50.txt', f'AP for Epoch {epoch} with only pred above score thresh: {ap_score_threshold}', my_ap_nointerp_thresh_iou50, res)
-	execute_coco_eval(f'{my_ap_interp_thresh_path[:-4]}_iou50.txt', f'AP for Epoch {epoch} with only pred above score thresh and curve interpolation, score thresh: {ap_score_threshold}', my_ap_interp_thresh_iou50, res)
+	execute_coco_eval(f'{results_dir}/standard_ap_scoreabovethresh_iou50.txt', f'AP for Epoch {epoch} with only pred above score thresh: {ap_score_threshold}', my_ap_nointerp_thresh_iou50, res)
+	execute_coco_eval(f'{results_dir}/myinterp_ap_scoreabovethresh_iou50.txt', f'AP for Epoch {epoch} with only pred above score thresh and my curve interpolation, score thresh: {ap_score_threshold}', my_ap_interp_thresh_iou50, res)
 	
-	execute_coco_eval(f'{my_ap_nointerp_thresh_path[:-4]}_iou75.txt', f'AP for Epoch {epoch} with only pred above score thresh: {ap_score_threshold}', my_ap_nointerp_thresh_iou75, res)
-	execute_coco_eval(f'{my_ap_interp_thresh_path[:-4]}_iou75.txt', f'AP for Epoch {epoch} with only pred above score thresh and curve interpolation, score thresh: {ap_score_threshold}', my_ap_interp_thresh_iou75, res)
+	execute_coco_eval(f'{results_dir}/standard_ap_scoreabovethresh_iou75.txt', f'AP for Epoch {epoch} with only pred above score thresh: {ap_score_threshold}', my_ap_nointerp_thresh_iou75, res)
+	execute_coco_eval(f'{results_dir}/myinterp_ap_scoreabovethresh_iou75.txt', f'AP for Epoch {epoch} with only pred above score thresh and my curve interpolation, score thresh: {ap_score_threshold}', my_ap_interp_thresh_iou75, res)
 	
 def execute_coco_eval(ap_log_path, print_msg, coco_evaluator, res):
 	coco_evaluator.update(res)

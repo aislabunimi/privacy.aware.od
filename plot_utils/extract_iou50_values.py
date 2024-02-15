@@ -1,8 +1,11 @@
 def extract_values(lines, split_line_value, coco_iou_modified):
     epoch = int(lines[0].split()[split_line_value])
-    if coco_iou_modified: #indica se ho modificato il coco eval per tenere solo iou 0.50:0.50
+    if coco_iou_modified==50: #indica se ho modificato il coco eval per tenere solo iou 0.50:0.50
     	ap_line = [line for line in lines if 'Average Precision' in line and 'IoU=0.50:0.50 | area=   all | maxDets=100' in line]
     	ar_line = [line for line in lines if 'Average Recall' in line and 'IoU=0.50:0.50 | area=   all | maxDets=100' in line]
+    elif coco_iou_modified==75: #indica se ho modificato il coco eval per tenere solo iou 0.50:0.50
+    	ap_line = [line for line in lines if 'Average Precision' in line and 'IoU=0.75:0.75 | area=   all | maxDets=100' in line]
+    	ar_line = [line for line in lines if 'Average Recall' in line and 'IoU=0.75:0.75 | area=   all | maxDets=100' in line]
     else:
     	ap_line = [line for line in lines if 'Average Precision' in line and 'IoU=0.50      | area=   all | maxDets=100' in line]
     	ar_line = [line for line in lines if 'Average Recall' in line and 'IoU=0.50:0.95 | area=   all | maxDets=100' in line]
@@ -13,7 +16,7 @@ def extract_values(lines, split_line_value, coco_iou_modified):
     return epoch, ap_value, ar_value
 
 
-def extract_iou50_ap(input_file, output_file, standard_ap=True, coco_iou_modified=False):
+def extract_ap(input_file, output_file, standard_ap=True, coco_iou_modified=None):
     with open(input_file, 'r') as f:
         lines = f.readlines()
 

@@ -353,7 +353,7 @@ def load_dataset_for_generating_disturbed_set(train_img_folder, train_ann_file, 
 	
 def load_disturbed_dataset(disturbed_train_img_folder, disturbed_train_ann, disturbed_val_img_folder, disturbed_val_ann, orig_train_folder, orig_val_folder, train_batch_size, val_batch_size, resize_scales_transform, use_dataset_subset):
 	disturbed_train_dataset = DisturbedDataset(disturbed_train_ann, disturbed_train_img_folder, orig_train_folder, transform=make_coco_transforms('val', resize_scales_transform), is_training=True, resize_scales=resize_scales_transform)
-	disturbed_val_dataset = DisturbedDataset(disturbed_val_ann, disturbed_val_img_folder, orig_val_folder, transform=make_coco_transforms('val', resize_scales_transform), is_training=False)
+	disturbed_val_dataset = DisturbedDataset(disturbed_val_ann, disturbed_val_img_folder, orig_val_folder, transform=make_coco_transforms('val', resize_scales_transform), is_training=False, resize_scales=resize_scales_transform)
 	
 	train_indices = list(range(0, len(disturbed_train_dataset), 1))
 	val_indices = list(range(0, len(disturbed_val_dataset), 1)) 

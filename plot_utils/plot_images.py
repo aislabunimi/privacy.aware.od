@@ -92,7 +92,65 @@ def show_res_test_unet(model, tasknet, device, img_file_path, not_reconstructed,
 	plt.savefig(name_path_save, format='png', bbox_inches='tight')
 
 
-  
+#da DETR, leggermente modificato
+def resize(image, target, size, max_size=None):
+    # size can be min_size (scalar) or (w, h) tuple
+
+    def get_size_with_aspect_ratio(image_size, size, max_size=None):
+        w, h = image_size[3], image_size[2] #modificato con shape
+        if max_size is not None:
+            min_original_size = float(min((w, h)))
+            max_original_size = float(max((w, h)))
+            if max_original_size / min_original_size * size > max_size:
+                size = int(round(max_size * min_original_size / max_original_size))
+
+        if (w <= h and w == size) or (h <= w and h == size):
+            return (h, w)
+
+        if w < h:
+            ow = size
+            oh = int(size * h / w)
+        else:
+            oh = size
+            ow = int(size * w / h)
+
+        return (oh, ow)
+
+    def get_size(image_size, size, max_size=None):
+        if isinstance(size, (list, tuple)):
+            return size[::-1]
+        else:
+            return get_size_with_aspect_ratio(image_size, size, max_size)
+
+    size = get_size(image.shape, size, max_size) #modificata con shape
+    rescaled_image = F.resize(image, size)
+
+    if target is None:
+        return rescaled_image, None
+
+    ratios = tuple(float(s) / float(s_orig) for s, s_orig in zip(rescaled_image.size, image.size))
+    ratio_width, ratio_height = ratios
+
+    target = target.copy()
+    if "boxes" in target:
+        boxes = target["boxes"]
+        scaled_boxes = boxes * torch.as_tensor([ratio_width, ratio_height, ratio_width, ratio_height])
+        target["boxes"] = scaled_boxes
+
+    if "area" in target:
+        area = target["area"]
+        scaled_area = area * (ratio_width * ratio_height)
+        target["area"] = scaled_area
+
+    h, w = size
+    target["size"] = torch.tensor([h, w])
+
+    if "masks" in target:
+        target['masks'] = interpolate(
+            target['masks'][:, None].float(), size, mode="nearest")[:, 0] > 0.5
+
+    return rescaled_image, target
+ 
 def get_transform():
     transform = []
     transform.append(transforms.PILToTensor())
@@ -114,7 +172,10 @@ def plot_results(img, prob, boxes):
         ax.text(xmin, ymin, text, fontsize=15,
                 bbox=dict(facecolor='yellow', alpha=0.5))
 
-from pytorch_msssim import ms_ssim, MS_SSIM	
+from pytorch_msssim import ms_ssim, MS_SSIM
+
+import piq
+
 def compare_two_results_unet(unet, tasknet, device, img_file_path, name_path_save, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler): 
 
 	unet.eval() #metto il modello in evaluate
@@ -129,6 +190,8 @@ def compare_two_results_unet(unet, tasknet, device, img_file_path, name_path_sav
 	img = eval_transform(image)
 	img = img.unsqueeze(0)
 	img = img.to(device)
+	img, _ = resize(img, None, 256) #in validation ora è così
+	
 	
 	res_tasknet = tasknet(img)
 	img_primo_plot = img.squeeze(0)
@@ -138,10 +201,14 @@ def compare_two_results_unet(unet, tasknet, device, img_file_path, name_path_sav
 	load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler)
 	out = unet(img)
 	#preparo poi per calcolo msssim
-	ms_ssim_module = MS_SSIM(data_range=1, size_average=True, channel=3)
+	#ms_ssim_module = MS_SSIM(data_range=1, size_average=False, channel=3, weights=[0.0448, 0.2856, 0.3001, 0.2363, 0.1333], K=(0.01, 0.03)) #default
+	#ms_ssim_module = MS_SSIM(data_range=1, size_average=False, channel=3, weights=[0.0448, 0.2856, 0.3001, 0.2363, 0.1333], K=(0.01, 0.07))
+	#ms_ssim_module = MS_SSIM(data_range=1, size_average=False, channel=3, weights=[0.0, 0.1, 0.25, 0.3, 0.35], K=(0.03, 0.09)) #dai test empirici sembra debba pesare di più la destra della coda (alte frequenze)
+	# human visual sensitivity peaks at middle frequencies (around 4 cycles per degree of visual angle) and decreases along both high- and low-frequency directions.
+	#Low-frequency information represents global or coarse features, while high-frequency information represents fine details or textures.
 	trans_r = transforms.Resize((out.shape[2], out.shape[3]), antialias=False)
-	orig_img = trans_r(img)
-	orig_img = unnormalize(orig_img)
+	orig_img_r = trans_r(img)
+	orig_img = unnormalize(orig_img_r)
 	
 	img_primo_plot = trans_r(img_primo_plot) #per fare img uguale a quelle ricostruite
 	plt.subplot(1, 3, 1)
@@ -155,8 +222,35 @@ def compare_two_results_unet(unet, tasknet, device, img_file_path, name_path_sav
 	nms_pred_recon = apply_nms(pred_recon, iou_thresh=0.1) #per applicare nms e salvare l'ultima box
 	filename = os.path.basename(unet_weights_load)
 	name = os.path.splitext(filename)[0]	
-	ms_ssim_score = ms_ssim_module(out_to_plot, orig_img)
-	plt.title(f'{name}, MS_SSIM: {ms_ssim_score:0.3f}', fontsize=16)
+	
+	out_to_plot = torch.clamp(out_to_plot, min=0, max=1)
+	orig_img = torch.clamp(orig_img, min=0, max=1)
+	
+	#ms_ssim_score = ms_ssim_module(out_to_plot, orig_img)
+	#ms_ssim_score = ms_ssim_score.item()
+
+	"""
+	iw_ssim_index: torch.Tensor = piq.information_weighted_ssim(out_to_plot, orig_img, data_range=1.)
+	iw_ssim_loss = piq.InformationWeightedSSIMLoss(data_range=1., reduction='none').to(out_to_plot.device)(out_to_plot, orig_img)
+	print(f"IW-SSIM index: {iw_ssim_index.item():0.4f}, loss: {iw_ssim_loss.item():0.4f}")
+	"""
+	
+	trans_te = transforms.Resize((64, 64), antialias=False)
+	orig_img_r = trans_te(orig_img_r)
+	out = trans_te(out)
+	from .lpips import LPIPS
+	#lpips_model = LPIPS(net='vgg', model_path='/home/math0012/Tesi_magistrale/Unet_faster_modificata/plot_utils/lpips_my_weights.pth').to(device)
+	lpips_model = LPIPS(net='alex').to(device)
+	#lpips_model = LPIPS(net='vgg').to(device)
+	#lpips_loss: torch.Tensor = piq.LPIPS(reduction='mean', mean=[0., 0., 0.], std=[1., 1., 1.])(out, orig_img_r)
+	#lpips_score = lpips_loss.item()
+	lpips_score = lpips_model(out, orig_img_r).item()
+	
+	#dists_loss = piq.DISTS(reduction='none', mean=[0.0, 0.0, 0.0], std=[1.0, 1.0, 1.0])(out, orig_img_r)
+	#print(f"DISTS: {dists_loss.item():0.4f}")
+	
+	#plt.title(f'{name}, MS_SSIM: {ms_ssim_score:0.3f}', fontsize=16)
+	plt.title(f'{name}, LPIPS: {lpips_score:0.3f}', fontsize=16)
 	plot_results(out_to_plot, nms_pred_recon['scores'], nms_pred_recon['boxes'])
 	plt.subplot(1, 3, 3)
 	load_checkpoint(unet, unet_weights_to_compare, unet_optimizer, unet_scheduler)
@@ -168,8 +262,30 @@ def compare_two_results_unet(unet, tasknet, device, img_file_path, name_path_sav
 	nms_pred_recon = apply_nms(pred_recon, iou_thresh=0.1) #per applicare nms e salvare l'ultima box
 	filename = os.path.basename(unet_weights_to_compare)
 	name = os.path.splitext(filename)[0]
-	ms_ssim_score = ms_ssim_module(out_to_plot, orig_img)
-	plt.title(f'{name}, MS_SSIM: {ms_ssim_score:0.3f}', fontsize=16)
+	
+	out_to_plot = torch.clamp(out_to_plot, min=0, max=1)
+	
+	#ms_ssim_score = ms_ssim_module(out_to_plot, orig_img)
+	#ms_ssim_score = ms_ssim_score.item()
+	
+	"""
+	iw_ssim_index: torch.Tensor = piq.information_weighted_ssim(out_to_plot, orig_img, data_range=1.)
+	iw_ssim_loss = piq.InformationWeightedSSIMLoss(data_range=1., reduction='none').to(out_to_plot.device)(out_to_plot, orig_img)
+	print(f"IW-SSIM index: {iw_ssim_index.item():0.4f}, loss: {iw_ssim_loss.item():0.4f}")
+	"""
+	
+	trans_te = transforms.Resize((64, 64), antialias=False)
+	out = trans_te(out)
+	#lpips_loss: torch.Tensor = piq.LPIPS(reduction='mean', mean=[0., 0., 0.], std=[1., 1., 1.])(out, orig_img_r)
+	#lpips_score = lpips_loss.item()
+	lpips_score = lpips_model(out, orig_img_r).item()
+	
+	
+	#dists_loss = piq.DISTS(reduction='none', mean=[0.0, 0.0, 0.0], std=[1.0, 1.0, 1.0])(out, orig_img_r)
+	#print(f"DISTS: {dists_loss.item():0.4f}")
+	
+	#plt.title(f'{name}, MS_SSIM: {ms_ssim_score:0.3f}', fontsize=16)
+	plt.title(f'{name}, LPIPS: {lpips_score:0.3f}', fontsize=16)
 	plot_results(out_to_plot, nms_pred_recon['scores'], nms_pred_recon['boxes'])
 	
 	plt.subplots_adjust(wspace=0.05)

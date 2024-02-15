@@ -18,17 +18,11 @@ seed_everything(0) #per rendere deterministico l'esperimento
 torch.use_deterministic_algorithms(mode=True, warn_only=True)
 device='cuda'
 #Config Plotting and Save files
-loss_log_path='results/loss_log.txt'
+results_dir='results'
 ap_score_threshold=0.75
-ap_log_path="results/ap_log.txt" #standard AP
-my_ap_log_path="results/my_ap_log.txt" #mia ap con interpolation senza filtrare i result
-my_ap_nointerp_thresh_path="results/my_ap_nointerp_thresh_log.txt" #mia ap senza interpolation ma filtrando i result
-my_ap_interp_thresh_path="results/my_ap_interp_thresh_log.txt" #mia Ap con interpolation ma filtrando i result
-michele_metric_folder="results"
 unet_save_path = "model_weights/model"
 tasknet_save_path = "tasknet_weights/tasknet"
 unet_weights_load= "model_weights/model_50.pt"
-unet_weights_to_compare= "model_weights/model_50.pt"
 tasknet_weights_load= "tasknet_weights/tasknet_10.pt"
 my_recons_classifier_weights='my_recons_classifier/my_recons_classifier_weights.pt'
 my_regressor_weights='my_recons_classifier/my_regressor_weights.pt'
@@ -55,8 +49,8 @@ if train_only_tasknet:
 	val_ann_file = '/home/alberti/coco_person/val/val.json'
 	resize_scales_transform = [200, 300, 400, 500, 600]
 else:
-	train_batch_size=8
-	val_batch_size=1  #per evitare problemi di padding di detr
+	train_batch_size=4
+	val_batch_size=4  #metterla a 1 porta ad avere loss non confrontabile con il train; in più il pad di detr non dovrebbe creare problemi
 	train_img_folder = '/home/alberti/coco_people_indoor/train/images'
 	#train_img_folder = '/home/math0012/Tesi_magistrale/open_images_v7/images'
 	train_ann_file = '/home/alberti/coco_people_indoor/train/train.json'
@@ -99,16 +93,22 @@ if train_only_tasknet:
 elif not train_backward_on_disturbed_sets:
 	from faster_modificata.faster_rcnn import fasterrcnn_resnet50_fpn_modificata, FasterRCNN_ResNet50_FPN_Weights, FastRCNNPredictor
 	weights = FasterRCNN_ResNet50_FPN_Weights.DEFAULT
-	tasknet = fasterrcnn_resnet50_fpn_modificata(weights=weights, progress=False,
-		rpn_pre_nms_top_n_train=2000, rpn_pre_nms_top_n_test=1000,
-		rpn_post_nms_top_n_train=500, rpn_post_nms_top_n_test=1000, #valore di default del post:2000
-		rpn_nms_thresh=0.7, rpn_fg_iou_thresh=0.7, rpn_bg_iou_thresh=0.3,
-		rpn_score_thresh=0.0, rpn_use_custom_filter_anchors=False,
-		rpn_n_top_pos_to_keep=1, rpn_n_top_neg_to_keep=2,
-		rpn_n_top_bg_to_keep=0, rpn_absolute_bg_score_thresh=0.75, rpn_objectness_bg_thresh=0.0,
-		rpn_use_not_overlapping_proposals=False, rpn_overlapping_prop_thresh=0.6,
-		box_use_custom_filter_proposals=True, box_n_top_pos_to_keep=3, box_n_top_neg_to_keep=3, 
-		box_n_top_bg_to_keep=0, box_obj_bg_score_thresh=0.9, box_batch_size_per_image=10000, box_positive_fraction=0.25)
+	use_custom_filter_proposals_objectness = True #Di default uso questo metodo, più veloce
+	if use_custom_filter_proposals_objectness:
+	   tasknet = fasterrcnn_resnet50_fpn_modificata(weights=weights, progress=False,
+		rpn_use_custom_filter_anchors=False, rpn_n_top_pos_to_keep=1, rpn_n_top_neg_to_keep=2,
+		rpn_n_top_bg_to_keep=0, rpn_objectness_bg_thresh=0.0,
+		box_use_custom_filter_proposals_objectness=True, box_n_top_pos_to_keep=3, 
+		box_n_top_neg_to_keep=6, box_n_top_bg_to_keep=0, box_obj_bg_score_thresh=0.9)
+	else: #Se no uso come metodo quello basato su score, più lento e peggiori risultati
+	   tasknet = fasterrcnn_resnet50_fpn_modificata(weights=weights, progress=False,
+		rpn_post_nms_top_n_train=500, #valore di default del post:2000, riduco le prop che sono tante
+		rpn_use_custom_filter_anchors=False, rpn_n_top_pos_to_keep=1, rpn_n_top_neg_to_keep=2,
+		rpn_n_top_bg_to_keep=0, rpn_objectness_bg_thresh=0.0,
+		box_use_custom_filter_proposals_scores=True, 
+		box_n_top_pos_to_keep=3, box_n_top_neg_to_keep=6, 
+		box_n_top_bg_to_keep=0, box_obj_bg_score_thresh=0.9,
+		box_batch_size_per_image=10000, box_positive_fraction=0.25) #devo tenere tutte le prop dal sampler
 	"""
 	comemnto su rpn_objectness_bg_thresh: la objectness varia da -25 a 10 o più. Se è 0 o superiore rappresenta la confidence dell'ancora che contenga un oggetto.
 	commento su questi parametri della faster: box_batch_size_per_image=512, box_positive_fraction=0.25, box_bg_iou_thresh=0.5
@@ -155,9 +155,9 @@ if(train_only_tasknet and not train_backward_on_disturbed_sets):
 	for epoch in range(1, num_epochs+1): #itero ora facendo un train e un test per ogni epoca
     		log['TRAIN_LOSS'].append(train_tasknet(train_dataloader, epoch, device, train_loss, tasknet_save_path, tasknet, tasknet_optimizer))
     		tasknet_scheduler.step()
-    		log['VAL_LOSS'].append(val_tasknet(val_dataloader, epoch, device, val_loss, tasknet_save_path, tasknet, tasknet_optimizer, tasknet_scheduler, ap_log_path, ap_score_threshold, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, michele_metric_folder))
+    		log['VAL_LOSS'].append(val_tasknet(val_dataloader, epoch, device, val_loss, tasknet_save_path, tasknet, tasknet_optimizer, tasknet_scheduler, ap_score_threshold, results_dir))
     		print(f'EPOCH {epoch} SUMMARY: ' + ', '.join([f'{k}: {v[epoch-1]}' for k, v in log.items()]))
-    		with open(loss_log_path, 'a') as file:
+    		with open(f'{results_dir}/loss_log.txt', 'a') as file:
     			loss_log_append = f"{epoch} {log['TRAIN_LOSS'][epoch-1]} {log['VAL_LOSS'][epoch-1]}\n"
     			file.write(loss_log_append)
 #BLOCCO TRAINING MODEL
@@ -171,9 +171,9 @@ elif (not train_backward_on_disturbed_sets):
 	for epoch in range(1, num_epochs+1): #itero ora facendo un train e un test per ogni epoca
     		log['TRAIN_LOSS'].append(train_model(train_dataloader, epoch, device, train_loss, unet, tasknet, unet_optimizer))
     		unet_scheduler.step()
-    		log['VAL_LOSS'].append(val_model(val_dataloader, epoch, device, val_loss, unet, unet_save_path, tasknet, unet_optimizer, unet_scheduler, ap_log_path, ap_score_threshold, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, michele_metric_folder, my_recons_classifier, my_regressor, example_dataloader))
+    		log['VAL_LOSS'].append(val_model(val_dataloader, epoch, device, val_loss, unet, unet_save_path, tasknet, unet_optimizer, unet_scheduler, ap_score_threshold, results_dir, my_recons_classifier, my_regressor, example_dataloader))
     		print(f'EPOCH {epoch} SUMMARY: ' + ', '.join([f'{k}: {v[epoch-1]}' for k, v in log.items()]))
-    		with open(loss_log_path, 'a') as file:
+    		with open(f'{results_dir}/loss_log.txt', 'a') as file:
     			loss_log_append = f"{epoch} {log['TRAIN_LOSS'][epoch-1]} {log['VAL_LOSS'][epoch-1]}\n"
     			file.write(loss_log_append)
 #BLOCCO TRAINING MODEL ON DISTURBED SET   			
@@ -183,7 +183,7 @@ else:
     		unet_scheduler.step()
     		log['VAL_LOSS'].append(val_model_on_disturbed_images(disturbed_val_dataloader, epoch, device, val_loss, unet, unet_save_path, unet_optimizer, unet_scheduler))
     		print(f'EPOCH {epoch} SUMMARY: ' + ', '.join([f'{k}: {v[epoch-1]}' for k, v in log.items()]))
-    		with open(loss_log_path, 'a') as file:
+    		with open(f'{results_dir}/loss_log.txt', 'a') as file:
     			loss_log_append = f"{epoch} {log['TRAIN_LOSS'][epoch-1]} {log['VAL_LOSS'][epoch-1]}\n"
     			file.write(loss_log_append)
 

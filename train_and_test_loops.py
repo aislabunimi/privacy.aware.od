@@ -25,7 +25,7 @@ def adjust_orig_target_to_reconstructed_imgs(targets, imgs, reconstructed):
    rec_batch_w, rec_batch_h =  reconstructed.shape[3], reconstructed.shape[2]
    for e in targets:
       for i, box in enumerate(e['boxes']):
-         xm, ym, xM, yM = box.tolist()
+         xm, ym, xM, yM = box
          #x_rec : rec_w = x_res : or_w
          rec_xm = (rec_batch_w * xm) / orig_batch_w
          rec_xM = (rec_batch_w * xM) / orig_batch_w
@@ -43,7 +43,7 @@ def adjust_outputs_to_cocoeval_api(targets, outputs, reconstructed=None):
          rec_batch_h, rec_batch_w = t['size']
       for i, box in enumerate(pred['boxes']):
          #x_rec : rec_w = x_res : or_w
-         xm, ym, xM, yM = box.tolist()
+         xm, ym, xM, yM = box
          resized_xm = (orig_w * xm) / rec_batch_w
          resized_xM = (orig_w * xM) / rec_batch_w
          resized_ym = (orig_h * ym) / rec_batch_h
@@ -97,7 +97,7 @@ def train_model(train_dataloader, epoch, device, train_loss, model, tasknet, mod
 
 from lpips.lpips import LPIPS
 from model_utils_and_functions import compute_my_recons_classifier_pred, save_my_recons_classifier_dict
-def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_log_path, ap_score_threshold, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, michele_metric_folder, my_recons_classifier, my_regressor, example_dataloader): #funzione che si occupa del test
+def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_score_threshold, results_dir, my_recons_classifier, my_regressor, example_dataloader): #funzione che si occupa del test
 	model.eval()
 	batch_size = len(val_dataloader) #recupero la batch size
 	running_loss = 0 # Initializing variable for storing  loss 
@@ -183,31 +183,31 @@ def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, t
 	running_loss /= batch_size #calcolo la loss media
 	#la validation loss se è attivo il custom filter proposal è fatta in base a ciò, non è una val
 	#loss con i parametri di default della tasknet, ma val loss con i parametri usati per allenamento
-	compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, ap_log_path, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, res)
-	compute_michele_metric(evaluator_complete_metric, michele_metric_folder, epoch)
+	compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, results_dir, res)
+	compute_michele_metric(evaluator_complete_metric, results_dir, epoch)
 	#ms_ssim_score /= batch_size #0.6 su plain, 0.34 su 10prop, 0.09 su 3prop (completamente irriconoscibile), 0.20 su 1bestiou5neg0bg. Quindi 0.20 potrebbe essere la soglia di privacy?
 	#ms_ssim_path="results/ms_ssim_score_log.txt"
 	#with open(ms_ssim_path, 'a') as file:
 	#	file.write(f"{epoch} {ms_ssim_score}\n")
 	lpips_score /= batch_size
-	lpips_path = "results/lpips_score_log.txt"
+	lpips_path = f"{results_dir}/lpips_score_log.txt"
 	with open(lpips_path, 'a') as file:
 		file.write(f"{epoch} {lpips_score}\n")
 	recon_rate /= batch_size
-	recon_path= "results/recon_rate_log.txt"
+	recon_path= f"{results_dir}/recon_rate_log.txt"
 	with open(recon_path, 'a') as file:
 		file.write(f"{epoch} {recon_rate}\n")
 	
-	my_recons_classifier_path = f"{michele_metric_folder}/my_recons_classifier_log.json"
+	my_recons_classifier_path = f"{results_dir}/my_recons_classifier_log.json"
 	save_my_recons_classifier_dict(my_recons_classifier_path, epoch, my_rec_class_dict)
 	
 	val_loss.append(running_loss)
 	model_save_path = f'{model_save_path}_{epoch}.pt'   
 	create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
-	save_image_examples(example_dataloader, model, epoch, device)
+	save_image_examples(example_dataloader, results_dir, model, epoch, device)
 	return running_loss
 
-def save_image_examples(example_dataloader, model, epoch, device):
+def save_image_examples(example_dataloader, results_dir, model, epoch, device):
    mean = torch.tensor([0.485, 0.456, 0.406]).to(device)
    std = torch.tensor([0.229, 0.224, 0.225]).to(device)
    unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
@@ -223,7 +223,7 @@ def save_image_examples(example_dataloader, model, epoch, device):
          #path = ''.join(targets)
          reconstructed = unnormalize(reconstructed)
          reconstructed = torch.clamp(reconstructed, min=0, max=1)
-         save_dir_path = f'experiments/epoch_{epoch}'
+         save_dir_path = f'{results_dir}/epoch_{epoch}'
          if not os.path.exists(save_dir_path):
             os.makedirs(save_dir_path)
          save_image(reconstructed, os.path.join(save_dir_path, path))
@@ -315,7 +315,8 @@ def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss,
 	mean = torch.tensor([0.485, 0.456, 0.406]).to(device)
 	std = torch.tensor([0.229, 0.224, 0.225]).to(device)
 	unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
-	ms_ssim_module = MS_SSIM(data_range=1, size_average=True, channel=3, weights=[0.0448, 0.2856, 0.3001, 0.2363, 0.1333], K=(0.01, 0.07))
+	#ms_ssim_module = MS_SSIM(data_range=1, size_average=True, channel=3, weights=[0.0448, 0.2856, 0.3001, 0.2363, 0.1333], K=(0.01, 0.07))
+	loss_fn = torch.nn.MSELoss()
 	for disturbed_imgs, orig_imgs in tqdm(train_dataloader, desc=f'Epoch {epoch} - Train model'):
 		disturbed_imgs, _ = disturbed_imgs.decompose()
 		disturbed_imgs = disturbed_imgs.to(device)
@@ -355,13 +356,13 @@ def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss,
 		plt.show()
 		"""
 		
-		reconstructed=unnormalize(reconstructed)
-		orig_imgs=unnormalize(orig_imgs)
+		#reconstructed=unnormalize(reconstructed)
+		#orig_imgs=unnormalize(orig_imgs)
 		#alcuni valori possono capitare negativi. Il clamping lo faccio per essere sicuro di riportare il tutto alle condizioni necessarie per poter usare l'ms_sssim
-		reconstructed = torch.clamp(reconstructed, min=0, max=1)
-		orig_imgs = torch.clamp(orig_imgs, min=0, max=1)	
-		true_loss = 1 - ms_ssim_module(reconstructed, orig_imgs)
-		#true_loss = loss_fn(reconstructed, orig_imgs)
+		#reconstructed = torch.clamp(reconstructed, min=0, max=1)
+		#orig_imgs = torch.clamp(orig_imgs, min=0, max=1)	
+		#true_loss = 1 - ms_ssim_module(reconstructed, orig_imgs)
+		true_loss = loss_fn(reconstructed, orig_imgs)
 
 		#plt.imshow(orig_imgs[0].cpu().permute(1, 2, 0))
 		#plt.title(orig_imgs)
@@ -385,7 +386,8 @@ def val_model_on_disturbed_images(val_dataloader, epoch, device, val_loss, model
 	mean = torch.tensor([0.485, 0.456, 0.406]).to(device)
 	std = torch.tensor([0.229, 0.224, 0.225]).to(device)
 	unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
-	ms_ssim_module = MS_SSIM(data_range=1, size_average=True, channel=3, weights=[0.0448, 0.2856, 0.3001, 0.2363, 0.1333], K=(0.01, 0.07))
+	#ms_ssim_module = MS_SSIM(data_range=1, size_average=True, channel=3, weights=[0.0448, 0.2856, 0.3001, 0.2363, 0.1333], K=(0.01, 0.07))
+	loss_fn = torch.nn.MSELoss()
 	with torch.no_grad(): #non calcolo il gradiente, sto testando e bassa
 		for disturbed_imgs, orig_imgs in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):
 			disturbed_imgs, _ = disturbed_imgs.decompose()
@@ -398,13 +400,13 @@ def val_model_on_disturbed_images(val_dataloader, epoch, device, val_loss, model
 			trans = transforms.Resize((reconstructed.shape[2], reconstructed.shape[3]), antialias=False)
 			orig_imgs = trans(orig_imgs)
 
-			reconstructed=unnormalize(reconstructed)
-			orig_imgs=unnormalize(orig_imgs)
+			#reconstructed=unnormalize(reconstructed)
+			#orig_imgs=unnormalize(orig_imgs)
 			#alcuni valori possono capitare negativi. Il clamping lo faccio per essere sicuro di riportare il tutto alle condizioni necessarie per poter usare l'ms_sssim
-			reconstructed = torch.clamp(reconstructed, min=0, max=1)
-			orig_imgs = torch.clamp(orig_imgs, min=0, max=1)	
-			true_loss = 1 - ms_ssim_module(reconstructed, orig_imgs)
-			#true_loss = loss_fn(reconstructed, orig_imgs)
+			#reconstructed = torch.clamp(reconstructed, min=0, max=1)
+			#orig_imgs = torch.clamp(orig_imgs, min=0, max=1)	
+			#true_loss = 1 - ms_ssim_module(reconstructed, orig_imgs)
+			true_loss = loss_fn(reconstructed, orig_imgs)
 			running_loss += true_loss.item()		
 	running_loss /= batch_size #calcolo la loss media
 	val_loss.append(running_loss)
@@ -433,7 +435,7 @@ def train_tasknet(train_dataloader, epoch, device, train_loss, tasknet_save_path
 	train_loss.append(running_loss)
 	return running_loss
 
-def val_tasknet(val_dataloader, epoch, device, val_loss, tasknet_save_path, tasknet, tasknet_optimizer, tasknet_scheduler, ap_log_path, ap_score_threshold, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, michele_metric_folder): #funzione che si occupa del test
+def val_tasknet(val_dataloader, epoch, device, val_loss, tasknet_save_path, tasknet, tasknet_optimizer, tasknet_scheduler, ap_score_threshold, results_dir): #funzione che si occupa del test
 	for param in tasknet.parameters():
 		param.requires_grad = False
 	res={}	
@@ -462,8 +464,8 @@ def val_tasknet(val_dataloader, epoch, device, val_loss, tasknet_save_path, task
 			evaluator_complete_metric.add_predictions_faster_rcnn(targets=targets, predictions=preds, img_size=imgs.size()[2:][::-1])
 			
 	running_loss /= batch_size #calcolo la loss media
-	compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, ap_log_path, my_ap_log_path, my_ap_nointerp_thresh_path, my_ap_interp_thresh_path, res)	
-	compute_michele_metric(evaluator_complete_metric, michele_metric_folder, epoch)	
+	compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, results_dir, res)	
+	compute_michele_metric(evaluator_complete_metric, results_dir, epoch)	
 	val_loss.append(running_loss)
 	tasknet_save_path = f'{tasknet_save_path}_{epoch}.pt' 
 	create_checkpoint(tasknet, tasknet_optimizer, epoch, running_loss, tasknet_scheduler, tasknet_save_path)
