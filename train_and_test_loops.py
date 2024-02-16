@@ -38,7 +38,19 @@ def adjust_outputs_to_cocoeval_api(targets, outputs, reconstructed=None):
    for t, pred in zip(targets, outputs):
       orig_h, orig_w = t['orig_size']
       if reconstructed is not None: #se non è none la sto usando con l'unet
-         rec_batch_h, rec_batch_w = reconstructed.shape[2], reconstructed.shape[3] #qui pred è fatta su img resizata con qualche pixel in meno
+         rec_batch_h_pad, rec_batch_w_pad = reconstructed.shape[2], reconstructed.shape[3] #qui pred è fatta su img resizata con qualche pixel in meno
+         rec_batch_h_img, rec_batch_w_img = t['size'] #queste sono le size dell'img resizata senza padding
+         """
+         prendo la più piccola delle due, serve per scalare le bbox rispetto all'img
+         e.g: rec_batch_pad = 288 304    rec_batch_img = 297, 256
+         Mi serve perché la tasknet fa la predizione sul rec_batch_pad come dimensione, quindi i target 
+         sono su quella immagine che ha perso qualche pixel (da qui il min con rec_batch_pad);
+         devo però anche eliminare il padding di DETR se è stato messo, perché i target li devo poi 
+         riscalare alle img originali (se tengo il padding scalerei l'img in modo sbagliato, finirei 
+         per fare considerare il target più piccolo e con coordinate sbagliate) (ecco il min rec_batch_img).
+         """
+         rec_batch_h = min(rec_batch_h_pad, rec_batch_h_img)
+         rec_batch_w = min(rec_batch_w_pad, rec_batch_w_img)
       else: #pred fatta da solo la tasknet
          rec_batch_h, rec_batch_w = t['size']
       for i, box in enumerate(pred['boxes']):
@@ -316,7 +328,8 @@ def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss,
 	std = torch.tensor([0.229, 0.224, 0.225]).to(device)
 	unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
 	#ms_ssim_module = MS_SSIM(data_range=1, size_average=True, channel=3, weights=[0.0448, 0.2856, 0.3001, 0.2363, 0.1333], K=(0.01, 0.07))
-	loss_fn = torch.nn.MSELoss()
+	#loss_fn = torch.nn.MSELoss()
+	lpips_model = LPIPS(net='vgg').to(device)
 	for disturbed_imgs, orig_imgs in tqdm(train_dataloader, desc=f'Epoch {epoch} - Train model'):
 		disturbed_imgs, _ = disturbed_imgs.decompose()
 		disturbed_imgs = disturbed_imgs.to(device)
@@ -362,7 +375,9 @@ def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss,
 		#reconstructed = torch.clamp(reconstructed, min=0, max=1)
 		#orig_imgs = torch.clamp(orig_imgs, min=0, max=1)	
 		#true_loss = 1 - ms_ssim_module(reconstructed, orig_imgs)
-		true_loss = loss_fn(reconstructed, orig_imgs)
+		lpips_loss = lpips_model(reconstructed, orig_imgs)
+		true_loss = (torch.mean(lpips_loss))
+		#true_loss = loss_fn(reconstructed, orig_imgs)
 
 		#plt.imshow(orig_imgs[0].cpu().permute(1, 2, 0))
 		#plt.title(orig_imgs)
@@ -387,7 +402,8 @@ def val_model_on_disturbed_images(val_dataloader, epoch, device, val_loss, model
 	std = torch.tensor([0.229, 0.224, 0.225]).to(device)
 	unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
 	#ms_ssim_module = MS_SSIM(data_range=1, size_average=True, channel=3, weights=[0.0448, 0.2856, 0.3001, 0.2363, 0.1333], K=(0.01, 0.07))
-	loss_fn = torch.nn.MSELoss()
+	#loss_fn = torch.nn.MSELoss()
+	lpips_model = LPIPS(net='vgg').to(device)
 	with torch.no_grad(): #non calcolo il gradiente, sto testando e bassa
 		for disturbed_imgs, orig_imgs in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):
 			disturbed_imgs, _ = disturbed_imgs.decompose()
@@ -406,7 +422,9 @@ def val_model_on_disturbed_images(val_dataloader, epoch, device, val_loss, model
 			#reconstructed = torch.clamp(reconstructed, min=0, max=1)
 			#orig_imgs = torch.clamp(orig_imgs, min=0, max=1)	
 			#true_loss = 1 - ms_ssim_module(reconstructed, orig_imgs)
-			true_loss = loss_fn(reconstructed, orig_imgs)
+			lpips_loss = lpips_model(reconstructed, orig_imgs)
+			true_loss = (torch.mean(lpips_loss))
+			#true_loss = loss_fn(reconstructed, orig_imgs)
 			running_loss += true_loss.item()		
 	running_loss /= batch_size #calcolo la loss media
 	val_loss.append(running_loss)
