@@ -148,10 +148,9 @@ def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, t
 			
 			# in validation i target devono poi essere riconvertiti alle dim originali, se no l'AP non va!
 			# i targets che usa l'AP sono gli originali dall'annotation, quindi anche se sopra li avevo resizati non c'è problema visto che quei target vengono ignorati
-			outputs = adjust_outputs_to_cocoeval_api(targets, outputs, reconstructed)
+			adj_outputs = adjust_outputs_to_cocoeval_api(targets, outputs, reconstructed)
 			
-			res.update({target["image_id"].item(): output for target, output in zip(targets, outputs)})
-			preds=outputs
+			res.update({target["image_id"].item(): output for target, output in zip(targets, adj_outputs)})
 			preds = [apply_nms(pred, iou_thresh=0.5, score_thresh=0.01) for pred in outputs]
 			#for pred in preds: #Questo non devo farlo, ce le ho già giuste
 			# 	pred['labels'] = pred['labels'] - 1
@@ -473,14 +472,15 @@ def val_tasknet(val_dataloader, epoch, device, val_loss, tasknet_save_path, task
 			outputs = tasknet(imgs)
 			outputs = [{k: v.to(device) for k, v in t.items()} for t in outputs]
 			
-			outputs = adjust_outputs_to_cocoeval_api(targets, outputs)
+			adj_outputs = adjust_outputs_to_cocoeval_api(targets, outputs)
 			
-			res.update({target["image_id"].item(): output for target, output in zip(targets, outputs)})
-			preds=outputs
+			res.update({target["image_id"].item(): output for target, output in zip(targets, adj_outputs)})
 			preds = [apply_nms(pred, iou_thresh=0.5, score_thresh=0.01) for pred in outputs]
 			#for pred in preds: #Questo non devo farlo, ce le ho già giuste
 			# 	pred['labels'] = pred['labels'] - 1
-			evaluator_complete_metric.add_predictions_faster_rcnn(targets=targets, predictions=preds, img_size=imgs.size()[2:][::-1])
+			#con la faster non ho un batch, ho una lista
+			evaluator_complete_metric.add_predictions_faster_rcnn(targets=targets, predictions=preds, img_size=imgs[0].size()[1:][::-1])
+			#evaluator_complete_metric.add_predictions_faster_rcnn(targets=targets, predictions=preds, img_size=imgs.size()[2:][::-1])
 			
 	running_loss /= batch_size #calcolo la loss media
 	compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, results_dir, res)	
