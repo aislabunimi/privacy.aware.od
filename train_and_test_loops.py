@@ -394,7 +394,7 @@ def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss,
 	train_loss.append(running_loss)
 	return running_loss
 
-def val_model_on_disturbed_images(val_dataloader, epoch, device, val_loss, model, model_save_path, model_optimizer, model_scheduler): #funzione che si occupa del test
+def val_model_on_disturbed_images(val_dataloader, epoch, device, val_loss, model, model_save_path, model_optimizer, model_scheduler, results_dir, example_dataloader): #funzione che si occupa del test
 	model.eval()
 	batch_size = len(val_dataloader) #recupero la batch size
 	running_loss = 0 # Initializing variable for storing  loss 
@@ -430,6 +430,7 @@ def val_model_on_disturbed_images(val_dataloader, epoch, device, val_loss, model
 	val_loss.append(running_loss)
 	model_save_path = f'{model_save_path}_{epoch}.pt'   
 	create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
+	save_image_examples(example_dataloader, results_dir, model, epoch, device)
 	return running_loss
 
 

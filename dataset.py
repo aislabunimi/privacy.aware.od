@@ -282,38 +282,25 @@ def load_dataset(train_img_folder, train_ann_file, val_img_folder, val_ann_file,
 		train_coco_dataset = torch.utils.data.Subset(train_coco_dataset, train_indices[:use_dataset_subset])
 		val_coco_dataset = torch.utils.data.Subset(val_coco_dataset, val_indices[:use_dataset_subset])
 	#elif split_size_train_set>0:
-	#	train_coco_dataset = torch.utils.data.Subset(train_coco_dataset, train_indices[:split_size_train_set]) #prendo i primi n elementi	
-	example_indices = list(range(0, len(example_coco_dataset), 1))
-	example_dataset = torch.utils.data.Subset(example_coco_dataset, example_indices[:20])
+	#	train_coco_dataset = torch.utils.data.Subset(train_coco_dataset, train_indices[:split_size_train_set]) #prendo i primi n elementi
+	#seleziono arbitrariamente alcuni esempi che sono interessanti	
+	example_indices = [1, 3, 13, 15, 60, 92, 97, 99, 101, 128, 134, 176, 208, 209, 214]
+	example_dataset = torch.utils.data.Subset(example_coco_dataset, example_indices)
 	
 	if train_only_tasknet:
 		collate = collate_fn_tasknet
 	else:
 		collate = collate_fn_nested_tensors
-	train_dataloader = torch.utils.data.DataLoader(train_coco_dataset,
-                                          batch_size=train_batch_size,
-                                          shuffle=True,
-                                          num_workers=4,
-                                          pin_memory=True,
-                                          collate_fn=collate,
-                                          worker_init_fn=deterministic_worker,
-                                          generator=deterministic_generator())
-	val_dataloader = torch.utils.data.DataLoader(val_coco_dataset,
-                                          batch_size=val_batch_size,
-                                          shuffle=False,
-                                          num_workers=4,
-                                          pin_memory=True,
-                                          collate_fn=collate,
-                                          worker_init_fn=deterministic_worker,
-                                          generator=deterministic_generator())
-	example_dataloader = torch.utils.data.DataLoader(example_dataset,
-                                          batch_size=1,
-                                          shuffle=False,
-                                          num_workers=4,
-                                          pin_memory=True,
-                                          collate_fn=collate,
-                                          worker_init_fn=deterministic_worker,
-                                          generator=deterministic_generator())
+	
+	train_dataloader = torch.utils.data.DataLoader(train_coco_dataset, batch_size=train_batch_size, 
+		shuffle=True, num_workers=4, pin_memory=True, collate_fn=collate, 
+		worker_init_fn=deterministic_worker, generator=deterministic_generator())
+	val_dataloader = torch.utils.data.DataLoader(val_coco_dataset, batch_size=val_batch_size, 
+		shuffle=False, num_workers=4, pin_memory=True, collate_fn=collate, 
+		worker_init_fn=deterministic_worker, generator=deterministic_generator())
+	example_dataloader = torch.utils.data.DataLoader(example_dataset, batch_size=1, 
+		shuffle=False, num_workers=4, pin_memory=True, collate_fn=collate, 
+		worker_init_fn=deterministic_worker, generator=deterministic_generator())
 	
 	return train_dataloader, val_dataloader, example_dataloader
 	
@@ -332,28 +319,20 @@ def load_dataset_for_generating_disturbed_set(train_img_folder, train_ann_file, 
 	#elif split_size_train_set>0:
 	#	train_coco_dataset_without_resize = torch.utils.data.Subset(train_coco_dataset_without_resize, train_indices[split_size_train_set:]) #prendo gli ultimi n elementi. Il val lo posso usare così come è
 	
-	disturbed_train_dataloader_gen = torch.utils.data.DataLoader(disturbed_train_dataset_gen,
-                                          batch_size=1,
-                                          shuffle=True,
-                                          num_workers=4,
-                                          pin_memory=True,
-                                          collate_fn=collate_fn_nested_tensors,
-                                          worker_init_fn=deterministic_worker,
-                                          generator=deterministic_generator())
-	val_dataloader_gen_disturbed = torch.utils.data.DataLoader(val_coco_dataset,
-                                          batch_size=1,
-                                          shuffle=False,
-                                          num_workers=4,
-                                          pin_memory=True,
-                                          collate_fn=collate_fn_nested_tensors,
-                                          worker_init_fn=deterministic_worker,
-                                          generator=deterministic_generator())
+	disturbed_train_dataloader_gen = torch.utils.data.DataLoader(disturbed_train_dataset_gen, 
+		batch_size=1, shuffle=True, num_workers=4, pin_memory=True, 
+		collate_fn=collate_fn_nested_tensors, worker_init_fn=deterministic_worker, 
+		generator=deterministic_generator())
+	val_dataloader_gen_disturbed = torch.utils.data.DataLoader(val_coco_dataset, batch_size=1,
+		shuffle=False, num_workers=4, pin_memory=True, collate_fn=collate_fn_nested_tensors, 
+		worker_init_fn=deterministic_worker, generator=deterministic_generator())
 	
 	return disturbed_train_dataloader_gen, val_dataloader_gen_disturbed
 	
-def load_disturbed_dataset(disturbed_train_img_folder, disturbed_train_ann, disturbed_val_img_folder, disturbed_val_ann, orig_train_folder, orig_val_folder, train_batch_size, val_batch_size, resize_scales_transform, use_dataset_subset):
-	disturbed_train_dataset = DisturbedDataset(disturbed_train_ann, disturbed_train_img_folder, orig_train_folder, transform=make_coco_transforms('val', resize_scales_transform), is_training=True, resize_scales=resize_scales_transform)
-	disturbed_val_dataset = DisturbedDataset(disturbed_val_ann, disturbed_val_img_folder, orig_val_folder, transform=make_coco_transforms('val', resize_scales_transform), is_training=False, resize_scales=resize_scales_transform)
+def load_disturbed_dataset(disturbed_train_img_folder, disturbed_train_ann, disturbed_val_img_folder, disturbed_val_ann, orig_train_folder, orig_val_folder, train_batch_size, val_batch_size, resize_scales_transform, use_dataset_subset, orig_val_ann_file):
+	disturbed_train_dataset = DisturbedDataset(disturbed_train_ann, disturbed_train_img_folder, orig_train_folder, transform=make_coco_transforms('val'), is_training=True, resize_scales=resize_scales_transform)
+	disturbed_val_dataset = DisturbedDataset(disturbed_val_ann, disturbed_val_img_folder, orig_val_folder, transform=make_coco_transforms('val'), is_training=False, resize_scales=resize_scales_transform)
+	example_dataset = CocoDetection(disturbed_val_img_folder, orig_val_ann_file, transforms=make_coco_transforms('val_resize', resize_scales_transform), return_masks=False)
 	
 	train_indices = list(range(0, len(disturbed_train_dataset), 1))
 	val_indices = list(range(0, len(disturbed_val_dataset), 1)) 
@@ -361,21 +340,19 @@ def load_disturbed_dataset(disturbed_train_img_folder, disturbed_train_ann, dist
 		disturbed_train_dataset = torch.utils.data.Subset(disturbed_train_dataset, train_indices[:use_dataset_subset])
 		disturbed_val_dataset = torch.utils.data.Subset(disturbed_val_dataset, val_indices[:use_dataset_subset])
 	
-	disturbed_train_dataloader = torch.utils.data.DataLoader(disturbed_train_dataset,
-                                          batch_size=train_batch_size,
-                                          shuffle=True,
-                                          num_workers=4,
-                                          pin_memory=True,
-                                          collate_fn=collate_fn_disturbed,
-                                          worker_init_fn=deterministic_worker,
-                                          generator=deterministic_generator())
-	disturbed_val_dataloader = torch.utils.data.DataLoader(disturbed_val_dataset,
-                                          batch_size=val_batch_size,
-                                          shuffle=False,
-                                          num_workers=4,
-                                          pin_memory=True,
-                                          collate_fn=collate_fn_disturbed,
-                                          worker_init_fn=deterministic_worker,
-                                          generator=deterministic_generator())
+	example_indices = [1, 3, 13, 15, 60, 92, 97, 99, 101, 128, 134, 176, 208, 209, 214]
+	example_dataset = torch.utils.data.Subset(example_dataset, example_indices)
+	
+	disturbed_train_dataloader = torch.utils.data.DataLoader(disturbed_train_dataset, 
+		batch_size=train_batch_size, shuffle=True, num_workers=4, pin_memory=True, 
+		collate_fn=collate_fn_disturbed, worker_init_fn=deterministic_worker, 
+		generator=deterministic_generator())
+	disturbed_val_dataloader = torch.utils.data.DataLoader(disturbed_val_dataset, 
+		batch_size=val_batch_size, shuffle=False, num_workers=4, pin_memory=True, 
+		collate_fn=collate_fn_disturbed, worker_init_fn=deterministic_worker, 
+		generator=deterministic_generator())	
+	example_dataloader = torch.utils.data.DataLoader(example_dataset, batch_size=1, 
+		shuffle=False, num_workers=4, pin_memory=True, collate_fn=collate_fn_nested_tensors, 
+		worker_init_fn=deterministic_worker, generator=deterministic_generator())
 		
-	return disturbed_train_dataloader, disturbed_val_dataloader
+	return disturbed_train_dataloader, disturbed_val_dataloader, example_dataloader
