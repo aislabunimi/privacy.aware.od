@@ -30,8 +30,8 @@ michele_metric_file_save_list=[f'{save_dir}/iou0.5_score0.5.png', f'{save_dir}/i
 #models
 unet_save_path = "model_weights/model"
 tasknet_save_path = "tasknet_weights/tasknet"
-unet_weights_load= "model_weights/model_4_score.pt"
-unet_weights_to_compare= "model_weights/model_8.pt"
+unet_weights_load= "model_weights/model_25.pt"
+unet_weights_to_compare= "model_weights/model_35.pt"
 tasknet_weights_load= "tasknet_weights/tasknet_10.pt"
 #Test images:
 image_save_prefix='test'
@@ -67,52 +67,60 @@ plot_model_loss(f'{results_dir}/loss_log.txt', f'{save_dir}/loss.png') #loss
 
 #STANDARD APs, standard interpolation, no score threshold filter
 extract_ap(f'{results_dir}/standard_ap.txt', f'{results_dir}/ext_standard_ap.txt', standard_ap=True, coco_iou_modified=False) #standard AP, all preds, no interp
-plot_ap(f'{results_dir}/ext_standard_ap.txt', f'{save_dir}/standard_ap.png', best_ap_value_for_comparison=0.757, best_recall_value_for_comparison=0.585, model_name='Unet with Plain Tasknet', ap_plot_title='(area=all, maxDets=100) AP (IoU=0.50) and Recall (IoU=0.50:0.95) Over Epochs')
+#Tasknet values: AP: 0.818, Recall: 0.608
+plot_ap(f'{results_dir}/ext_standard_ap.txt', f'{save_dir}/standard_ap.png', best_ap_value_for_comparison=0.818, best_recall_value_for_comparison=0.608, model_name='Tasknet', ap_plot_title='(area=all, maxDets=100) AP (IoU=0.50) and Recall (IoU=0.50:0.95) Over Epochs')
 
 extract_ap(f'{results_dir}/standard_ap_iou50.txt', f'{results_dir}/ext_standard_ap_iou50.txt', standard_ap=True, coco_iou_modified=50)
-plot_ap(f'{results_dir}/ext_standard_ap_iou50.txt', f'{save_dir}/standard_ap_iou50.png', best_ap_value_for_comparison=None, best_recall_value_for_comparison=None, model_name='Unet with Plain Tasknet', ap_plot_title='(IoU=0.50, area=all, maxDets=100) AP and Recall Over Epochs')
+#Tasknet values: AP: 0.818, Recall: 0.914
+plot_ap(f'{results_dir}/ext_standard_ap_iou50.txt', f'{save_dir}/standard_ap_iou50.png', best_ap_value_for_comparison=0.818, best_recall_value_for_comparison=0.914, model_name='Tasknet', ap_plot_title='(IoU=0.50, area=all, maxDets=100) AP and Recall Over Epochs')
 
 extract_ap(f'{results_dir}/standard_ap_iou75.txt', f'{results_dir}/ext_standard_ap_iou75.txt', standard_ap=True, coco_iou_modified=75)
-plot_ap(f'{results_dir}/ext_standard_ap_iou75.txt', f'{save_dir}/standard_ap_iou75.png', best_ap_value_for_comparison=None, best_recall_value_for_comparison=None, model_name='Unet with Plain Tasknet', ap_plot_title='(IoU=0.75, area=all, maxDets=100) AP and Recall Over Epochs')
+#Tasknet values: AP: 0.554, Recall: 0.643
+plot_ap(f'{results_dir}/ext_standard_ap_iou75.txt', f'{save_dir}/standard_ap_iou75.png', best_ap_value_for_comparison=0.554, best_recall_value_for_comparison=0.643, model_name='Tasknet', ap_plot_title='(IoU=0.75, area=all, maxDets=100) AP and Recall Over Epochs')
 
 #STANDARD APs, standard interpolation, with only preds above score threshold
 extract_ap(f'{results_dir}/standard_ap_scoreabovethresh.txt', f'{results_dir}/ext_standard_ap_scoreabovethresh.txt', standard_ap=False, coco_iou_modified=False) #standard AP, all preds, no interp
-plot_ap(f'{results_dir}/ext_standard_ap_scoreabovethresh.txt', f'{save_dir}/standard_ap_scoreabovethresh.png', best_ap_value_for_comparison=0.757, best_recall_value_for_comparison=0.585, model_name='Unet with Plain Tasknet', ap_plot_title='(area=all, maxDets=100) AP (IoU=0.50) and Recall (IoU=0.50:0.95) Over Epochs')
+#Tasknet values: AP: 0.710, Recall: 0.520
+plot_ap(f'{results_dir}/ext_standard_ap_scoreabovethresh.txt', f'{save_dir}/standard_ap_scoreabovethresh.png', best_ap_value_for_comparison=0.710, best_recall_value_for_comparison=0.520, model_name='Tasknet', ap_plot_title='(area=all, maxDets=100) AP (IoU=0.50) and Recall (IoU=0.50:0.95) Over Epochs')
 
 extract_ap(f'{results_dir}/standard_ap_scoreabovethresh_iou50.txt', f'{results_dir}/ext_standard_ap_scoreabovethresh_iou50.txt', standard_ap=False, coco_iou_modified=50)
-plot_ap(f'{results_dir}/ext_standard_ap_scoreabovethresh_iou50.txt', f'{save_dir}/standard_ap_scoreabovethresh_iou50.png', best_ap_value_for_comparison=None, best_recall_value_for_comparison=None, model_name='Unet with Plain Tasknet', ap_plot_title='(IoU=0.50, area=all, maxDets=100) AP and Recall Over Epochs')
+#Tasknet values: AP: 0.710, Recall: 0.736
+plot_ap(f'{results_dir}/ext_standard_ap_scoreabovethresh_iou50.txt', f'{save_dir}/standard_ap_scoreabovethresh_iou50.png', best_ap_value_for_comparison=0.710, best_recall_value_for_comparison=0.736, model_name='Tasknet', ap_plot_title='(IoU=0.50, area=all, maxDets=100) AP and Recall Over Epochs')
 
 extract_ap(f'{results_dir}/standard_ap_scoreabovethresh_iou75.txt', f'{results_dir}/ext_standard_ap_scoreabovethresh_iou75.txt', standard_ap=False, coco_iou_modified=75)
-plot_ap(f'{results_dir}/ext_standard_ap_scoreabovethresh_iou75.txt', f'{save_dir}/standard_ap_scoreabovethresh_iou75.png', best_ap_value_for_comparison=None, best_recall_value_for_comparison=None, model_name='Unet with Plain Tasknet', ap_plot_title='(IoU=0.75, area=all, maxDets=100) AP and Recall Over Epochs')
+#Tasknet values: AP: 0.522, Recall: 0.574
+plot_ap(f'{results_dir}/ext_standard_ap_scoreabovethresh_iou75.txt', f'{save_dir}/standard_ap_scoreabovethresh_iou75.png', best_ap_value_for_comparison=0.522, best_recall_value_for_comparison=0.574, model_name='Tasknet', ap_plot_title='(IoU=0.75, area=all, maxDets=100) AP and Recall Over Epochs')
 
 #APs with my interpolation, without filtering preds above score thresh
 extract_ap(f'{results_dir}/myinterp_ap.txt', f'{results_dir}/ext_myinterp_ap.txt', standard_ap=False, coco_iou_modified=False) #standard AP, all preds, no interp
-plot_ap(f'{results_dir}/ext_myinterp_ap.txt', f'{save_dir}/myinterp_ap.png', best_ap_value_for_comparison=0.757, best_recall_value_for_comparison=0.585, model_name='Unet with Plain Tasknet', ap_plot_title='(area=all, maxDets=100) AP (IoU=0.50) and Recall (IoU=0.50:0.95) Over Epochs')
+#Tasknet values: AP: 0.997, Recall: 0.608
+plot_ap(f'{results_dir}/ext_myinterp_ap.txt', f'{save_dir}/myinterp_ap.png', best_ap_value_for_comparison=0.997, best_recall_value_for_comparison=0.608, model_name='Tasknet', ap_plot_title='(area=all, maxDets=100) AP (IoU=0.50) and Recall (IoU=0.50:0.95) Over Epochs')
 
 extract_ap(f'{results_dir}/myinterp_ap_iou50.txt', f'{results_dir}/ext_myinterp_ap_iou50.txt', standard_ap=False, coco_iou_modified=50)
-plot_ap(f'{results_dir}/ext_myinterp_ap_iou50.txt', f'{save_dir}/myinterp_ap_iou50.png', best_ap_value_for_comparison=None, best_recall_value_for_comparison=None, model_name='Unet with Plain Tasknet', ap_plot_title='(IoU=0.50, area=all, maxDets=100) AP and Recall Over Epochs')
+#Tasknet values: AP: 0.997, Recall: 0.914
+plot_ap(f'{results_dir}/ext_myinterp_ap_iou50.txt', f'{save_dir}/myinterp_ap_iou50.png', best_ap_value_for_comparison=0.997, best_recall_value_for_comparison=0.914, model_name='Tasknet', ap_plot_title='(IoU=0.50, area=all, maxDets=100) AP and Recall Over Epochs')
 
 extract_ap(f'{results_dir}/myinterp_ap_iou75.txt', f'{results_dir}/ext_myinterp_ap_iou75.txt', standard_ap=False, coco_iou_modified=75)
-plot_ap(f'{results_dir}/ext_myinterp_ap_iou75.txt', f'{save_dir}/myinterp_ap_iou75.png', best_ap_value_for_comparison=None, best_recall_value_for_comparison=None, model_name='Unet with Plain Tasknet', ap_plot_title='(IoU=0.75, area=all, maxDets=100) AP and Recall Over Epochs')
+#Tasknet values: AP: 0.973, Recall: 0.643
+plot_ap(f'{results_dir}/ext_myinterp_ap_iou75.txt', f'{save_dir}/myinterp_ap_iou75.png', best_ap_value_for_comparison=0.973, best_recall_value_for_comparison=0.643, model_name='Tasknet', ap_plot_title='(IoU=0.75, area=all, maxDets=100) AP and Recall Over Epochs')
 
 #APs with my interpolation, with only preds above score thresh
 extract_ap(f'{results_dir}/myinterp_ap_scoreabovethresh.txt', f'{results_dir}/ext_myinterp_ap_scoreabovethresh.txt', standard_ap=False, coco_iou_modified=False) #standard AP, all preds, no interp
-plot_ap(f'{results_dir}/ext_myinterp_ap_scoreabovethresh.txt', f'{save_dir}/myinterp_ap_scoreabovethresh.png', best_ap_value_for_comparison=0.757, best_recall_value_for_comparison=0.585, model_name='Unet with Plain Tasknet', ap_plot_title='(area=all, maxDets=100) AP (IoU=0.50) and Recall (IoU=0.50:0.95) Over Epochs')
+#Tasknet values: AP: 0.997, Recall: 0.520
+plot_ap(f'{results_dir}/ext_myinterp_ap_scoreabovethresh.txt', f'{save_dir}/myinterp_ap_scoreabovethresh.png', best_ap_value_for_comparison=0.997, best_recall_value_for_comparison=0.520, model_name='Tasknet', ap_plot_title='(area=all, maxDets=100) AP (IoU=0.50) and Recall (IoU=0.50:0.95) Over Epochs')
 
 extract_ap(f'{results_dir}/myinterp_ap_scoreabovethresh_iou50.txt', f'{results_dir}/ext_myinterp_ap_scoreabovethresh_iou50.txt', standard_ap=False, coco_iou_modified=50)
-plot_ap(f'{results_dir}/ext_myinterp_ap_scoreabovethresh_iou50.txt', f'{save_dir}/myinterp_ap_scoreabovethresh_iou50.png', best_ap_value_for_comparison=None, best_recall_value_for_comparison=None, model_name='Unet with Plain Tasknet', ap_plot_title='(IoU=0.50, area=all, maxDets=100) AP and Recall Over Epochs')
+#Tasknet values: AP: 0.997, Recall: 0.736
+plot_ap(f'{results_dir}/ext_myinterp_ap_scoreabovethresh_iou50.txt', f'{save_dir}/myinterp_ap_scoreabovethresh_iou50.png', best_ap_value_for_comparison=0.997, best_recall_value_for_comparison=0.736, model_name='Tasknet', ap_plot_title='(IoU=0.50, area=all, maxDets=100) AP and Recall Over Epochs')
 
 extract_ap(f'{results_dir}/myinterp_ap_scoreabovethresh_iou75.txt', f'{results_dir}/ext_myinterp_ap_scoreabovethresh_iou75.txt', standard_ap=False, coco_iou_modified=75)
-plot_ap(f'{results_dir}/ext_myinterp_ap_scoreabovethresh_iou75.txt', f'{save_dir}/myinterp_ap_scoreabovethresh_iou75.png', best_ap_value_for_comparison=None, best_recall_value_for_comparison=None, model_name='Unet with Plain Tasknet', ap_plot_title='(IoU=0.75, area=all, maxDets=100) AP and Recall Over Epochs')
+#Tasknet values: AP: 0.973, Recall: 0.574
+plot_ap(f'{results_dir}/ext_myinterp_ap_scoreabovethresh_iou75.txt', f'{save_dir}/myinterp_ap_scoreabovethresh_iou75.png', best_ap_value_for_comparison=0.973, best_recall_value_for_comparison=0.574, model_name='Tasknet', ap_plot_title='(IoU=0.75, area=all, maxDets=100) AP and Recall Over Epochs')
 
-"""
-plot_compare_between_two_ap(ap_standard_extracted, f'{results_dir}/ap_overlap.txt', ap_model_name='Unet without overlapping prop, iou=0.6', ap_to_compare_model_name='Unet with overlapping prop (old method)', plotted_comparison_save_path=ap_comparison_save_path, ap_plot_title=ap_plot_title)
-"""
+#plot_compare_between_two_ap(ap_standard_extracted, f'{results_dir}/ap_overlap.txt', ap_model_name='Unet without overlapping prop, iou=0.6', ap_to_compare_model_name='Unet with overlapping prop (old method)', plotted_comparison_save_path=ap_comparison_save_path, ap_plot_title=ap_plot_title)
 
-"""
-from plot_utils.ms_ssim import plot_ms_ssim_score
-plot_ms_ssim_score(ms_ssim_score_log_path=f"{results_dir}/ms_ssim_score_log.txt", ms_ssim_save_name=f'{save_dir}/ms_ssim_score.png')
-"""
+#from plot_utils.ms_ssim import plot_ms_ssim_score
+#plot_ms_ssim_score(ms_ssim_score_log_path=f"{results_dir}/ms_ssim_score_log.txt", ms_ssim_save_name=f'{save_dir}/ms_ssim_score.png')
 
 from plot_utils.lpips_score import plot_lpips_score
 plot_lpips_score(lpips_score_log_path=f"{results_dir}/lpips_score_log.txt", lpips_save_name=f"{save_dir}/lpips_score.png")

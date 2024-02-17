@@ -128,7 +128,7 @@ def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, t
 	recon_rate=0
 	
 	#lpips_model = LPIPS(net='vgg', model_path='lpips/lpips_my_weights.pth').to(device)
-	lpips_model = LPIPS().to(device) #alexnet, pesi di default, alla fine sembrano migliori	
+	lpips_model = LPIPS(net='vgg').to(device) #alexnet, pesi di default, alla fine sembrano migliori	
 	lpips_score = 0
 	with torch.no_grad(): #non calcolo il gradiente, sto testando e bassa
 		for imgs, targets in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):
@@ -145,13 +145,14 @@ def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, t
 			tasknet.eval()
 			outputs = tasknet(reconstructed)
 			outputs = [{k: v.to(device) for k, v in t.items()} for t in outputs]
+			outputs_evaluator = [{k: v.clone().to(device) for k, v in t.items()} for t in outputs] #devo clonarli perché poi gli originali li modifico
 			
 			# in validation i target devono poi essere riconvertiti alle dim originali, se no l'AP non va!
 			# i targets che usa l'AP sono gli originali dall'annotation, quindi anche se sopra li avevo resizati non c'è problema visto che quei target vengono ignorati
 			adj_outputs = adjust_outputs_to_cocoeval_api(targets, outputs, reconstructed)
 			
 			res.update({target["image_id"].item(): output for target, output in zip(targets, adj_outputs)})
-			preds = [apply_nms(pred, iou_thresh=0.5, score_thresh=0.01) for pred in outputs]
+			preds = [apply_nms(pred, iou_thresh=0.5, score_thresh=0.01) for pred in outputs_evaluator]
 			#for pred in preds: #Questo non devo farlo, ce le ho già giuste
 			# 	pred['labels'] = pred['labels'] - 1
 			evaluator_complete_metric.add_predictions_faster_rcnn(targets=targets, predictions=preds, img_size=imgs.size()[2:][::-1])
@@ -471,14 +472,15 @@ def val_tasknet(val_dataloader, epoch, device, val_loss, tasknet_save_path, task
 			tasknet.eval()
 			outputs = tasknet(imgs)
 			outputs = [{k: v.to(device) for k, v in t.items()} for t in outputs]
+			outputs_evaluator = [{k: v.clone().to(device) for k, v in t.items()} for t in outputs] #devo clonarli perché poi gli originali li modifico
 			
 			adj_outputs = adjust_outputs_to_cocoeval_api(targets, outputs)
-			
+
 			res.update({target["image_id"].item(): output for target, output in zip(targets, adj_outputs)})
-			preds = [apply_nms(pred, iou_thresh=0.5, score_thresh=0.01) for pred in outputs]
+			preds = [apply_nms(pred, iou_thresh=0.5, score_thresh=0.01) for pred in outputs_evaluator]
 			#for pred in preds: #Questo non devo farlo, ce le ho già giuste
 			# 	pred['labels'] = pred['labels'] - 1
-			#con la faster non ho un batch, ho una lista
+			#con la faster non ho un batch, ho una list
 			evaluator_complete_metric.add_predictions_faster_rcnn(targets=targets, predictions=preds, img_size=imgs[0].size()[1:][::-1])
 			#evaluator_complete_metric.add_predictions_faster_rcnn(targets=targets, predictions=preds, img_size=imgs.size()[2:][::-1])
 			
