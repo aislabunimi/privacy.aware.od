@@ -27,7 +27,7 @@ tasknet_weights_load= "tasknet_weights/tasknet_10.pt"
 my_recons_classifier_weights='my_recons_classifier/my_recons_classifier_weights.pt'
 my_regressor_weights='my_recons_classifier/my_regressor_weights.pt'
 #Config DATASET
-use_coco_train_for_generating_disturbed_set=False #se metti questo a true, allora stai usando il dataset di train di coco per generare il disturbato. Vanno cambiati i due path sopra
+use_coco_train_for_generating_disturbed_set=True #se metti questo a true, allora stai usando il dataset di train di coco per generare il disturbato. Vanno cambiati i due path sopra
 if use_coco_train_for_generating_disturbed_set:
 	disturbed_train_img_gen='/home/alberti/coco_people_indoor/train/images'
 	disturbed_train_ann_gen='/home/alberti/coco_people_indoor/train/train.json'
@@ -48,6 +48,10 @@ if train_only_tasknet:
 	val_img_folder = '/home/alberti/coco_person/val/images'
 	val_ann_file = '/home/alberti/coco_person/val/val.json'
 	resize_scales_transform = [200, 300, 400, 500, 600]
+	#resize_scales_transform = [256] #da usare per ottenere AP finale confrontabile con Unet
+	#val_batch_size=4 #da usare per ottenere AP finale confrontabile con Unet
+	#val_img_folder = '/home/alberti/coco_people_indoor/val/images' #da usare per ottenere AP finale confrontabile con Unet
+	#val_ann_file = '/home/alberti/coco_people_indoor/val/val.json' #da usare per ottenere AP finale confrontabile con Unet
 else:
 	train_batch_size=4
 	val_batch_size=4  #metterla a 1 porta ad avere loss non confrontabile con il train; in più il pad di detr non dovrebbe creare problemi
@@ -98,8 +102,8 @@ elif not train_backward_on_disturbed_sets:
 	   tasknet = fasterrcnn_resnet50_fpn_modificata(weights=weights, progress=False,
 		rpn_use_custom_filter_anchors=False, rpn_n_top_pos_to_keep=1, rpn_n_top_neg_to_keep=2,
 		rpn_n_top_bg_to_keep=0, rpn_objectness_bg_thresh=0.0,
-		box_use_custom_filter_proposals_objectness=True, box_n_top_pos_to_keep=3, 
-		box_n_top_neg_to_keep=6, box_n_top_bg_to_keep=0, box_obj_bg_score_thresh=0.9)
+		box_use_custom_filter_proposals_objectness=True, box_n_top_pos_to_keep=4, 
+		box_n_top_neg_to_keep=4, box_n_top_bg_to_keep=0, box_obj_bg_score_thresh=0.9)
 	else: #Se no uso come metodo quello basato su score, più lento e peggiori risultati
 	   tasknet = fasterrcnn_resnet50_fpn_modificata(weights=weights, progress=False,
 		rpn_post_nms_top_n_train=500, #valore di default del post:2000, riduco le prop che sono tante
