@@ -13,11 +13,14 @@ from torchvision import transforms
 #config
 conf_threshold = 0.75
 device = 'cuda'
-unet_weights_load= "model_weights/model_50.pt"
+unet_weights_load= "model_50.pt"
+#unet_weights_load= "mse.pt"
 video_path='parasite.mp4'
+#video_path='unet.avi'
 output_video_path = 'unet.avi'
+#output_video_path = 'mse_unet.avi'
 #unet
-unet = UNet(3, 3, False)
+unet = UNet(3, False)
 unet_optimizer = torch.optim.SGD(unet.parameters(), lr=0.005,
                                 momentum=0.9, weight_decay=0.0005, nesterov=True)
 unet_scheduler = torch.optim.lr_scheduler.StepLR(unet_optimizer,
@@ -39,8 +42,15 @@ if not cap.isOpened():
 #fps = FPS().start()
 fourcc = cv2.VideoWriter_fourcc(*'XVID')
 fps = cap.get(cv2.CAP_PROP_FPS)
-width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+#width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+#height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+#Per simulare il validation
+width = 256
+height = 192
+#Risoluzioni utilizzabili
+#width = 320	#width = 384	#width = 512	#width = 640
+#height = 240	#height = 288	#height = 384	#height = 480
 
 out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height)) 
 while True:
@@ -50,6 +60,7 @@ while True:
 	#frame = imutils.resize(frame, width=400)
 	orig = frame.copy()
 	frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+	frame = cv2.resize(frame, (width, height))
 	frame = frame.transpose((2, 0, 1)) #inverto canali
 	frame = torch.from_numpy(frame).float().to(device)
 	frame = frame.unsqueeze(0) #aggiungo prima dim per simulare il batch

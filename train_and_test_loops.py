@@ -11,7 +11,7 @@ import json
 import torchvision.transforms as transforms
 from coco_eval import get_coco_api_from_dataset
 import os
-#from pytorch_msssim import ms_ssim, MS_SSIM
+from pytorch_msssim import ms_ssim, MS_SSIM
 #MS SSIM dovrebbe tenere conto di più di come appare l'img a una persona, rispetto alla sola distribuzione dell'EMD
 
 def adjust_orig_target_to_reconstructed_imgs(targets, imgs, reconstructed):
@@ -320,7 +320,7 @@ def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_ge
 	model.train()
 
 
-def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss, model, model_optimizer): 
+def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss, model, model_optimizer, loss_fn): 
 	model.train()
 	batch_size = len(train_dataloader)
 	running_loss = 0
@@ -329,7 +329,7 @@ def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss,
 	unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
 	#ms_ssim_module = MS_SSIM(data_range=1, size_average=True, channel=3, weights=[0.0448, 0.2856, 0.3001, 0.2363, 0.1333], K=(0.01, 0.07))
 	#loss_fn = torch.nn.MSELoss()
-	lpips_model = LPIPS(net='vgg').to(device)
+	#lpips_model = LPIPS(net='vgg').to(device)
 	for disturbed_imgs, orig_imgs in tqdm(train_dataloader, desc=f'Epoch {epoch} - Train model'):
 		disturbed_imgs, _ = disturbed_imgs.decompose()
 		disturbed_imgs = disturbed_imgs.to(device)
@@ -375,9 +375,9 @@ def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss,
 		#reconstructed = torch.clamp(reconstructed, min=0, max=1)
 		#orig_imgs = torch.clamp(orig_imgs, min=0, max=1)	
 		#true_loss = 1 - ms_ssim_module(reconstructed, orig_imgs)
-		lpips_loss = lpips_model(reconstructed, orig_imgs)
-		true_loss = (torch.mean(lpips_loss))
-		#true_loss = loss_fn(reconstructed, orig_imgs)
+		#lpips_loss = lpips_model(reconstructed, orig_imgs)
+		#true_loss = (torch.mean(lpips_loss))
+		true_loss = loss_fn(reconstructed, orig_imgs)
 
 		#plt.imshow(orig_imgs[0].cpu().permute(1, 2, 0))
 		#plt.title(orig_imgs)
@@ -394,7 +394,7 @@ def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss,
 	train_loss.append(running_loss)
 	return running_loss
 
-def val_model_on_disturbed_images(val_dataloader, epoch, device, val_loss, model, model_save_path, model_optimizer, model_scheduler, results_dir, example_dataloader): #funzione che si occupa del test
+def val_model_on_disturbed_images(val_dataloader, epoch, device, val_loss, model, model_save_path, model_optimizer, model_scheduler, results_dir, example_dataloader, loss_fn): #funzione che si occupa del test
 	model.eval()
 	batch_size = len(val_dataloader) #recupero la batch size
 	running_loss = 0 # Initializing variable for storing  loss 
@@ -403,7 +403,7 @@ def val_model_on_disturbed_images(val_dataloader, epoch, device, val_loss, model
 	unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
 	#ms_ssim_module = MS_SSIM(data_range=1, size_average=True, channel=3, weights=[0.0448, 0.2856, 0.3001, 0.2363, 0.1333], K=(0.01, 0.07))
 	#loss_fn = torch.nn.MSELoss()
-	lpips_model = LPIPS(net='vgg').to(device)
+	#lpips_model = LPIPS(net='vgg').to(device)
 	with torch.no_grad(): #non calcolo il gradiente, sto testando e bassa
 		for disturbed_imgs, orig_imgs in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):
 			disturbed_imgs, _ = disturbed_imgs.decompose()
@@ -422,9 +422,9 @@ def val_model_on_disturbed_images(val_dataloader, epoch, device, val_loss, model
 			#reconstructed = torch.clamp(reconstructed, min=0, max=1)
 			#orig_imgs = torch.clamp(orig_imgs, min=0, max=1)	
 			#true_loss = 1 - ms_ssim_module(reconstructed, orig_imgs)
-			lpips_loss = lpips_model(reconstructed, orig_imgs)
-			true_loss = (torch.mean(lpips_loss))
-			#true_loss = loss_fn(reconstructed, orig_imgs)
+			#lpips_loss = lpips_model(reconstructed, orig_imgs)
+			#true_loss = (torch.mean(lpips_loss))
+			true_loss = loss_fn(reconstructed, orig_imgs)
 			running_loss += true_loss.item()		
 	running_loss /= batch_size #calcolo la loss media
 	val_loss.append(running_loss)

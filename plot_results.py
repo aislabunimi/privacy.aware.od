@@ -30,8 +30,8 @@ michele_metric_file_save_list=[f'{save_dir}/iou0.5_score0.5.png', f'{save_dir}/i
 #models
 unet_save_path = "model_weights/model"
 tasknet_save_path = "tasknet_weights/tasknet"
-unet_weights_load= "model_weights/MSE_loss.pt"
-unet_weights_to_compare= "model_weights/MSSSIM_loss.pt"
+unet_weights_load= "model_weights/model_11.pt"
+unet_weights_to_compare= "model_weights/model_25.pt"
 tasknet_weights_load= "tasknet_weights/tasknet_10.pt"
 #Test images:
 image_save_prefix='test'
@@ -95,7 +95,7 @@ plot_ap(f'{results_dir}/ext_standard_ap_scoreabovethresh_iou50.txt', f'{save_dir
 extract_ap(f'{results_dir}/standard_ap_scoreabovethresh_iou75.txt', f'{results_dir}/ext_standard_ap_scoreabovethresh_iou75.txt', standard_ap=False, coco_iou_modified=75)
 #Tasknet 65k coco dataset values: AP: 0.522, Recall: 0.574
 #Tasknet 10k coco indoor people dataset values: AP: 0.610, Recall: 0.670
-plot_ap(f'{results_dir}/ext_standard_ap_scoreabovethresh_iou75.txt', f'{save_dir}/standard_ap_scoreabovethresh_iou75.png', best_ap_value_for_comparison=0.610,, best_recall_value_for_comparison=0.670, model_name='Tasknet', ap_plot_title='(IoU=0.75, area=all, maxDets=100) AP and Recall Over Epochs')
+plot_ap(f'{results_dir}/ext_standard_ap_scoreabovethresh_iou75.txt', f'{save_dir}/standard_ap_scoreabovethresh_iou75.png', best_ap_value_for_comparison=0.610, best_recall_value_for_comparison=0.670, model_name='Tasknet', ap_plot_title='(IoU=0.75, area=all, maxDets=100) AP and Recall Over Epochs')
 
 #APs with my interpolation, without filtering preds above score thresh
 extract_ap(f'{results_dir}/myinterp_ap.txt', f'{results_dir}/ext_myinterp_ap.txt', standard_ap=False, coco_iou_modified=False) #standard AP, all preds, no interp

@@ -22,7 +22,7 @@ results_dir='results'
 ap_score_threshold=0.75
 unet_save_path = "model_weights/model"
 tasknet_save_path = "tasknet_weights/tasknet"
-unet_weights_load= "model_weights/model_50.pt"
+unet_weights_load= "model_weights/model_50_notback.pt"
 tasknet_weights_load= "tasknet_weights/tasknet_10.pt"
 my_recons_classifier_weights='my_recons_classifier/my_recons_classifier_weights.pt'
 my_regressor_weights='my_recons_classifier/my_regressor_weights.pt'
@@ -69,8 +69,8 @@ resume_training=False
 save_disturbed_dataset=False
 keep_original_size=False #quando generi il dataset disturbato, deve essere a True se mi serve per il comparison con la tasknet plain, se no a False se devo fare train backward
 #split_size_train_set = 0 #necessario per quando si fa il train backward. Se a 0 nessuno split. Non è possibile usare lo stesso dataset per train perché le img ricostruite dal train potrebbero contenere più info rispetto a quelle generate dal validation. Quindi tengo i primi n elementi per train del modello con la tasknet, poi genero di disturbati quelli da n in poi, e userò solo quelli per trainare il backward. Questo se voglio usare coco indoor.
-train_backward_on_disturbed_sets=False
-num_epochs = 50 #setto numero delle epoche
+train_backward_on_disturbed_sets=True
+num_epochs = 100 #50 per training Unet normale, 100 per backward, 10 o meno per tasknet
 
 ###### MODELLI
 #Instanzio il modello e gli iperparametri; lo muovo poi al device
@@ -137,6 +137,15 @@ log = {'TRAIN_LOSS': [], 'VAL_LOSS': []}
 
 if save_disturbed_dataset:
 	train_dataloader_gen_disturbed, val_dataloader_gen_disturbed = load_dataset_for_generating_disturbed_set(disturbed_train_img_gen, disturbed_train_ann_gen, val_img_folder, val_ann_file, use_dataset_subset, use_coco_train_for_generating_disturbed_set) #, split_size_train_set)
+	import os
+	if not os.path.exists(disturbed_train_img_folder):
+	   os.makedirs(disturbed_train_img_folder)
+	if not os.path.exists(disturbed_val_img_folder):
+	   os.makedirs(disturbed_val_img_folder)
+	load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler)
+	generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, device, unet, disturbed_train_img_folder, disturbed_train_ann, disturbed_val_img_folder, disturbed_val_ann, keep_original_size, use_coco_train_for_generating_disturbed_set)
+	print("Generated disturbed dataset")
+	sys.exit()
 
 if train_backward_on_disturbed_sets: #carico i dataloader appositi del dataset disturbato
 	disturbed_train_dataloader, disturbed_val_dataloader, example_dataloader = load_disturbed_dataset(disturbed_train_img_folder, disturbed_train_ann, disturbed_val_img_folder, disturbed_val_ann, train_img_folder, val_img_folder, train_batch_size, val_batch_size, resize_scales_transform, use_dataset_subset, val_ann_file)
@@ -182,16 +191,14 @@ elif (not train_backward_on_disturbed_sets):
     			file.write(loss_log_append)
 #BLOCCO TRAINING MODEL ON DISTURBED SET   			
 else:
+	loss = torch.nn.MSELoss()
 	for epoch in range(1, num_epochs+1): #itero ora facendo un train e un test per ogni epoca
-    		log['TRAIN_LOSS'].append(train_model_on_disturbed_images(disturbed_train_dataloader, epoch, device, train_loss, unet, unet_optimizer))
+    		log['TRAIN_LOSS'].append(train_model_on_disturbed_images(disturbed_train_dataloader, epoch, device, train_loss, unet, unet_optimizer, loss))
     		unet_scheduler.step()
-    		log['VAL_LOSS'].append(val_model_on_disturbed_images(disturbed_val_dataloader, epoch, device, val_loss, unet, unet_save_path, unet_optimizer, unet_scheduler, results_dir, example_dataloader))
+    		log['VAL_LOSS'].append(val_model_on_disturbed_images(disturbed_val_dataloader, epoch, device, val_loss, unet, unet_save_path, unet_optimizer, unet_scheduler, results_dir, example_dataloader, loss))
     		print(f'EPOCH {epoch} SUMMARY: ' + ', '.join([f'{k}: {v[epoch-1]}' for k, v in log.items()]))
     		with open(f'{results_dir}/loss_log.txt', 'a') as file:
     			loss_log_append = f"{epoch} {log['TRAIN_LOSS'][epoch-1]} {log['VAL_LOSS'][epoch-1]}\n"
     			file.write(loss_log_append)
-
-if save_disturbed_dataset:
-	generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, device, unet, disturbed_train_img_folder, disturbed_train_ann, disturbed_val_img_folder, disturbed_val_ann, keep_original_size, use_coco_train_for_generating_disturbed_set)
    			
 print("Done!")
