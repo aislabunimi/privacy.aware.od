@@ -418,26 +418,21 @@ class RegionProposalNetwork(torch.nn.Module):
                 # discard indices that are between thresholds
                 inds_to_discard = matched_idxs == self.proposal_matcher.BETWEEN_THRESHOLDS
                 labels_per_image[inds_to_discard] = -1.0
-                #IDEA: prendo indici con label 1 che sono positivi, con label 0 che sono negativi
-                my_pos = torch.where(labels_per_image == 1.0)[0] #[0] per evitare che venga considerato tupla
-                my_neg = torch.where(labels_per_image == 0.0)[0]
                 
+                #Mio metodo               
                 n_gt = len(gt_boxes)
                 device = anchors_per_image.device
                 tensor_taken=torch.empty(0, dtype=torch.int64).to(device) #tensori di inizializzazione
                 matched_gt_taken=torch.empty(0, dtype=torch.float32).to(device)
                 labels_taken=torch.empty(0, dtype=torch.float32).to(device)
-                "Premessa 1: anchors positive (con IoU sopra al matcher)"
-                only_pos = match_quality_matrix[:, my_pos] #recupero solo i valori di IoU positivi e neg
-                only_neg = match_quality_matrix[:, my_neg] #questi sono in matrice NxM dove N numero gt
-                # Per ogni anchor, trovo la best match gt, ovvero quella con IoU maggiore fra le gt. Prima lo faccio con i pos, poi con i neg. Non ci possono essere duplicati da rimuovere qui
-                matched_vals, matches_idx = only_pos.max(dim=0) #matches_idx rappresenta il gt a cui associare l'anchor; se è 0 significa che l'anchor ha max IoU con il gt 0.
-                sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True) #Ora li ordino in modo che così sono ordinate per IoU max          
-                my_pos_sort = my_pos[sort_ma_val_idx] #riordino i positivi rispetto a tale ordine
-                matches_idx_sort = matches_idx[sort_ma_val_idx] #riordino anche gli id
+                
+                "Premessa 1: anchors positive"
+                labels_indexes = torch.arange(len(labels_per_image), device=device)
+                matched_vals, matches_idx = match_quality_matrix.max(dim=0) #così per ogni anchor so a quale gt corrisponde
+                sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True)  #Ora li ordino in modo che così sono ordinate per IoU max
+                my_pos_sort = labels_indexes[sort_ma_val_idx] #riordino pure le label rispetto a tale ordine
+                matches_idx_sort = matches_idx[sort_ma_val_idx] #riordino anche gli id               
                 """
-                n_gt -> 2
-                only_pos -> tensor([[0.7189, 0.1421, 0.0642, 0.7189, 0.7069], [0.1407, 0.6593, 0.6593, 0.1407, 0.1358]], device='cuda:0')
                 matched_vals -> tensor([0.7189, 0.6593, 0.6593, 0.7189, 0.7069], device='cuda:0')
                 matches_idx -> tensor([0, 1, 1, 0, 0], device='cuda:0') #questo indica che di tutte le anchors positive, 2 (quelle con 1) matchano meglio con la gt 1 
                 sort_ma_val_idx -> tensor([0, 3, 4, 1, 2], device='cuda:0') #rappresenta come gli indici originali (0,1, 2... 4) si trovano ora nel nuovo ordine (0, 3 ... 2). Lo uso poi per riordinare 
@@ -449,11 +444,64 @@ class RegionProposalNetwork(torch.nn.Module):
                    true_idx = torch.where(index)[0] #prendo solo i valori a true
                    true_idx = true_idx[:self.n_top_pos_to_keep]  #ne tengo i primi n (avranno iou più alta)      
                    tensor_taken = torch.cat([tensor_taken, my_pos_sort[true_idx]]) #salvo indicid da tenere
+                   labels_per_image[my_pos_sort[true_idx]] = 1.0 #aggiorno considerandole come foreground, anche se magari non soddisfavano l'IoU minimo
                    for i in range(0, self.n_top_pos_to_keep): #ora aggiungo n matched gt e labels quante n anchors tengo. Questo lo faccio per fare la label e definire la matched gt box dell'anchors. Nelle positive potrei anche non farlo, ma nelle negative sono obbligato perché rpn.py di default considera le negative come tutte associate alla prima matched_gt_box
                       matched_gt_taken = torch.cat([matched_gt_taken, gt_boxes[val].unsqueeze(0)])
                       labels_taken= torch.cat([labels_taken, torch.tensor(1.0, dtype=torch.float32, device=device).unsqueeze(0)])
+                
+                """
+                #Metodo vecchio
+                #IDEA: prendo indici con label 1 che sono positivi, con label 0 che sono negativi
+                my_pos = torch.where(labels_per_image == 1.0)[0] #[0] per evitare che venga considerato tupla
+                my_neg = torch.where(labels_per_image == 0.0)[0] 
+                only_pos = match_quality_matrix[:, my_pos] #recupero solo i valori di IoU positivi e neg
+                only_neg = match_quality_matrix[:, my_neg] #questi sono in matrice NxM dove N numero gt
+                # Per ogni anchor, trovo la best match gt, ovvero quella con IoU maggiore fra le gt. Prima lo faccio con i pos, poi con i neg. Non ci possono essere duplicati da rimuovere qui
+                matched_vals, matches_idx = only_pos.max(dim=0) #matches_idx rappresenta il gt a cui associare l'anchor; se è 0 significa che l'anchor ha max IoU con il gt 0.
+                sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True) #Ora li ordino in modo che così sono ordinate per IoU max          
+                my_pos_sort = my_pos[sort_ma_val_idx] #riordino i positivi rispetto a tale ordine
+                matches_idx_sort = matches_idx[sort_ma_val_idx] #riordino anche gli id
+                for val in range(0, n_gt): #per ogni gt
+                   index = (matches_idx_sort == val) #cerco nel matched id quelli corrispondenti alla gt attuale; è una maschera booleana
+                   true_idx = torch.where(index)[0] #prendo solo i valori a true
+                   true_idx = true_idx[:self.n_top_pos_to_keep]  #ne tengo i primi n (avranno iou più alta)      
+                   tensor_taken = torch.cat([tensor_taken, my_pos_sort[true_idx]]) #salvo indicid da tenere
+                   for i in range(0, self.n_top_pos_to_keep): #ora aggiungo n matched gt e labels quante n anchors tengo. Questo lo faccio per fare la label e definire la matched gt box dell'anchors. Nelle positive potrei anche non farlo, ma nelle negative sono obbligato perché rpn.py di default considera le negative come tutte associate alla prima matched_gt_box
+                      matched_gt_taken = torch.cat([matched_gt_taken, gt_boxes[val].unsqueeze(0)])
+                      labels_taken= torch.cat([labels_taken, torch.tensor(1.0, dtype=torch.float32, device=device).unsqueeze(0)])
+                """
      
-                "Premessa 2: Anchors negative (IoU sotto al matcher). Ordinate per IoU, poi riordinate per Objectness score maggiore"                 
+                "Premessa 2: Anchors negative (IoU sotto al matcher). Ordinate per IoU, poi riordinate per Objectness score maggiore."      
+                #vedo tutte le labels con valore 0.0. Non può capitare che prendo una che avevo scelto prima, perché avevo settato la label a 1.0 per farla considerare background !
+                #sfrutto questi perché sono già con IoU<0.3; se voglio avere IoU più alta, basta cambiare il matcher, che il metodo sopra per le pos non ne è influenzato !
+                my_neg = torch.where(labels_per_image == 0.0)[0] 
+                only_neg = match_quality_matrix[:, my_neg] #questi sono in matrice NxM dove N numero gt
+                matched_vals, matches_idx = only_neg.max(dim=0)
+                sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True) 
+                #estraggo objectness. Non ha senso normalizzarla tra 0 e 1 e non è possibile usare una thresh di score sopra il quale prendere un objectness (l'objectness ha valori molto random e imprevedibili.
+                #min_value = my_objectness.min()
+                #max_value = my_objectness.max()
+                #norm_obj = (my_objectness - min_value) / (max_value - min_value)  
+                objectness = objectness.flatten()
+                my_obj = objectness[sort_ma_val_idx+tot_offset]
+                my_obj_sort, my_obj_sort_idx = torch.sort(my_obj, descending=True) #sort per score, diverso dall'originale
+                #my_neg_sort = my_neg[sort_ma_val_idx]
+                #matches_idx_sort = matches_idx[sort_ma_val_idx]
+                my_neg_sort = my_neg[my_obj_sort_idx]
+                matches_idx_sort = matches_idx[my_obj_sort_idx]
+                neg_already_taken=torch.empty(0, dtype=torch.int64).to(device)
+                for val in range(0, n_gt):
+                   index = (matches_idx_sort == val)
+                   true_idx = torch.where(index)[0]
+                   true_idx = true_idx[:self.n_top_neg_to_keep]   
+                   tensor_taken = torch.cat([tensor_taken, my_neg_sort[true_idx]])
+                   neg_already_taken = torch.cat([neg_already_taken, my_neg_sort[true_idx]])
+                   for i in range(0, self.n_top_neg_to_keep):
+                      matched_gt_taken = torch.cat([matched_gt_taken, gt_boxes[val].unsqueeze(0)])
+                      labels_taken= torch.cat([labels_taken, torch.tensor(0.0, dtype=torch.float32, device=device).unsqueeze(0)])                
+                
+                """
+                #Metodo vecchio
                 matched_vals, matches_idx = only_neg.max(dim=0)
                 sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True) 
                 #estraggo objectness. Non ha senso normalizzarla tra 0 e 1 e non è possibile usare una thresh di score sopra il quale prendere un objectness (l'objectness ha valori molto random e imprevedibili.
@@ -477,6 +525,7 @@ class RegionProposalNetwork(torch.nn.Module):
                    for i in range(0, self.n_top_neg_to_keep):
                       matched_gt_taken = torch.cat([matched_gt_taken, gt_boxes[val].unsqueeze(0)])
                       labels_taken= torch.cat([labels_taken, torch.tensor(0.0, dtype=torch.float32, device=device).unsqueeze(0)])
+                """
                 
                 "Premessa 3: Anchors nel background completo (IoU=0.0). Riordinate secondo ordine originale, poi riordinate secondo Objectness score maggiore"
                 if self.n_top_bg_to_keep>0:
