@@ -257,7 +257,7 @@ def load_checkpoint(model, model_save_path, optimizer, scheduler):
 	print('Model Loaded')
 	return epoch
 
-def load_checkpoint_encoder(model, model_save_path, optimizer, scheduler):
+def load_checkpoint_encoder(model, model_save_path, optimizer, scheduler, load_optim_scheduler=False):
 	checkpoint = torch.load(model_save_path)
 	#model.load_state_dict(checkpoint['model_state_dict'])
 	mod = checkpoint['model_state_dict']
@@ -325,15 +325,14 @@ def load_checkpoint_encoder(model, model_save_path, optimizer, scheduler):
 		model.down4.maxpool_conv[1].double_conv[4].running_var.copy_(mod['down4.maxpool_conv.1.double_conv.4.running_var'])
 		model.down4.maxpool_conv[1].double_conv[4].num_batches_tracked.copy_(mod['down4.maxpool_conv.1.double_conv.4.num_batches_tracked'])
 
-	
-	optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-	epoch = checkpoint['epoch']
-	loss = checkpoint['loss']
-	scheduler.load_state_dict(checkpoint['lr_scheduler'])
+	if load_optim_scheduler:
+	   optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+	   epoch = checkpoint['epoch']
+	   loss = checkpoint['loss']
+	   scheduler.load_state_dict(checkpoint['lr_scheduler'])
 	#train_loss += checkpoint['train_loss']
 	#val_loss += checkpoint['val_loss']
-	load_checkpoint_decoder(model, model_save_path, optimizer, scheduler)
-	print('Model Loaded')
+	print('Encoder Loaded')
 
 def freeze_encoder(model):
 	model.inc.double_conv[0].weight.requires_grad=False
@@ -398,7 +397,7 @@ def freeze_encoder(model):
 	model.down4.maxpool_conv[1].double_conv[4].num_batches_tracked.requires_grad=False
 	print('Encoder Freezed')
 
-def load_checkpoint_decoder(model, model_save_path, optimizer, scheduler):
+def load_checkpoint_decoder(model, model_save_path, optimizer, scheduler, load_optim_scheduler=False):
 	checkpoint = torch.load(model_save_path)
 	#model.load_state_dict(checkpoint['model_state_dict'])
 	mod = checkpoint['model_state_dict']
@@ -464,14 +463,14 @@ def load_checkpoint_decoder(model, model_save_path, optimizer, scheduler):
 		model.outc.conv.weight.copy_(mod['outc.conv.weight'])
 		model.outc.conv.bias.copy_(mod['outc.conv.bias'])
 
-	
-	optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-	epoch = checkpoint['epoch']
-	loss = checkpoint['loss']
-	scheduler.load_state_dict(checkpoint['lr_scheduler'])
+	if load_optim_scheduler:
+	   optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+	   epoch = checkpoint['epoch']
+	   loss = checkpoint['loss']
+	   scheduler.load_state_dict(checkpoint['lr_scheduler'])
 	#train_loss += checkpoint['train_loss']
 	#val_loss += checkpoint['val_loss']
-	print('Model Loaded')
+	print('Decoder Loaded')
 
 def freeze_decoder(model):
 	model.up1.up.weight.requires_grad=False

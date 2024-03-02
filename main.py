@@ -156,9 +156,9 @@ else:
 if resume_training:
 	completed_epochs = load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler) #3 arg, il modello, il save path e l'optimizer
 
-#load_checkpoint_encoder(unet, unet_weights_load, unet_optimizer, unet_scheduler)
-#freeze_encoder(unet, unet_weights_load, unet_optimizer, unet_scheduler)
 #load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler)
+#load_checkpoint_encoder(unet, unet_weights_load, unet_optimizer, unet_scheduler, load_optim_scheduler=False)
+#load_checkpoint_decoder(unet, unet_weights_load, unet_optimizer, unet_scheduler, load_optim_scheduler=False)
 #freeze_encoder(unet)
 #freeze_decoder(unet)
 
