@@ -27,7 +27,7 @@ tasknet_weights_load= "tasknet_weights/tasknet_10.pt"
 my_recons_classifier_weights='my_recons_classifier/my_recons_classifier_weights.pt'
 my_regressor_weights='my_recons_classifier/my_regressor_weights.pt'
 #Config DATASET
-use_coco_train_for_generating_disturbed_set=True #se metti questo a true, allora stai usando il dataset di train di coco per generare il disturbato. Vanno cambiati i due path sopra
+use_coco_train_for_generating_disturbed_set=False #se metti questo a true, allora stai usando il dataset di train di coco per generare il disturbato. Vanno cambiati i due path sopra
 if use_coco_train_for_generating_disturbed_set:
 	disturbed_train_img_gen='/home/alberti/coco_people_indoor/train/images'
 	disturbed_train_ann_gen='/home/alberti/coco_people_indoor/train/train.json'
@@ -69,8 +69,8 @@ resume_training=False
 save_disturbed_dataset=False
 keep_original_size=False #quando generi il dataset disturbato, deve essere a True se mi serve per il comparison con la tasknet plain, se no a False se devo fare train backward
 #split_size_train_set = 0 #necessario per quando si fa il train backward. Se a 0 nessuno split. Non è possibile usare lo stesso dataset per train perché le img ricostruite dal train potrebbero contenere più info rispetto a quelle generate dal validation. Quindi tengo i primi n elementi per train del modello con la tasknet, poi genero di disturbati quelli da n in poi, e userò solo quelli per trainare il backward. Questo se voglio usare coco indoor.
-train_backward_on_disturbed_sets=True
-num_epochs = 100 #50 per training Unet normale, 100 per backward, 10 o meno per tasknet
+train_backward_on_disturbed_sets=False
+num_epochs = 50 #50 per training Unet normale, 100 per backward, 10 o meno per tasknet
 
 ###### MODELLI
 #Instanzio il modello e gli iperparametri; lo muovo poi al device
@@ -131,10 +131,6 @@ elif not train_backward_on_disturbed_sets:
 my_recons_classifier = load_my_recons_classifier(my_recons_classifier_weights, device)
 my_regressor = load_my_regressor(my_regressor_weights, device)
 
-train_loss = [] # Lista che conserva la training loss. Mi serve se voglio vedere l'andamento della loss
-val_loss = [] #Lista che conversa la test loss
-log = {'TRAIN_LOSS': [], 'VAL_LOSS': []}
-
 if save_disturbed_dataset:
 	train_dataloader_gen_disturbed, val_dataloader_gen_disturbed = load_dataset_for_generating_disturbed_set(disturbed_train_img_gen, disturbed_train_ann_gen, val_img_folder, val_ann_file, use_dataset_subset, use_coco_train_for_generating_disturbed_set) #, split_size_train_set)
 	import os
@@ -152,26 +148,24 @@ if train_backward_on_disturbed_sets: #carico i dataloader appositi del dataset d
 else:
 	train_dataloader, val_dataloader, example_dataloader= load_dataset(train_img_folder, train_ann_file, val_img_folder, val_ann_file, train_batch_size, val_batch_size, save_disturbed_dataset, train_only_tasknet, resize_scales_transform, use_dataset_subset) #, split_size_train_set)
 
-
+completed_epochs=1
 if resume_training:
-	completed_epochs = load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler) #3 arg, il modello, il save path e l'optimizer
-
-#load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler)
-#load_checkpoint_encoder(unet, unet_weights_load, unet_optimizer, unet_scheduler, load_optim_scheduler=False)
-#load_checkpoint_decoder(unet, unet_weights_load, unet_optimizer, unet_scheduler, load_optim_scheduler=False)
-#freeze_encoder(unet)
-#freeze_decoder(unet)
+	completed_epochs = load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler) + 1 #3 arg, il modello, il save path e l'optimizer
+	#load_checkpoint_encoder(unet, unet_weights_load, unet_optimizer, unet_scheduler, load_optim_scheduler=False)
+	#load_checkpoint_decoder(unet, unet_weights_load, unet_optimizer, unet_scheduler, load_optim_scheduler=False)
+	#freeze_encoder(unet)
+	#freeze_decoder(unet)
 
 #BLOCCO TRAINING TASKNET
 if(train_only_tasknet and not train_backward_on_disturbed_sets):
 	tasknet.train()
-	for epoch in range(1, num_epochs+1): #itero ora facendo un train e un test per ogni epoca
-    		log['TRAIN_LOSS'].append(train_tasknet(train_dataloader, epoch, device, train_loss, tasknet_save_path, tasknet, tasknet_optimizer))
+	for epoch in range(completed_epochs, num_epochs+1): #itero ora facendo un train e un test per ogni epoca
+    		train_temp_loss = train_tasknet(train_dataloader, epoch, device, tasknet_save_path, tasknet, tasknet_optimizer)
     		tasknet_scheduler.step()
-    		log['VAL_LOSS'].append(val_tasknet(val_dataloader, epoch, device, val_loss, tasknet_save_path, tasknet, tasknet_optimizer, tasknet_scheduler, ap_score_threshold, results_dir))
-    		print(f'EPOCH {epoch} SUMMARY: ' + ', '.join([f'{k}: {v[epoch-1]}' for k, v in log.items()]))
+    		val_temp_loss = val_tasknet(val_dataloader, epoch, device, tasknet_save_path, tasknet, tasknet_optimizer, tasknet_scheduler, ap_score_threshold, results_dir)
+    		print(f'EPOCH {epoch} SUMMARY: Train loss {train_temp_loss}, Val loss {val_temp_loss}')
     		with open(f'{results_dir}/loss_log.txt', 'a') as file:
-    			loss_log_append = f"{epoch} {log['TRAIN_LOSS'][epoch-1]} {log['VAL_LOSS'][epoch-1]}\n"
+    			loss_log_append = f"{epoch} {train_temp_loss} {val_temp_loss}\n"
     			file.write(loss_log_append)
 #BLOCCO TRAINING MODEL
 elif (not train_backward_on_disturbed_sets):
@@ -181,24 +175,24 @@ elif (not train_backward_on_disturbed_sets):
 #a meno che il modello sia in training
 	for param in tasknet.parameters():
 		param.requires_grad = False
-	for epoch in range(1, num_epochs+1): #itero ora facendo un train e un test per ogni epoca
-    		log['TRAIN_LOSS'].append(train_model(train_dataloader, epoch, device, train_loss, unet, tasknet, unet_optimizer))
+	for epoch in range(completed_epochs, num_epochs+1): #itero ora facendo un train e un test per ogni epoca
+    		train_temp_loss = train_model(train_dataloader, epoch, device, unet, tasknet, unet_optimizer)
     		unet_scheduler.step()
-    		log['VAL_LOSS'].append(val_model(val_dataloader, epoch, device, val_loss, unet, unet_save_path, tasknet, unet_optimizer, unet_scheduler, ap_score_threshold, results_dir, my_recons_classifier, my_regressor, example_dataloader))
-    		print(f'EPOCH {epoch} SUMMARY: ' + ', '.join([f'{k}: {v[epoch-1]}' for k, v in log.items()]))
+    		val_temp_loss = val_model(val_dataloader, epoch, device, unet, unet_save_path, tasknet, unet_optimizer, unet_scheduler, ap_score_threshold, results_dir, my_recons_classifier, my_regressor, example_dataloader)
+    		print(f'EPOCH {epoch} SUMMARY: Train loss {train_temp_loss}, Val loss {val_temp_loss}')
     		with open(f'{results_dir}/loss_log.txt', 'a') as file:
-    			loss_log_append = f"{epoch} {log['TRAIN_LOSS'][epoch-1]} {log['VAL_LOSS'][epoch-1]}\n"
+    			loss_log_append = f"{epoch} {train_temp_loss} {val_temp_loss}\n"
     			file.write(loss_log_append)
 #BLOCCO TRAINING MODEL ON DISTURBED SET   			
 else:
 	loss = torch.nn.MSELoss()
-	for epoch in range(1, num_epochs+1): #itero ora facendo un train e un test per ogni epoca
-    		log['TRAIN_LOSS'].append(train_model_on_disturbed_images(disturbed_train_dataloader, epoch, device, train_loss, unet, unet_optimizer, loss))
+	for epoch in range(completed_epochs, num_epochs+1): #itero ora facendo un train e un test per ogni epoca
+    		train_temp_loss = train_model_on_disturbed_images(disturbed_train_dataloader, epoch, device, unet, unet_optimizer, loss)
     		unet_scheduler.step()
-    		log['VAL_LOSS'].append(val_model_on_disturbed_images(disturbed_val_dataloader, epoch, device, val_loss, unet, unet_save_path, unet_optimizer, unet_scheduler, results_dir, example_dataloader, loss))
-    		print(f'EPOCH {epoch} SUMMARY: ' + ', '.join([f'{k}: {v[epoch-1]}' for k, v in log.items()]))
+    		val_temp_loss = val_model_on_disturbed_images(disturbed_val_dataloader, epoch, device, unet, unet_save_path, unet_optimizer, unet_scheduler, results_dir, example_dataloader, loss)
+    		print(f'EPOCH {epoch} SUMMARY: Train loss {train_temp_loss}, Val loss {val_temp_loss}')
     		with open(f'{results_dir}/loss_log.txt', 'a') as file:
-    			loss_log_append = f"{epoch} {log['TRAIN_LOSS'][epoch-1]} {log['VAL_LOSS'][epoch-1]}\n"
+    			loss_log_append = f"{epoch} {train_temp_loss} {val_temp_loss}\n"
     			file.write(loss_log_append)
    			
 print("Done!")

@@ -14,6 +14,10 @@ import os
 from pytorch_msssim import ms_ssim, MS_SSIM
 #MS SSIM dovrebbe tenere conto di più di come appare l'img a una persona, rispetto alla sola distribuzione dell'EMD
 
+# print(torch.cuda.memory_allocated() / torch.cuda.max_memory_allocated())
+#import psutil
+# print(psutil.virtual_memory().percent)
+
 def adjust_orig_target_to_reconstructed_imgs(targets, imgs, reconstructed):
    """
    L'img ricostruita per via della mancanza delle skip connection non ha la stessa dim dell'originale ma perde qualche pixel. 
@@ -63,12 +67,14 @@ def adjust_outputs_to_cocoeval_api(targets, outputs, reconstructed=None):
          pred['boxes'][i] = torch.tensor([resized_xm, resized_ym, resized_xM, resized_yM], device=box.device)
    return outputs
 
-def train_model(train_dataloader, epoch, device, train_loss, model, tasknet, model_optimizer): #funzione che si occupa del training
+def train_model(train_dataloader, epoch, device, model, tasknet, model_optimizer): #funzione che si occupa del training
+	#print(psutil.virtual_memory().percent)
 	model.train()
 	tasknet.train()
 	batch_size = len(train_dataloader) #recupero la batch size
 	running_loss = 0 # Iniziallizzo la variabile per la loss
 	for imgs, targets in tqdm(train_dataloader, desc=f'Epoch {epoch} - Train model'):
+		#print(psutil.virtual_memory().percent)
 		imgs, _ = imgs.decompose()
 		imgs = imgs.to(device)
 		targets = [{k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in t.items()} for t in targets]
@@ -104,12 +110,11 @@ def train_model(train_dataloader, epoch, device, train_loss, model, tasknet, mod
 		running_loss += true_loss.item()
 	
 	running_loss /= batch_size #calcolo la loss media
-	train_loss.append(running_loss)
 	return running_loss
 
 from lpips.lpips import LPIPS
 from model_utils_and_functions import compute_my_recons_classifier_pred, save_my_recons_classifier_dict
-def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_score_threshold, results_dir, my_recons_classifier, my_regressor, example_dataloader): #funzione che si occupa del test
+def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_score_threshold, results_dir, my_recons_classifier, my_regressor, example_dataloader): #funzione che si occupa del test
 	model.eval()
 	batch_size = len(val_dataloader) #recupero la batch size
 	running_loss = 0 # Initializing variable for storing  loss 
@@ -213,7 +218,6 @@ def val_model(val_dataloader, epoch, device, val_loss, model, model_save_path, t
 	my_recons_classifier_path = f"{results_dir}/my_recons_classifier_log.json"
 	save_my_recons_classifier_dict(my_recons_classifier_path, epoch, my_rec_class_dict)
 	
-	val_loss.append(running_loss)
 	model_save_path = f'{model_save_path}_{epoch}.pt'   
 	create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
 	save_image_examples(example_dataloader, results_dir, model, epoch, device)
@@ -320,7 +324,7 @@ def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_ge
 	model.train()
 
 
-def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss, model, model_optimizer, loss_fn): 
+def train_model_on_disturbed_images(train_dataloader, epoch, device, model, model_optimizer, loss_fn): 
 	model.train()
 	batch_size = len(train_dataloader)
 	running_loss = 0
@@ -391,10 +395,9 @@ def train_model_on_disturbed_images(train_dataloader, epoch, device, train_loss,
 		running_loss += true_loss.item()
 	
 	running_loss /= batch_size #calcolo la loss media
-	train_loss.append(running_loss)
 	return running_loss
 
-def val_model_on_disturbed_images(val_dataloader, epoch, device, val_loss, model, model_save_path, model_optimizer, model_scheduler, results_dir, example_dataloader, loss_fn): #funzione che si occupa del test
+def val_model_on_disturbed_images(val_dataloader, epoch, device, model, model_save_path, model_optimizer, model_scheduler, results_dir, example_dataloader, loss_fn): #funzione che si occupa del test
 	model.eval()
 	batch_size = len(val_dataloader) #recupero la batch size
 	running_loss = 0 # Initializing variable for storing  loss 
@@ -427,14 +430,13 @@ def val_model_on_disturbed_images(val_dataloader, epoch, device, val_loss, model
 			true_loss = loss_fn(reconstructed, orig_imgs)
 			running_loss += true_loss.item()		
 	running_loss /= batch_size #calcolo la loss media
-	val_loss.append(running_loss)
 	model_save_path = f'{model_save_path}_{epoch}.pt'   
 	create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
 	save_image_examples(example_dataloader, results_dir, model, epoch, device)
 	return running_loss
 
 
-def train_tasknet(train_dataloader, epoch, device, train_loss, tasknet_save_path, tasknet, tasknet_optimizer): #funzione che si occupa del training
+def train_tasknet(train_dataloader, epoch, device, tasknet_save_path, tasknet, tasknet_optimizer): #funzione che si occupa del training
 	tasknet.train()
 	for param in tasknet.parameters():
 		param.requires_grad = True
@@ -451,10 +453,9 @@ def train_tasknet(train_dataloader, epoch, device, train_loss, tasknet_save_path
 		
 		running_loss += losses.item()
 	running_loss /= batch_size #calcolo la loss media
-	train_loss.append(running_loss)
 	return running_loss
 
-def val_tasknet(val_dataloader, epoch, device, val_loss, tasknet_save_path, tasknet, tasknet_optimizer, tasknet_scheduler, ap_score_threshold, results_dir): #funzione che si occupa del test
+def val_tasknet(val_dataloader, epoch, device, tasknet_save_path, tasknet, tasknet_optimizer, tasknet_scheduler, ap_score_threshold, results_dir): #funzione che si occupa del test
 	for param in tasknet.parameters():
 		param.requires_grad = False
 	res={}	
@@ -487,7 +488,6 @@ def val_tasknet(val_dataloader, epoch, device, val_loss, tasknet_save_path, task
 	running_loss /= batch_size #calcolo la loss media
 	compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, results_dir, res)	
 	compute_michele_metric(evaluator_complete_metric, results_dir, epoch)	
-	val_loss.append(running_loss)
 	tasknet_save_path = f'{tasknet_save_path}_{epoch}.pt' 
 	create_checkpoint(tasknet, tasknet_optimizer, epoch, running_loss, tasknet_scheduler, tasknet_save_path)
 	return running_loss

@@ -176,31 +176,32 @@ def save_my_recons_classifier_dict(classifier_path, epoch, my_rec_class_dict):
          json.dump(temp_list, json_file, indent=2)
 
 def compute_my_recons_classifier_pred(my_recons_classifier, reconstructed, my_rec_class_dict):
-   outputs = my_recons_classifier(reconstructed)
-   _, predicted = torch.max(outputs.data, 1)
-   values, occurrences = torch.unique(predicted, return_counts=True)
-   my_rec_class_dict['total']+=len(reconstructed)
-   for value, occurrence in zip(values, occurrences):
-      value_item = value.item()
-      occurrence_item = occurrence.item()
-      if value_item in my_rec_class_dict:
-         my_rec_class_dict[value_item] += occurrence_item
-      else:
-         my_rec_class_dict[value_item] = occurrence_item
-   outputs = torch.nn.functional.softmax(outputs) #ottengo le prob per ogni classe
-   if 'prob0tot' not in my_rec_class_dict:
-      my_rec_class_dict['prob0tot']=0
-   if 'prob1tot' not in my_rec_class_dict:
-      my_rec_class_dict['prob1tot']=0
-   if 'prob2tot' not in my_rec_class_dict:
-      my_rec_class_dict['prob2tot']=0
-   if 'prob3tot' not in my_rec_class_dict:
-      my_rec_class_dict['prob3tot']=0
-   for prob0, prob1, prob2, prob3 in outputs:
-      my_rec_class_dict['prob0tot'] += prob0.item()
-      my_rec_class_dict['prob1tot'] += prob1.item()
-      my_rec_class_dict['prob2tot'] += prob2.item()
-      my_rec_class_dict['prob3tot'] += prob3.item()
+   with torch.no_grad():
+      outputs = my_recons_classifier(reconstructed)
+      _, predicted = torch.max(outputs.data, 1)
+      values, occurrences = torch.unique(predicted, return_counts=True)
+      my_rec_class_dict['total']+=len(reconstructed)
+      for value, occurrence in zip(values, occurrences):
+         value_item = value.item()
+         occurrence_item = occurrence.item()
+         if value_item in my_rec_class_dict:
+            my_rec_class_dict[value_item] += occurrence_item
+         else:
+            my_rec_class_dict[value_item] = occurrence_item
+      outputs = torch.nn.functional.softmax(outputs) #ottengo le prob per ogni classe
+      if 'prob0tot' not in my_rec_class_dict:
+         my_rec_class_dict['prob0tot']=0
+      if 'prob1tot' not in my_rec_class_dict:
+         my_rec_class_dict['prob1tot']=0
+      if 'prob2tot' not in my_rec_class_dict:
+         my_rec_class_dict['prob2tot']=0
+      if 'prob3tot' not in my_rec_class_dict:
+         my_rec_class_dict['prob3tot']=0
+      for prob0, prob1, prob2, prob3 in outputs:
+         my_rec_class_dict['prob0tot'] += prob0.item()
+         my_rec_class_dict['prob1tot'] += prob1.item()
+         my_rec_class_dict['prob2tot'] += prob2.item()
+         my_rec_class_dict['prob3tot'] += prob3.item()
 
 import torch.nn as nn
 class CNNRegression(nn.Module):
