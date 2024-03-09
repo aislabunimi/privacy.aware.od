@@ -37,14 +37,18 @@ tasknet_weights_load= "tasknet_weights/tasknet_10.pt"
 image_save_prefix='test'
 image_list_folder='test_data'
 image_name_list=['val', 'cat', 'lenna', 'people']
+val_set_list=['000000004395','000000008532','000000019924', '000000020992', '000000070739', '000000117525', '000000131444',
+'000000133343', '000000138115', '000000170099', '000000179112', '000000224337', '000000258541', '000000262895', '000000271997']
+image_val_folder='from_val_set'
 #image_name_list=['a', 'b']
 #image_name_list=['disturbed_val', 'disturbed_cat', 'disturbed_lenna', 'disturbed_people']
 ####
 #unet standard
 unet = UNet(3, False)
 unet.to(device)
-unet_optimizer = torch.optim.SGD(unet.parameters(), lr=0.005, momentum=0.9, weight_decay=0.0005, nesterov=True)
-unet_scheduler = torch.optim.lr_scheduler.StepLR(unet_optimizer, step_size=10, gamma=0.5)
+unet_optimizer = torch.optim.SGD(unet.parameters(), lr=5e-4, momentum=0.9, weight_decay=5e-4, nesterov=True)
+#unet_scheduler = torch.optim.lr_scheduler.StepLR(unet_optimizer, step_size=10, gamma=0.5)
+unet_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(unet_optimizer, mode='min', factor=0.5, patience=2, verbose=True)
 #faster rcnn non modificata dato che mi serve per simulare il deployment
 from torchvision.models.detection import fasterrcnn_resnet50_fpn, FasterRCNN_ResNet50_FPN_Weights
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
@@ -150,6 +154,14 @@ for img in image_name_list:
 	compare_two_results_unet(unet, tasknet, device, image_path, image_save_name, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler)
 	plt.clf()
 
+if not os.path.exists(f'{save_dir}/{image_val_folder}'):
+	os.makedirs(f'{save_dir}/{image_val_folder}')
+for img in val_set_list:
+	image_path=''
+	image_path=f'{image_list_folder}/{image_val_folder}/{img}.jpg'
+	image_save_name=f'{save_dir}/{image_val_folder}/{image_save_prefix}_{img}.png'
+	compare_two_results_unet(unet, tasknet, device, image_path, image_save_name, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler)
+	plt.clf()
 """
 #show_res_test_unet(unet, tasknet, device, 'plot/val.jpg', True, 'plot/reconstructed_person.png')
 load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler)

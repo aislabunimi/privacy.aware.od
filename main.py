@@ -78,8 +78,9 @@ num_epochs = 50 #50 per training Unet normale, 100 per backward, 10 o meno per t
 if not train_only_tasknet:
 	unet = UNet(n_channels=3, bilinear=False)
 	unet.to(device)
-	unet_optimizer = torch.optim.SGD(unet.parameters(), lr=0.005, momentum=0.9, weight_decay=0.0005, nesterov=True)
-	unet_scheduler = torch.optim.lr_scheduler.StepLR(unet_optimizer, step_size=10, gamma=0.5)
+	unet_optimizer = torch.optim.SGD(unet.parameters(), lr=5e-4, momentum=0.9, weight_decay=5e-4, nesterov=True)
+	#unet_scheduler = torch.optim.lr_scheduler.StepLR(unet_optimizer, step_size=10, gamma=0.5)
+	unet_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(unet_optimizer, mode='min', factor=0.5, patience=2, verbose=True)
 
 if train_only_tasknet:
 	from torchvision.models.detection import fasterrcnn_resnet50_fpn, FasterRCNN_ResNet50_FPN_Weights
@@ -148,9 +149,9 @@ if train_backward_on_disturbed_sets: #carico i dataloader appositi del dataset d
 else:
 	train_dataloader, val_dataloader, example_dataloader= load_dataset(train_img_folder, train_ann_file, val_img_folder, val_ann_file, train_batch_size, val_batch_size, save_disturbed_dataset, train_only_tasknet, resize_scales_transform, use_dataset_subset) #, split_size_train_set)
 
-completed_epochs=1
+starting_epoch=1
 if resume_training:
-	completed_epochs = load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler) + 1 #3 arg, il modello, il save path e l'optimizer
+	starting_epoch = load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler) + 1 #3 arg, il modello, il save path e l'optimizer
 	#load_checkpoint_encoder(unet, unet_weights_load, unet_optimizer, unet_scheduler, load_optim_scheduler=False)
 	#load_checkpoint_decoder(unet, unet_weights_load, unet_optimizer, unet_scheduler, load_optim_scheduler=False)
 	#freeze_encoder(unet)
@@ -159,10 +160,10 @@ if resume_training:
 #BLOCCO TRAINING TASKNET
 if(train_only_tasknet and not train_backward_on_disturbed_sets):
 	tasknet.train()
-	for epoch in range(completed_epochs, num_epochs+1): #itero ora facendo un train e un test per ogni epoca
+	for epoch in range(starting_epoch, num_epochs+1): #itero ora facendo un train e un test per ogni epoca
     		train_temp_loss = train_tasknet(train_dataloader, epoch, device, tasknet_save_path, tasknet, tasknet_optimizer)
-    		tasknet_scheduler.step()
     		val_temp_loss = val_tasknet(val_dataloader, epoch, device, tasknet_save_path, tasknet, tasknet_optimizer, tasknet_scheduler, ap_score_threshold, results_dir)
+    		tasknet_scheduler.step()
     		print(f'EPOCH {epoch} SUMMARY: Train loss {train_temp_loss}, Val loss {val_temp_loss}')
     		with open(f'{results_dir}/loss_log.txt', 'a') as file:
     			loss_log_append = f"{epoch} {train_temp_loss} {val_temp_loss}\n"
@@ -175,10 +176,11 @@ elif (not train_backward_on_disturbed_sets):
 #a meno che il modello sia in training
 	for param in tasknet.parameters():
 		param.requires_grad = False
-	for epoch in range(completed_epochs, num_epochs+1): #itero ora facendo un train e un test per ogni epoca
-    		train_temp_loss = train_model(train_dataloader, epoch, device, unet, tasknet, unet_optimizer)
-    		unet_scheduler.step()
+	for epoch in range(starting_epoch, num_epochs+1): #itero ora facendo un train e un test per ogni epoca
+    		train_temp_loss = train_model(train_dataloader, epoch, device, unet, tasknet, unet_optimizer)   		
     		val_temp_loss = val_model(val_dataloader, epoch, device, unet, unet_save_path, tasknet, unet_optimizer, unet_scheduler, ap_score_threshold, results_dir, my_recons_classifier, my_regressor, example_dataloader)
+    		#unet_scheduler.step()
+    		unet_scheduler.step(val_temp_loss)
     		print(f'EPOCH {epoch} SUMMARY: Train loss {train_temp_loss}, Val loss {val_temp_loss}')
     		with open(f'{results_dir}/loss_log.txt', 'a') as file:
     			loss_log_append = f"{epoch} {train_temp_loss} {val_temp_loss}\n"
@@ -186,10 +188,11 @@ elif (not train_backward_on_disturbed_sets):
 #BLOCCO TRAINING MODEL ON DISTURBED SET   			
 else:
 	loss = torch.nn.MSELoss()
-	for epoch in range(completed_epochs, num_epochs+1): #itero ora facendo un train e un test per ogni epoca
+	for epoch in range(starting_epoch, num_epochs+1): #itero ora facendo un train e un test per ogni epoca
     		train_temp_loss = train_model_on_disturbed_images(disturbed_train_dataloader, epoch, device, unet, unet_optimizer, loss)
-    		unet_scheduler.step()
     		val_temp_loss = val_model_on_disturbed_images(disturbed_val_dataloader, epoch, device, unet, unet_save_path, unet_optimizer, unet_scheduler, results_dir, example_dataloader, loss)
+    		#unet_scheduler.step()
+    		unet_scheduler.step(val_temp_loss)
     		print(f'EPOCH {epoch} SUMMARY: Train loss {train_temp_loss}, Val loss {val_temp_loss}')
     		with open(f'{results_dir}/loss_log.txt', 'a') as file:
     			loss_log_append = f"{epoch} {train_temp_loss} {val_temp_loss}\n"
