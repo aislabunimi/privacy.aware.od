@@ -212,7 +212,7 @@ def compare_two_results_unet(unet, tasknet, device, img_file_path, name_path_sav
 	
 	img_primo_plot = trans_r(img_primo_plot) #per fare img uguale a quelle ricostruite
 	plt.subplot(1, 3, 1)
-	plt.title('Original Image', fontsize=16)	
+	plt.title('Original Image', fontsize=20)	
 	plot_results(img_primo_plot, nms_pred['scores'], nms_pred['boxes'])
 	
 	plt.subplot(1, 3, 2)
@@ -240,7 +240,7 @@ def compare_two_results_unet(unet, tasknet, device, img_file_path, name_path_sav
 	out = trans_te(out)
 	from .lpips import LPIPS
 	#lpips_model = LPIPS(net='vgg', model_path='/home/math0012/Tesi_magistrale/Unet_faster_modificata/plot_utils/lpips_my_weights.pth').to(device)
-	lpips_model = LPIPS(net='alex').to(device)
+	lpips_model = LPIPS(net='vgg').to(device)
 	#lpips_model = LPIPS(net='vgg').to(device)
 	#lpips_loss: torch.Tensor = piq.LPIPS(reduction='mean', mean=[0., 0., 0.], std=[1., 1., 1.])(out, orig_img_r)
 	#lpips_score = lpips_loss.item()
@@ -250,7 +250,7 @@ def compare_two_results_unet(unet, tasknet, device, img_file_path, name_path_sav
 	#print(f"DISTS: {dists_loss.item():0.4f}")
 	
 	#plt.title(f'{name}, MS_SSIM: {ms_ssim_score:0.3f}', fontsize=16)
-	plt.title(f'{name}, LPIPS: {lpips_score:0.3f}', fontsize=16)
+	plt.title(f'{name}, LPIPS: {lpips_score:0.3f}', fontsize=20)
 	plot_results(out_to_plot, nms_pred_recon['scores'], nms_pred_recon['boxes'])
 	plt.subplot(1, 3, 3)
 	load_checkpoint(unet, unet_weights_to_compare, unet_optimizer, unet_scheduler)
@@ -285,7 +285,7 @@ def compare_two_results_unet(unet, tasknet, device, img_file_path, name_path_sav
 	#print(f"DISTS: {dists_loss.item():0.4f}")
 	
 	#plt.title(f'{name}, MS_SSIM: {ms_ssim_score:0.3f}', fontsize=16)
-	plt.title(f'{name}, LPIPS: {lpips_score:0.3f}', fontsize=16)
+	plt.title(f'{name}, LPIPS: {lpips_score:0.3f}', fontsize=20)
 	plot_results(out_to_plot, nms_pred_recon['scores'], nms_pred_recon['boxes'])
 	
 	plt.subplots_adjust(wspace=0.05)

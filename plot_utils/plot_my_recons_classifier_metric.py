@@ -36,7 +36,7 @@ def plot_my_recons_classifier_metric(file_path, file_save):
    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
    
    #saving
-   plt.legend(loc='lower left', fontsize=16)
+   plt.legend(loc='lower left', fontsize=20)
    plt.grid(True)
    plt.savefig(file_save, format='png', bbox_inches='tight')
    plt.clf()
@@ -65,17 +65,17 @@ def plot_my_recons_classifier_metric_probs(file_path, file_save):
    plt.plot(epochs, three_percentage, label='Identifiable person', color='red')
    
    #label and titles
-   plt.xlabel('Epoch', fontsize=18)
-   plt.ylabel('Probability', fontsize=18)
+   plt.xlabel('Epoch', fontsize=20)
+   plt.ylabel('Probability', fontsize=20)
    plt.title('Probability for each class over total dataset each Epoch', fontsize=20)
    
    #settings epoch axis to have only discrete values
    ax = plt.gca()
-   ax.tick_params(axis='both', which='major', labelsize=14)
+   ax.tick_params(axis='both', which='major', labelsize=20)
    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
    
    #saving
-   plt.legend(loc='lower left', fontsize=16)
+   plt.legend(loc='lower left', fontsize=20)
    plt.grid(True)
    plt.savefig(file_save, format='png', bbox_inches='tight')
    plt.clf()

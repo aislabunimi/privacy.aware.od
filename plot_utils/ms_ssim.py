@@ -20,13 +20,13 @@ def plot_ms_ssim_score(ms_ssim_score_log_path, ms_ssim_save_name):
 	
 	# config
 	ax = plt.gca()
-	ax.tick_params(axis='both', which='major', labelsize=14)
+	ax.tick_params(axis='both', which='major', labelsize=20)
 	ax.xaxis.set_major_locator(MaxNLocator(integer=True))
 	
 	plt.title('MS_SSIM score Over Epochs', fontsize=20)
-	plt.xlabel('Epoch', fontsize=18)
-	plt.ylabel('Value', fontsize=18)
-	plt.legend(loc='upper right', fontsize=16)
+	plt.xlabel('Epoch', fontsize=20)
+	plt.ylabel('Value', fontsize=20)
+	plt.legend(loc='upper right', fontsize=20)
 	plt.grid(True)
 	
 	plt.savefig(ms_ssim_save_name, format='png', bbox_inches='tight')

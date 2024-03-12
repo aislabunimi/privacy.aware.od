@@ -35,12 +35,12 @@ def plot_compare_between_two_ap(ap_log_path, ap_log_to_compare_path, ap_model_na
 
 	plt.title(ap_plot_title, fontsize=20)
 	ax = plt.gca()
-	ax.tick_params(axis='both', which='major', labelsize=14)
+	ax.tick_params(axis='both', which='major', labelsize=20)
 	ax.xaxis.set_major_locator(MaxNLocator(integer=True))
 
-	plt.xlabel('Epoch', fontsize=18)
-	plt.ylabel('Value', fontsize=18)
-	plt.legend(loc='upper left', fontsize=16)
+	plt.xlabel('Epoch', fontsize=20)
+	plt.ylabel('Value', fontsize=20)
+	plt.legend(loc='upper left', fontsize=20)
 	plt.grid(True)
 
 	plt.savefig(plotted_comparison_save_path, format='png', bbox_inches='tight')

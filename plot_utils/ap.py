@@ -25,12 +25,12 @@ def plot_ap(ap_log_path, ap_save_name, best_ap_value_for_comparison=None, best_r
 	plt.title(ap_plot_title, fontsize=20)
 	
 	ax = plt.gca()
-	ax.tick_params(axis='both', which='major', labelsize=14)
+	ax.tick_params(axis='both', which='major', labelsize=20)
 	ax.xaxis.set_major_locator(MaxNLocator(integer=True))
 	
-	plt.xlabel('Epoch', fontsize=18)
-	plt.ylabel('Value', fontsize=18)
-	plt.legend(loc='upper left', fontsize=16) #la metto in alto a sx
+	plt.xlabel('Epoch', fontsize=20)
+	plt.ylabel('Value', fontsize=20)
+	plt.legend(loc='upper left', fontsize=20) #la metto in alto a sx
 	plt.grid(True)
 	
 	plt.savefig(ap_save_name, format='png', bbox_inches='tight')
