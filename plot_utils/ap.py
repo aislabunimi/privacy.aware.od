@@ -15,22 +15,23 @@ def plot_ap(ap_log_path, ap_save_name, best_ap_value_for_comparison=None, best_r
             			recall.append(float(recall_v))
 
 	plt.figure(figsize=(15, 10))
-	plt.plot(epochs, ap, linestyle='-', color='b', label='AP', marker='o')
-	plt.plot(epochs, recall, linestyle='-', color='r', label='Recall', marker='x')
 
 	if best_ap_value_for_comparison is not None:
-		plt.axhline(y=best_ap_value_for_comparison, color='b', linestyle='-.', label=f'{model_name} AP')
+		plt.axhline(y=best_ap_value_for_comparison, color='b', linestyle='-.', label=f'{model_name} AP', linewidth=3.0)
 	if best_recall_value_for_comparison is not None:
-		plt.axhline(y=best_recall_value_for_comparison, color='r', linestyle='-.', label=f'{model_name} Recall')
-	plt.title(ap_plot_title, fontsize=20)
+		plt.axhline(y=best_recall_value_for_comparison, color='r', linestyle='-.', label=f'{model_name} AR', linewidth=3.0)
+	plt.title(ap_plot_title, fontsize=27, fontweight='bold')
+	
+	plt.plot(epochs, ap, linestyle='-', color='b', label='AP', linewidth=3.0)
+	plt.plot(epochs, recall, linestyle='-', color='r', label='AR', linewidth=3.0)
 	
 	ax = plt.gca()
-	ax.tick_params(axis='both', which='major', labelsize=20)
+	ax.tick_params(axis='both', which='major', labelsize=35)
 	ax.xaxis.set_major_locator(MaxNLocator(integer=True))
 	
-	plt.xlabel('Epoch', fontsize=20)
-	plt.ylabel('Value', fontsize=20)
-	plt.legend(loc='upper left', fontsize=20) #la metto in alto a sx
+	plt.xlabel('Epoch', fontsize=30, fontweight='bold')
+	plt.ylabel('Value', fontsize=30, fontweight='bold')
+	plt.legend(loc='best', framealpha=0.5, fontsize=28) #la metto in alto a sx
 	plt.grid(True)
 	
 	plt.savefig(ap_save_name, format='png', bbox_inches='tight')

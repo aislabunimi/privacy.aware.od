@@ -13,18 +13,17 @@ def plot_lpips_score(lpips_score_log_path, lpips_save_name):
 
 	# Creo plot
 	plt.figure(figsize=(15, 10))
-	plt.plot(epochs, lpips, linestyle='-', color='b', label='LPIPS score', marker='o')
-	#plt.axhline(y=0.6, color='r', linestyle='-.', label='Plain Unet')
+	plt.plot(epochs, lpips, linestyle='-', color='b', label='LPIPS score', linewidth=3.0)
 	
 	# config
 	ax = plt.gca()
-	ax.tick_params(axis='both', which='major', labelsize=20)
+	ax.tick_params(axis='both', which='major', labelsize=35)
 	ax.xaxis.set_major_locator(MaxNLocator(integer=True))
 	
-	plt.title('LPIPS score Over Epochs', fontsize=20)
-	plt.xlabel('Epoch', fontsize=20)
-	plt.ylabel('Value', fontsize=20)
-	plt.legend(loc='upper right', fontsize=20)
+	plt.title('LPIPS score Over Epochs', fontsize=30, fontweight='bold')
+	plt.xlabel('Epoch', fontsize=30, fontweight='bold')
+	plt.ylabel('Value', fontsize=30, fontweight='bold')
+	plt.legend(loc='best', framealpha=0.5, fontsize=28)
 	plt.grid(True)
 	
 	plt.savefig(lpips_save_name, format='png', bbox_inches='tight')

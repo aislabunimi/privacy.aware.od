@@ -15,18 +15,17 @@ def plot_ms_ssim_score(ms_ssim_score_log_path, ms_ssim_save_name):
 
 	# Creo plot
 	plt.figure(figsize=(15, 10))
-	plt.plot(epochs, ms_ssim, linestyle='-', color='b', label='MS_SSIM score', marker='o')
-	#plt.axhline(y=0.6, color='r', linestyle='-.', label='Plain Unet')
+	plt.plot(epochs, ms_ssim, linestyle='-', color='b', label='MS_SSIM score', linewidth=3.0)
 	
 	# config
 	ax = plt.gca()
-	ax.tick_params(axis='both', which='major', labelsize=20)
+	ax.tick_params(axis='both', which='major', labelsize=35)
 	ax.xaxis.set_major_locator(MaxNLocator(integer=True))
 	
-	plt.title('MS_SSIM score Over Epochs', fontsize=20)
-	plt.xlabel('Epoch', fontsize=20)
-	plt.ylabel('Value', fontsize=20)
-	plt.legend(loc='upper right', fontsize=20)
+	plt.title('MS_SSIM score Over Epochs', fontsize=29, fontweight='bold')
+	plt.xlabel('Epoch', fontsize=30, fontweight='bold')
+	plt.ylabel('Value', fontsize=30, fontweight='bold')
+	plt.legend(loc='best', framealpha=0.5, fontsize=28)
 	plt.grid(True)
 	
 	plt.savefig(ms_ssim_save_name, format='png', bbox_inches='tight')

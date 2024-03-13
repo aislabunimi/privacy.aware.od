@@ -20,23 +20,23 @@ def plot_my_recons_classifier_metric(file_path, file_save):
    """
    
    plt.figure(figsize=(15, 10))
-   plt.plot(epochs, zero_percentage, label='Noise', color='black')
-   plt.plot(epochs, one_percentage, label='Person Silhoutte', color='blue')
-   plt.plot(epochs, two_percentage, label='Hardly Identifiable person', color='green')
-   plt.plot(epochs, three_percentage, label='Identifiable person', color='red')
+   plt.plot(epochs, zero_percentage, label='Noise', color='black', linewidth=3.0)
+   plt.plot(epochs, one_percentage, label='Person Silhoutte', color='blue', linewidth=3.0)
+   plt.plot(epochs, two_percentage, label='Hardly Identifiable person', color='green', linewidth=3.0)
+   plt.plot(epochs, three_percentage, label='Identifiable person', color='red',linewidth=3.0)
    
    #label and titles
-   plt.xlabel('Epoch', fontsize=18)
-   plt.ylabel('Percentage', fontsize=18)
-   plt.title('Percentage of each class occurence over total dataset each Epoch', fontsize=20)
+   plt.xlabel('Epoch', fontsize=30, fontweight='bold')
+   plt.ylabel('Probability', fontsize=30, fontweight='bold')
+   plt.title('Probability for each class over dataset each Epoch', fontsize=30, fontweight='bold')
    
    #settings epoch axis to have only discrete values
    ax = plt.gca()
-   ax.tick_params(axis='both', which='major', labelsize=14)
+   ax.tick_params(axis='both', which='major', labelsize=35)
    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
    
    #saving
-   plt.legend(loc='lower left', fontsize=20)
+   plt.legend(loc='best', framealpha=0.5, fontsize=28)
    plt.grid(True)
    plt.savefig(file_save, format='png', bbox_inches='tight')
    plt.clf()
@@ -59,23 +59,23 @@ def plot_my_recons_classifier_metric_probs(file_path, file_save):
    """
    
    plt.figure(figsize=(15, 10))
-   plt.plot(epochs, zero_percentage, label='Noise', color='black')
-   plt.plot(epochs, one_percentage, label='Person Silhoutte', color='blue')
-   plt.plot(epochs, two_percentage, label='Hardly Identifiable person', color='green')
-   plt.plot(epochs, three_percentage, label='Identifiable person', color='red')
+   plt.plot(epochs, zero_percentage, label='Noise', color='black', linewidth=3.0)
+   plt.plot(epochs, one_percentage, label='Person Silhoutte', color='blue', linewidth=3.0)
+   plt.plot(epochs, two_percentage, label='Hardly Identifiable person', color='green', linewidth=3.0)
+   plt.plot(epochs, three_percentage, label='Identifiable person', color='red',linewidth=3.0)
    
    #label and titles
-   plt.xlabel('Epoch', fontsize=20)
-   plt.ylabel('Probability', fontsize=20)
-   plt.title('Probability for each class over total dataset each Epoch', fontsize=20)
+   plt.xlabel('Epoch', fontsize=30, fontweight='bold')
+   plt.ylabel('Probability', fontsize=30, fontweight='bold')
+   plt.title('Probability for each class over dataset each Epoch', fontsize=30, fontweight='bold')
    
    #settings epoch axis to have only discrete values
    ax = plt.gca()
-   ax.tick_params(axis='both', which='major', labelsize=20)
+   ax.tick_params(axis='both', which='major', labelsize=35)
    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
    
    #saving
-   plt.legend(loc='lower left', fontsize=20)
+   plt.legend(loc='best', framealpha=0.5, fontsize=28)
    plt.grid(True)
    plt.savefig(file_save, format='png', bbox_inches='tight')
    plt.clf()

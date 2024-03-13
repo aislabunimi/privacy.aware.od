@@ -27,20 +27,20 @@ def plot_compare_between_two_ap(ap_log_path, ap_log_to_compare_path, ap_model_na
             			recall_model_compare.append(float(recall_v))
 
 	plt.figure(figsize=(15, 10))
-	plt.plot(epochs_model, ap_model, linestyle='-', color='b', label=f'AP {ap_model_name}', marker='o')
-	plt.plot(epochs_model, recall_model, linestyle='-', color='r', label=f'Recall {ap_model_name}', marker='o')
+	plt.plot(epochs_model, ap_model, linestyle='-', color='b', label=f'AP {ap_model_name}', linewidth=3.0)
+	plt.plot(epochs_model, recall_model, linestyle='-', color='r', label=f'Recall {ap_model_name}', linewidth=3.0)
 
-	plt.plot(epochs_model_compare, ap_model_compare, linestyle='--', color='b', label=f'AP {ap_to_compare_model_name}', marker='x')
-	plt.plot(epochs_model_compare, recall_model_compare, linestyle='--', color='r', label=f'Recall {ap_to_compare_model_name}', marker='x')
+	plt.plot(epochs_model_compare, ap_model_compare, linestyle='--', color='b', label=f'AP {ap_to_compare_model_name}', linewidth=3.0)
+	plt.plot(epochs_model_compare, recall_model_compare, linestyle='--', color='r', label=f'Recall {ap_to_compare_model_name}', linewidth=3.0)
 
-	plt.title(ap_plot_title, fontsize=20)
+	plt.title(ap_plot_title, fontsize=30, fontweight='bold')
 	ax = plt.gca()
-	ax.tick_params(axis='both', which='major', labelsize=20)
+	ax.tick_params(axis='both', which='major', labelsize=35)
 	ax.xaxis.set_major_locator(MaxNLocator(integer=True))
 
-	plt.xlabel('Epoch', fontsize=20)
-	plt.ylabel('Value', fontsize=20)
-	plt.legend(loc='upper left', fontsize=20)
+	plt.xlabel('Epoch', fontsize=30, fontweight='bold')
+	plt.ylabel('Value', fontsize=30, fontweight='bold')
+	plt.legend(loc='best', framealpha=0.5, fontsize=28)
 	plt.grid(True)
 
 	plt.savefig(plotted_comparison_save_path, format='png', bbox_inches='tight')

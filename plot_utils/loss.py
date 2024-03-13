@@ -17,18 +17,18 @@ def plot_model_loss(loss_log_path, loss_save_name):
 
 	# Creo plot
 	plt.figure(figsize=(15, 10))
-	plt.plot(epochs, train_losses, linestyle='-', color='b', label='Train Loss', marker='o')
-	plt.plot(epochs, test_losses, linestyle='-', color='r', label='Validation Loss', marker='x')
+	plt.plot(epochs, train_losses, linestyle='-', color='b', label='Train Loss', linewidth=3.0)
+	plt.plot(epochs, test_losses, linestyle='-', color='r', label='Val Loss', linewidth=3.0)
 	
 	# config
 	ax = plt.gca()
-	ax.tick_params(axis='both', which='major', labelsize=20)
+	ax.tick_params(axis='both', which='major', labelsize=35)
 	ax.xaxis.set_major_locator(MaxNLocator(integer=True))
 	
-	plt.title('Training and Validation Loss Over Epochs', fontsize=20)
-	plt.xlabel('Epoch', fontsize=20)
-	plt.ylabel('Value', fontsize=20)
-	plt.legend(loc='upper right', fontsize=20)
+	plt.title('Training and Validation Loss Over Epochs', fontsize=30, fontweight='bold')
+	plt.xlabel('Epoch', fontsize=30, fontweight='bold')
+	plt.ylabel('Value', fontsize=30, fontweight='bold')
+	plt.legend(loc='best', framealpha=0.5, fontsize=28)
 	plt.grid(True)
 	
 	plt.savefig(loss_save_name, format='png', bbox_inches='tight')
