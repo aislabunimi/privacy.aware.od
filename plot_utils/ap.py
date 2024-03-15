@@ -1,10 +1,15 @@
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
+import os
 def plot_ap(ap_log_path, ap_save_name, best_ap_value_for_comparison=None, best_recall_value_for_comparison=None, model_name='model', ap_plot_title='AP and recall'):
 	epochs = []
 	ap = []
 	recall = []
 	# Dati dal file
+	if not os.path.exists(ap_log_path):
+           print(f"The file '{ap_log_path}' was not found. Skipping AP and AR plotting.")
+           plt.close()
+           return
 	with open(ap_log_path, 'r') as file:
     		for line in file:
         		parts = line.split()

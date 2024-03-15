@@ -3,6 +3,10 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 import os
 def plot_my_recons_classifier_metric(file_path, file_save):
+   if not os.path.exists(file_path):
+      print(f"The file '{file_path}' was not found. Skipping my classifier metric plotting.")
+      plt.close()
+      return
    with open(file_path, 'r') as json_file:
       data = json.load(json_file)
    #getting data, calculating percentage of tp, fp and fpiou over total_detections
@@ -42,6 +46,10 @@ def plot_my_recons_classifier_metric(file_path, file_save):
    plt.clf()
    
 def plot_my_recons_classifier_metric_probs(file_path, file_save):
+   if not os.path.exists(file_path):
+      print(f"The file '{file_path}' was not found. Skipping my classifier probs metric plotting.")
+      plt.close()
+      return
    with open(file_path, 'r') as json_file:
       data = json.load(json_file)
    #getting data, calculating percentage of tp, fp and fpiou over total_detections

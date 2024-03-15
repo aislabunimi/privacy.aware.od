@@ -124,7 +124,7 @@ def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, mo
 	mean = torch.tensor([0.485, 0.456, 0.406]).to(device)
 	std = torch.tensor([0.229, 0.224, 0.225]).to(device)
 	unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
-	#ms_ssim_module = MS_SSIM(data_range=1, size_average=True, channel=3, weights=[0.0448, 0.2856, 0.3001, 0.2363, 0.1333], K=(0.01, 0.07)) #size average fa la media fra ms_ssim delle img nel batch. Metto k2=0.07 anzichè il default 0.03 per "normalizzare" i valori ed evitare casi in cui ms_ssim=0
+	ms_ssim_module = MS_SSIM(data_range=1, size_average=True, channel=3, weights=[0.0448, 0.2856, 0.3001, 0.2363, 0.1333], K=(0.01, 0.07)) #size average fa la media fra ms_ssim delle img nel batch. Metto k2=0.07 anzichè il default 0.03 per "normalizzare" i valori ed evitare casi in cui ms_ssim=0
 	#lpips_loss_fn = LPIPS(reduction='mean', mean=[0., 0., 0.], std=[1., 1., 1.]) #mean e std settati così, in questo modo la vggnet non rinormalizza visto che i miei input sono già normalizzati
 	
 	my_rec_class_dict = {}
@@ -135,6 +135,7 @@ def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, mo
 	#lpips_model = LPIPS(net='vgg', model_path='lpips/lpips_my_weights.pth').to(device)
 	lpips_model = LPIPS(net='vgg').to(device) #alexnet, pesi di default, alla fine sembrano migliori	
 	lpips_score = 0
+	ms_ssim_score = 0
 	with torch.no_grad(): #non calcolo il gradiente, sto testando e bassa
 		for imgs, targets in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):
 			imgs, _ = imgs.decompose()
@@ -173,14 +174,14 @@ def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, mo
 			plt.clf()
 			"""
 			
-			#trans = transforms.Resize((reconstructed.shape[2], reconstructed.shape[3]), antialias=False)
-			#orig_imgs = trans(imgs)
-			#reconstructed=unnormalize(reconstructed)
-			#orig_imgs=unnormalize(orig_imgs)
+			trans = transforms.Resize((reconstructed.shape[2], reconstructed.shape[3]), antialias=False)
+			orig_imgs = trans(imgs)
+			reconstructed_ms=unnormalize(reconstructed)
+			orig_imgs_ms = unnormalize(orig_imgs)
 			#alcuni valori possono capitare negativi. Il clamping lo faccio per essere sicuro di riportare il tutto alle condizioni necessarie per poter usare l'ms_sssim
-			#reconstructed = torch.clamp(reconstructed, min=0, max=1)
-			#orig_imgs = torch.clamp(orig_imgs, min=0, max=1)
-			#ms_ssim_score += ms_ssim_module(reconstructed, orig_imgs)
+			reconstructed_ms = torch.clamp(reconstructed_ms, min=0, max=1)
+			orig_imgs_ms = torch.clamp(orig_imgs_ms, min=0, max=1)
+			ms_ssim_score += ms_ssim_module(reconstructed_ms, orig_imgs_ms).item()
 			#lpips_score += lpips_loss_fn(reconstructed, orig_imgs) #lpips può essere anche sopra 1 come valore
 			trans_te = transforms.Resize((64, 64), antialias=False)
 			reconstructed = trans_te(reconstructed)
@@ -202,10 +203,10 @@ def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, mo
 	#loss con i parametri di default della tasknet, ma val loss con i parametri usati per allenamento
 	compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, results_dir, res)
 	compute_michele_metric(evaluator_complete_metric, results_dir, epoch)
-	#ms_ssim_score /= batch_size #0.6 su plain, 0.34 su 10prop, 0.09 su 3prop (completamente irriconoscibile), 0.20 su 1bestiou5neg0bg. Quindi 0.20 potrebbe essere la soglia di privacy?
-	#ms_ssim_path="results/ms_ssim_score_log.txt"
-	#with open(ms_ssim_path, 'a') as file:
-	#	file.write(f"{epoch} {ms_ssim_score}\n")
+	ms_ssim_score /= batch_size
+	ms_ssim_path= f"{results_dir}/ms_ssim_score_log.txt"
+	with open(ms_ssim_path, 'a') as file:
+		file.write(f"{epoch} {ms_ssim_score}\n")
 	lpips_score /= batch_size
 	lpips_path = f"{results_dir}/lpips_score_log.txt"
 	with open(lpips_path, 'a') as file:
@@ -338,13 +339,7 @@ def train_model_on_disturbed_images(train_dataloader, epoch, device, model, mode
 		disturbed_imgs, _ = disturbed_imgs.decompose()
 		disturbed_imgs = disturbed_imgs.to(device)
 		orig_imgs, _ = orig_imgs.decompose()
-		orig_imgs = orig_imgs.to(device)
-		
-		#import random
-		#scales = [200, 150, 100, 80, 120, 140]
-		#random_size = random.choice(scales)
-		#trans = transforms.Resize((random_size, random_size), antialias=False)
-		#disturbed_imgs = trans(disturbed_imgs)
+		orig_imgs = orig_imgs.to(device)		
 		
 		"""#For testing
 		import matplotlib.pyplot as plt
@@ -365,31 +360,9 @@ def train_model_on_disturbed_images(train_dataloader, epoch, device, model, mode
 		trans = transforms.Resize((reconstructed.shape[2], reconstructed.shape[3]), antialias=False)
 		#riduco la dimensione dell'originale all'output dell'unet; ha più senso rispetto che riportare all'originale l'ouput dell'unet, che richiederebbe di aggiungere info
 		orig_imgs = trans(orig_imgs)
-		
-		"""
-		plt.imshow(orig_imgs[1].cpu().permute(1, 2, 0))
-		plt.title('orig_imgs')
-		plt.axis('off')
-		plt.show()
-		"""
-		
-		#reconstructed=unnormalize(reconstructed)
-		#orig_imgs=unnormalize(orig_imgs)
-		#alcuni valori possono capitare negativi. Il clamping lo faccio per essere sicuro di riportare il tutto alle condizioni necessarie per poter usare l'ms_sssim
-		#reconstructed = torch.clamp(reconstructed, min=0, max=1)
-		#orig_imgs = torch.clamp(orig_imgs, min=0, max=1)	
-		#true_loss = 1 - ms_ssim_module(reconstructed, orig_imgs)
-		#lpips_loss = lpips_model(reconstructed, orig_imgs)
-		#true_loss = (torch.mean(lpips_loss))
 		true_loss = loss_fn(reconstructed, orig_imgs)
 
-		#plt.imshow(orig_imgs[0].cpu().permute(1, 2, 0))
-		#plt.title(orig_imgs)
-		#plt.axis('off')
-		#plt.show()
-		
 		model_optimizer.zero_grad(set_to_none=True) #pulisco i gradienti prima del backpropagation step
-		
 		true_loss.backward() #computo il gradiente per la total loss con rispetto ai parametri
 		model_optimizer.step()		
 		running_loss += true_loss.item()
@@ -404,9 +377,10 @@ def val_model_on_disturbed_images(val_dataloader, epoch, device, model, model_sa
 	mean = torch.tensor([0.485, 0.456, 0.406]).to(device)
 	std = torch.tensor([0.229, 0.224, 0.225]).to(device)
 	unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
-	#ms_ssim_module = MS_SSIM(data_range=1, size_average=True, channel=3, weights=[0.0448, 0.2856, 0.3001, 0.2363, 0.1333], K=(0.01, 0.07))
-	#loss_fn = torch.nn.MSELoss()
-	#lpips_model = LPIPS(net='vgg').to(device)
+	ms_ssim_module = MS_SSIM(data_range=1, size_average=True, channel=3, weights=[0.0448, 0.2856, 0.3001, 0.2363, 0.1333], K=(0.01, 0.07))
+	lpips_model = LPIPS(net='vgg').to(device)
+	ms_ssim_score = 0
+	lpips_score = 0
 	with torch.no_grad(): #non calcolo il gradiente, sto testando e bassa
 		for disturbed_imgs, orig_imgs in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):
 			disturbed_imgs, _ = disturbed_imgs.decompose()
@@ -415,21 +389,33 @@ def val_model_on_disturbed_images(val_dataloader, epoch, device, model, model_sa
 			orig_imgs = orig_imgs.to(device)
 			
 			reconstructed = model(disturbed_imgs)
-			#print(reconstructed[0].shape[1], reconstructed[0].shape[2])
 			trans = transforms.Resize((reconstructed.shape[2], reconstructed.shape[3]), antialias=False)
 			orig_imgs = trans(orig_imgs)
-
-			#reconstructed=unnormalize(reconstructed)
-			#orig_imgs=unnormalize(orig_imgs)
-			#alcuni valori possono capitare negativi. Il clamping lo faccio per essere sicuro di riportare il tutto alle condizioni necessarie per poter usare l'ms_sssim
-			#reconstructed = torch.clamp(reconstructed, min=0, max=1)
-			#orig_imgs = torch.clamp(orig_imgs, min=0, max=1)	
-			#true_loss = 1 - ms_ssim_module(reconstructed, orig_imgs)
-			#lpips_loss = lpips_model(reconstructed, orig_imgs)
-			#true_loss = (torch.mean(lpips_loss))
 			true_loss = loss_fn(reconstructed, orig_imgs)
+			
+			trans_lpips = transforms.Resize((64, 64), antialias=False)
+			reconstructed_lpips = trans_lpips(reconstructed)
+			orig_imgs_lpips = trans_lpips(orig_imgs)
+			lpips_temp = lpips_model(reconstructed_lpips, orig_imgs_lpips)
+			lpips_score += (torch.mean(lpips_temp)).item()
+			
+			reconstructed=unnormalize(reconstructed)
+			orig_imgs=unnormalize(orig_imgs)
+			#alcuni valori possono capitare negativi. Il clamping lo faccio per essere sicuro di riportare il tutto alle condizioni necessarie per poter usare l'ms_sssim
+			reconstructed = torch.clamp(reconstructed, min=0, max=1)
+			orig_imgs = torch.clamp(orig_imgs, min=0, max=1)	
+			ms_ssim_score += ms_ssim_module(reconstructed, orig_imgs).item()
+			
 			running_loss += true_loss.item()		
 	running_loss /= batch_size #calcolo la loss media
+	lpips_score /= batch_size #calcolo lpips loss media
+	lpips_path = f"{results_dir}/lpips_score_log.txt"
+	with open(lpips_path, 'a') as file:
+		file.write(f"{epoch} {lpips_score}\n")
+	ms_ssim_score /= batch_size #calcolo ms_ssim medio
+	ms_ssim_path = f"{results_dir}/ms_ssim_score_log.txt"
+	with open(ms_ssim_path, 'a') as file:
+		file.write(f"{epoch} {ms_ssim_score}\n")
 	model_save_path = f'{model_save_path}_{epoch}.pt'   
 	create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
 	save_image_examples(example_dataloader, results_dir, model, epoch, device)

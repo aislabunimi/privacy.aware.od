@@ -1,11 +1,16 @@
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
+import os
 def plot_model_loss(loss_log_path, loss_save_name):
 	#Liste vuote
 	epochs = []
 	train_losses = []
 	test_losses = []
 	# Salvo il contenuto del file nelle liste
+	if not os.path.exists(loss_log_path):
+           print(f"The file '{loss_log_path}' was not found. Skipping loss plotting.")
+           plt.close()
+           return
 	with open(loss_log_path, 'r') as file:
     		for line in file:
         		parts = line.split()

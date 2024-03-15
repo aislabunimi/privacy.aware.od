@@ -1,8 +1,13 @@
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
+import os
 def plot_lpips_score(lpips_score_log_path, lpips_save_name):
 	epochs = []
 	lpips = []
+	if not os.path.exists(lpips_score_log_path):
+           print(f"The file '{lpips_score_log_path}' was not found. Skipping LPIPIS score plotting.")
+           plt.close()
+           return
 	with open(lpips_score_log_path, 'r') as file:
     		for line in file:
         		parts = line.split()

@@ -15,6 +15,9 @@ from plot_utils.plot_michele_metric import plot_michele_metric
 from plot_utils.compare_ap import plot_compare_between_two_ap
 from plot_utils.plot_images import *
 from plot_utils.plot_my_recons_classifier_metric import plot_my_recons_classifier_metric, plot_my_recons_classifier_metric_probs
+from plot_utils.lpips_score import plot_lpips_score
+from plot_utils.ms_ssim import plot_ms_ssim_score
+from plot_utils.plot_my_regressor import plot_reconrate
 ###### CONFIG
 seed_everything(0) #per rendere deterministico l'esperimento
 #nota: upsample_bilinear2d_backward_out_cuda della unet non è deterministico
@@ -134,18 +137,16 @@ extract_ap(f'{results_dir}/myinterp_ap_scoreabovethresh_iou75.txt', f'{results_d
 #Tasknet 10k coco indoor people dataset values: AP: 0.969, Recall: 0.670
 plot_ap(f'{results_dir}/ext_myinterp_ap_scoreabovethresh_iou75.txt', f'{save_dir}/myinterp_ap_scoreabovethresh_iou75.png', best_ap_value_for_comparison=0.969, best_recall_value_for_comparison=0.670, model_name='Tasknet', ap_plot_title='(IoU=0.75, area=all, maxDets=100) AP, AR Over Epochs')
 
-#plot_compare_between_two_ap(ap_standard_extracted, f'{results_dir}/ap_overlap.txt', ap_model_name='Unet without overlapping prop, iou=0.6', ap_to_compare_model_name='Unet with overlapping prop (old method)', plotted_comparison_save_path=ap_comparison_save_path, ap_plot_title=ap_plot_title)
+plot_compare_between_two_ap(f'{results_dir}/ext_standard_ap2.txt', f'{results_dir}/ext_standard_ap.txt', ap_model_name='Unet2', ap_to_compare_model_name='Unet', plotted_comparison_save_path=f'{save_dir}/compare_AP.png', ap_plot_title='(IoU=0.75, area=all, maxDets=100) AP, AR Over Epochs')
 
-#from plot_utils.ms_ssim import plot_ms_ssim_score
-#plot_ms_ssim_score(ms_ssim_score_log_path=f"{results_dir}/ms_ssim_score_log.txt", ms_ssim_save_name=f'{save_dir}/ms_ssim_score.png')
-
-from plot_utils.lpips_score import plot_lpips_score
+plot_ms_ssim_score(ms_ssim_score_log_path=f"{results_dir}/ms_ssim_score_log.txt", ms_ssim_save_name=f'{save_dir}/ms_ssim_score.png')
 plot_lpips_score(lpips_score_log_path=f"{results_dir}/lpips_score_log.txt", lpips_save_name=f"{save_dir}/lpips_score.png")
 
 plot_michele_metric(michele_metric_file_list, michele_metric_file_save_list)
 
 plot_my_recons_classifier_metric(f'{results_dir}/my_recons_classifier_log.json', f'{save_dir}/my_recons_classifier.png')
 plot_my_recons_classifier_metric_probs(f'{results_dir}/my_recons_classifier_log.json', f'{save_dir}/my_recons_classifier_probs.png')
+plot_reconrate(f'{results_dir}/recon_rate_log.txt', f'{save_dir}/regressor_recon_rate.png')
 
 #Plotting per le img
 for img in image_name_list:

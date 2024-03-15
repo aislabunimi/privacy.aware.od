@@ -10,6 +10,10 @@ def plot_michele_metric(file_list, file_save_list):
 		matches = re.findall(pattern, file_path)
 		iou_value = float(matches[0])
 		score_value = float(matches[1])
+		if not os.path.exists(file_path):
+		   print(f"The file '{file_path}' was not found. Skipping relative custom metric plotting.")
+		   plt.close()
+		   return
 		with open(file_path, 'r') as json_file:
     			data = json.load(json_file)
 		#getting data, calculating percentage of tp, fp and fpiou over total_detections

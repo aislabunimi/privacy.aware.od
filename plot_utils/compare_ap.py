@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
+import os
 def plot_compare_between_two_ap(ap_log_path, ap_log_to_compare_path, ap_model_name, ap_to_compare_model_name, plotted_comparison_save_path, ap_plot_title):
 	epochs_model = []
 	ap_model = []
@@ -7,7 +8,10 @@ def plot_compare_between_two_ap(ap_log_path, ap_log_to_compare_path, ap_model_na
 	epochs_model_compare = []
 	ap_model_compare = []
 	recall_model_compare = []
-
+	if not os.path.exists(ap_log_path):
+           print(f"The file '{ap_log_path}' was not found. Skipping compare AP and AR plotting.")
+           plt.close()
+           return
 	with open(ap_log_path, 'r') as file:
     		for line in file:
         		parts = line.split()
@@ -16,7 +20,10 @@ def plot_compare_between_two_ap(ap_log_path, ap_log_to_compare_path, ap_model_na
            	 		epochs_model.append(int(epoch))
             			ap_model.append(float(ap_v))
             			recall_model.append(float(recall_v))
-
+	if not os.path.exists(ap_log_to_compare_path):
+           print(f"The file '{ap_log_to_compare_path}' was not found. Skipping compare AP and AR plotting.")
+           plt.close()
+           return
 	with open(ap_log_to_compare_path, 'r') as file:
     		for line in file:
        		 	parts = line.split()

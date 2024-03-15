@@ -1,3 +1,4 @@
+import os
 def extract_values(lines, split_line_value, coco_iou_modified):
     epoch = int(lines[0].split()[split_line_value])
     if coco_iou_modified==50: #indica se ho modificato il coco eval per tenere solo iou 0.50:0.50
@@ -17,6 +18,9 @@ def extract_values(lines, split_line_value, coco_iou_modified):
 
 
 def extract_ap(input_file, output_file, standard_ap=True, coco_iou_modified=None):
+    if not os.path.exists(input_file):
+       print(f"The file '{input_file}' was not found. Skipping AP and AR extraction.")
+       return
     with open(input_file, 'r') as f:
         lines = f.readlines()
 
