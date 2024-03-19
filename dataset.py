@@ -259,6 +259,8 @@ class DisturbedDataset(torch.utils.data.Dataset):
         	elif not self.is_training and not self.generate_disturbed_dataset:
         	   first_size = [self.resize_scales[0]]
         	   resize = RandomResize(first_size, max_size=None)
+        	   disturbed_image, _ = resize(disturbed_image, target=None)
+        	   orig_image, _ = resize(orig_image, target=None)
         	disturbed_image, _ = self.transform(disturbed_image, target=None)
         	
         	if self.orig_path is not None:
