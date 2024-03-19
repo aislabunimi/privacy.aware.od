@@ -32,8 +32,8 @@ if use_coco_train_for_generating_disturbed_set:
 	disturbed_train_img_gen='/home/alberti/coco_people_indoor/train/images'
 	disturbed_train_ann_gen='/home/alberti/coco_people_indoor/train/train.json'
 else:
-	disturbed_train_img_gen='/home/math0012/Tesi_magistrale/open_images_v7/images'
-	disturbed_train_ann_gen='/home/math0012/Tesi_magistrale/open_images_v7/open_images_id_list.json'
+	disturbed_train_img_gen='/home/alberti/open_images/images'
+	disturbed_train_ann_gen='/home/alberti/open_images/open_images_id_list.json'
 disturbed_train_img_folder='disturbed_dataset/train'
 disturbed_train_ann='disturbed_dataset/train.json'
 disturbed_val_img_folder='disturbed_dataset/val'
@@ -56,20 +56,21 @@ else:
 	train_batch_size=4
 	val_batch_size=4  #metterla a 1 porta ad avere loss non confrontabile con il train; in più il pad di detr non dovrebbe creare problemi
 	train_img_folder = '/home/alberti/coco_people_indoor/train/images'
-	#train_img_folder = '/home/math0012/Tesi_magistrale/open_images_v7/images'
+	#train_img_folder = '/home/alberti/open_images/images'
 	train_ann_file = '/home/alberti/coco_people_indoor/train/train.json'
 	val_img_folder = '/home/alberti/coco_people_indoor/val/images'
 	val_ann_file = '/home/alberti/coco_people_indoor/val/val.json'
 	resize_scales_transform = [256, 288, 320, 352, 384, 416] #piu piccole, meno memoria
 
+#use_dataset_subset=11296 #Per simulare comparison backward fra coco e openimages e vedere se c'è differenza
 use_dataset_subset=0
 #use_dataset_subset=10 #se è 0 uso tutto il dataset, se è n uso esattamente n elementi dal dataset
 #Config Execution mode of the Architecture
 resume_training=False
-save_disturbed_dataset=False
+save_disturbed_dataset=True
 keep_original_size=False #quando generi il dataset disturbato, deve essere a True se mi serve per il comparison con la tasknet plain, se no a False se devo fare train backward
 #split_size_train_set = 0 #necessario per quando si fa il train backward. Se a 0 nessuno split. Non è possibile usare lo stesso dataset per train perché le img ricostruite dal train potrebbero contenere più info rispetto a quelle generate dal validation. Quindi tengo i primi n elementi per train del modello con la tasknet, poi genero di disturbati quelli da n in poi, e userò solo quelli per trainare il backward. Questo se voglio usare coco indoor.
-train_backward_on_disturbed_sets=False
+train_backward_on_disturbed_sets=False #!!! CHANGE train_img_folder TO OPEN IMAGE PATH IF TRAINING WITH OPEN IMAGES
 num_epochs = 50 #50 per training Unet normale, 100 per backward, 10 o meno per tasknet
 
 ###### MODELLI
@@ -103,8 +104,8 @@ elif not train_backward_on_disturbed_sets:
 	   tasknet = fasterrcnn_resnet50_fpn_modificata(weights=weights, progress=False,
 		rpn_use_custom_filter_anchors=False, rpn_n_top_pos_to_keep=1, rpn_n_top_neg_to_keep=2,
 		rpn_n_top_bg_to_keep=0, rpn_objectness_bg_thresh=0.0,
-		box_use_custom_filter_proposals_objectness=True, box_n_top_pos_to_keep=4, 
-		box_n_top_neg_to_keep=4, box_n_top_bg_to_keep=0, box_obj_bg_score_thresh=0.9)
+		box_use_custom_filter_proposals_objectness=True, box_n_top_pos_to_keep=10, 
+		box_n_top_neg_to_keep=10, box_n_top_bg_to_keep=0, box_obj_bg_score_thresh=0.9)
 	else: #Se no uso come metodo quello basato su score, più lento e peggiori risultati
 	   tasknet = fasterrcnn_resnet50_fpn_modificata(weights=weights, progress=False,
 		rpn_post_nms_top_n_train=500, #valore di default del post:2000, riduco le prop che sono tante
