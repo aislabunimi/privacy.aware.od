@@ -60,11 +60,6 @@ def show_res_test_unet(model, tasknet, device, img_file_path, not_reconstructed,
 
 		out_to_plot = unnormalize(out)
 
-		#La transform qui sotto fixxa il mismatch visivo fra ouput e ricostruzione
-		#out_to_plot = transforms.functional.convert_image_dtype(out[0], torch.uint8)
-		#out_to_plot = out_to_plot.squeeze(0) #necessario per lvpga
-		#recons_out = out_to_plot #serve dopo per vedere di fare le bbox sopra la ricostruita
-		#out_only_recon = out_to_plot.detach().cpu().numpy().transpose(1,2,0)
 	else:
 		out = img
 		out_to_plot = img
@@ -184,14 +179,12 @@ def compare_two_results_unet(unet, tasknet, device, img_file_path, name_path_sav
 	mean = torch.tensor([0.485, 0.456, 0.406])
 	std = torch.tensor([0.229, 0.224, 0.225])
 	unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
-	
 	image = Image.open(img_file_path).convert("RGB")
 	eval_transform = get_transform()
 	img = eval_transform(image)
 	img = img.unsqueeze(0)
 	img = img.to(device)
 	img, _ = resize(img, None, 256) #in validation ora è così
-	
 	
 	res_tasknet = tasknet(img)
 	img_primo_plot = img.squeeze(0)
@@ -200,12 +193,7 @@ def compare_two_results_unet(unet, tasknet, device, img_file_path, name_path_sav
 		
 	load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler)
 	out = unet(img)
-	#preparo poi per calcolo msssim
-	#ms_ssim_module = MS_SSIM(data_range=1, size_average=False, channel=3, weights=[0.0448, 0.2856, 0.3001, 0.2363, 0.1333], K=(0.01, 0.03)) #default
-	#ms_ssim_module = MS_SSIM(data_range=1, size_average=False, channel=3, weights=[0.0448, 0.2856, 0.3001, 0.2363, 0.1333], K=(0.01, 0.07))
-	#ms_ssim_module = MS_SSIM(data_range=1, size_average=False, channel=3, weights=[0.0, 0.1, 0.25, 0.3, 0.35], K=(0.03, 0.09)) #dai test empirici sembra debba pesare di più la destra della coda (alte frequenze)
-	# human visual sensitivity peaks at middle frequencies (around 4 cycles per degree of visual angle) and decreases along both high- and low-frequency directions.
-	#Low-frequency information represents global or coarse features, while high-frequency information represents fine details or textures.
+
 	trans_r = transforms.Resize((out.shape[2], out.shape[3]), antialias=False)
 	orig_img_r = trans_r(img)
 	orig_img = unnormalize(orig_img_r)
@@ -217,6 +205,7 @@ def compare_two_results_unet(unet, tasknet, device, img_file_path, name_path_sav
 	
 	plt.subplot(1, 3, 2)
 	out_to_plot = unnormalize(out)
+	
 	reconstructed = tasknet(out)
 	pred_recon = reconstructed[0]
 	nms_pred_recon = apply_nms(pred_recon, iou_thresh=0.1) #per applicare nms e salvare l'ultima box
@@ -226,30 +215,14 @@ def compare_two_results_unet(unet, tasknet, device, img_file_path, name_path_sav
 	out_to_plot = torch.clamp(out_to_plot, min=0, max=1)
 	orig_img = torch.clamp(orig_img, min=0, max=1)
 	
-	#ms_ssim_score = ms_ssim_module(out_to_plot, orig_img)
-	#ms_ssim_score = ms_ssim_score.item()
-
-	"""
-	iw_ssim_index: torch.Tensor = piq.information_weighted_ssim(out_to_plot, orig_img, data_range=1.)
-	iw_ssim_loss = piq.InformationWeightedSSIMLoss(data_range=1., reduction='none').to(out_to_plot.device)(out_to_plot, orig_img)
-	print(f"IW-SSIM index: {iw_ssim_index.item():0.4f}, loss: {iw_ssim_loss.item():0.4f}")
-	"""
-	
 	trans_te = transforms.Resize((64, 64), antialias=False)
 	orig_img_r = trans_te(orig_img_r)
 	out = trans_te(out)
 	from .lpips import LPIPS
 	#lpips_model = LPIPS(net='vgg', model_path='/home/math0012/Tesi_magistrale/Unet_faster_modificata/plot_utils/lpips_my_weights.pth').to(device)
 	lpips_model = LPIPS(net='vgg').to(device)
-	#lpips_model = LPIPS(net='vgg').to(device)
-	#lpips_loss: torch.Tensor = piq.LPIPS(reduction='mean', mean=[0., 0., 0.], std=[1., 1., 1.])(out, orig_img_r)
-	#lpips_score = lpips_loss.item()
 	lpips_score = lpips_model(out, orig_img_r).item()
 	
-	#dists_loss = piq.DISTS(reduction='none', mean=[0.0, 0.0, 0.0], std=[1.0, 1.0, 1.0])(out, orig_img_r)
-	#print(f"DISTS: {dists_loss.item():0.4f}")
-	
-	#plt.title(f'{name}, MS_SSIM: {ms_ssim_score:0.3f}', fontsize=16)
 	plt.title(f'{name}, LPIPS: {lpips_score:0.3f}', fontsize=20)
 	plot_results(out_to_plot, nms_pred_recon['scores'], nms_pred_recon['boxes'])
 	plt.subplot(1, 3, 3)
@@ -265,26 +238,11 @@ def compare_two_results_unet(unet, tasknet, device, img_file_path, name_path_sav
 	
 	out_to_plot = torch.clamp(out_to_plot, min=0, max=1)
 	
-	#ms_ssim_score = ms_ssim_module(out_to_plot, orig_img)
-	#ms_ssim_score = ms_ssim_score.item()
-	
-	"""
-	iw_ssim_index: torch.Tensor = piq.information_weighted_ssim(out_to_plot, orig_img, data_range=1.)
-	iw_ssim_loss = piq.InformationWeightedSSIMLoss(data_range=1., reduction='none').to(out_to_plot.device)(out_to_plot, orig_img)
-	print(f"IW-SSIM index: {iw_ssim_index.item():0.4f}, loss: {iw_ssim_loss.item():0.4f}")
-	"""
-	
 	trans_te = transforms.Resize((64, 64), antialias=False)
 	out = trans_te(out)
-	#lpips_loss: torch.Tensor = piq.LPIPS(reduction='mean', mean=[0., 0., 0.], std=[1., 1., 1.])(out, orig_img_r)
-	#lpips_score = lpips_loss.item()
+
 	lpips_score = lpips_model(out, orig_img_r).item()
-	
-	
-	#dists_loss = piq.DISTS(reduction='none', mean=[0.0, 0.0, 0.0], std=[1.0, 1.0, 1.0])(out, orig_img_r)
-	#print(f"DISTS: {dists_loss.item():0.4f}")
-	
-	#plt.title(f'{name}, MS_SSIM: {ms_ssim_score:0.3f}', fontsize=16)
+
 	plt.title(f'{name}, LPIPS: {lpips_score:0.3f}', fontsize=20)
 	plot_results(out_to_plot, nms_pred_recon['scores'], nms_pred_recon['boxes'])
 	
@@ -294,14 +252,17 @@ def compare_two_results_unet(unet, tasknet, device, img_file_path, name_path_sav
 
 from torchvision.utils import save_image
 def save_disturbed_pred(unet, device, img_file_path, name_path_save):
+	unet.eval()
 	image = Image.open(img_file_path).convert("RGB")
-	eval_transform = transforms.Compose([ transforms.PILToTensor(), transforms.ConvertImageDtype(torch.float)])
+	eval_transform = get_transform()
 	img = eval_transform(image)
-	img = img.to(device)
 	img = img.unsqueeze(0)
+	img = img.to(device)
+	img, _ = resize(img, None, 256) #in validation ora è così
 	recons = unet(img)
 	mean = torch.tensor([0.485, 0.456, 0.406])
 	std = torch.tensor([0.229, 0.224, 0.225])
 	unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
 	recons = unnormalize(recons)
+	recons = torch.clamp(recons, min=0, max=1)
 	save_image(recons, name_path_save)

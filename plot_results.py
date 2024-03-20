@@ -33,9 +33,10 @@ michele_metric_file_save_list=[f'{save_dir}/iou0.5_score0.5.png', f'{save_dir}/i
 #models
 unet_save_path = "model_weights/model"
 tasknet_save_path = "tasknet_weights/tasknet"
-unet_weights_load= "model_weights/model_25.pt"
-unet_weights_to_compare= "model_weights/model_50.pt"
+unet_weights_load= "model_weights/model_50.pt"
+unet_weights_to_compare= "model_weights/model_100.pt"
 tasknet_weights_load= "tasknet_weights/tasknet_10.pt"
+plot_backward_images=True
 #Test images:
 image_save_prefix='test'
 image_list_folder='test_data'
@@ -149,26 +150,37 @@ plot_my_recons_classifier_metric_probs(f'{results_dir}/my_recons_classifier_log.
 plot_reconrate(f'{results_dir}/recon_rate_log.txt', f'{save_dir}/regressor_recon_rate.png')
 
 #Plotting per le img
-for img in image_name_list:
-	image_path=''
-	image_path=f'{image_list_folder}/{img}.jpg'
-	image_save_name=f'{save_dir}/{image_save_prefix}_{img}.png'
-	compare_two_results_unet(unet, tasknet, device, image_path, image_save_name, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler)
-	plt.clf()
+if not plot_backward_images:
+   for img in image_name_list:
+      image_path=''
+      image_path=f'{image_list_folder}/{img}.jpg'
+      image_save_name=f'{save_dir}/{image_save_prefix}_{img}.png'
+      compare_two_results_unet(unet, tasknet, device, image_path, image_save_name, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler)
+      plt.clf()
+      
+   if not os.path.exists(f'{save_dir}/{image_val_folder}'):
+      os.makedirs(f'{save_dir}/{image_val_folder}')
+   for img in val_set_list:
+      image_path=''
+      image_path=f'{image_list_folder}/{image_val_folder}/{img}.jpg'
+      image_save_name=f'{save_dir}/{image_val_folder}/{image_save_prefix}_{img}.png'
+      compare_two_results_unet(unet, tasknet, device, image_path, image_save_name, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler)
+      plt.clf()
 
-if not os.path.exists(f'{save_dir}/{image_val_folder}'):
-	os.makedirs(f'{save_dir}/{image_val_folder}')
-for img in val_set_list:
-	image_path=''
-	image_path=f'{image_list_folder}/{image_val_folder}/{img}.jpg'
-	image_save_name=f'{save_dir}/{image_val_folder}/{image_save_prefix}_{img}.png'
-	compare_two_results_unet(unet, tasknet, device, image_path, image_save_name, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler)
-	plt.clf()
-"""
+else:
 #show_res_test_unet(unet, tasknet, device, 'plot/val.jpg', True, 'plot/reconstructed_person.png')
-load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler)
-for img in image_name_list:
-	image_path=f'plot/{img}.jpg'
-	image_save_name=f'plot/disturbed_{img}.png'
-	save_disturbed_pred(unet, device, image_path, image_save_name)
-"""
+#load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler)
+   for img in image_name_list:
+      image_path=f'{image_list_folder}/{img}.jpg'
+      image_save_name=f'{save_dir}/disturbed_{img}.png'
+      save_disturbed_pred(unet, device, image_path, image_save_name)
+      plt.clf()
+      
+   if not os.path.exists(f'{save_dir}/{image_val_folder}'):
+      os.makedirs(f'{save_dir}/{image_val_folder}')
+   for img in val_set_list:
+      image_path=''
+      image_path=f'{image_list_folder}/{image_val_folder}/{img}.jpg'
+      image_save_name=f'{save_dir}/{image_val_folder}/disturbed_{img}.png'
+      save_disturbed_pred(unet, device, image_path, image_save_name)
+      plt.clf()
