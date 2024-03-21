@@ -1,7 +1,7 @@
 import torch
 from torch import nn
-
-#rimuovo n_classes che a me non serve, voglio ricostruire con stessi canali dell'img originale
+#code mostly copy pasted from https://github.com/milesial/Pytorch-UNet
+#Removed n classes
 class UNet(nn.Module):
     def __init__(self, n_channels, bilinear=False):
         super(UNet, self).__init__()
@@ -20,10 +20,7 @@ class UNet(nn.Module):
         self.up4 = (Up(128, 64, bilinear))
         self.outc = (OutConv(64, n_channels))
 
-        #devo rimuovere i collegamenti -> non mi interessano visto che encoder e decoder
-        #in deployment stanno su due dispostivi separati!
-        #creo quindi mio forward custom che usa solo x visto che ora non devo più ricordarmi degli out precedenti
-
+        #Removed skip connections in forward
     def forward(self, x):
         x = self.inc(x)
         x = self.down1(x)
@@ -92,13 +89,13 @@ class Up(nn.Module):
         # if bilinear, use the normal convolutions to reduce the number of channels
         if bilinear:
             self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-            self.conv = DoubleConv(in_channels, out_channels, in_channels // 2)
- #modifico anche qui, facendo che non divido per 2 il secondo in_channels di self.up       
+            self.conv = DoubleConv(in_channels, out_channels, in_channels // 2)      
         else:
+            #the second in_channels is not divided by 2 as I can't exploit skip connections
             self.up = nn.ConvTranspose2d(in_channels, in_channels, kernel_size=2, stride=2)
             self.conv = DoubleConv(in_channels, out_channels)
 
-#forward custom, non mi interessano più le connessioni
+#forward custom without connections
     def forward(self, x):
         x = self.up(x)
         return self.conv(x)

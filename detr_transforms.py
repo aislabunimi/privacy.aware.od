@@ -1,7 +1,4 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
-"""
-Transforms and data augmentation for both image + bbox.
-"""
+# Modified version of DETR transforms. # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 import random
 
 import PIL
@@ -9,8 +6,6 @@ import torch
 import torchvision.transforms as T
 import torchvision.transforms.functional as F
 
-#from util.box_ops import box_xyxy_to_cxcywh
-#from util.misc import interpolate
 def box_xyxy_to_cxcywh(x):
     x0, y0, x1, y1 = x.unbind(-1)
     b = [(x0 + x1) / 2, (y0 + y1) / 2,
@@ -84,7 +79,7 @@ def hflip(image, target):
 
     w, h = image.size
     
-    #Aggiunto io per renderlo compatibile con l'assenza di target del dataset disturbed
+    #My add: Added for being compatible with assence of targets with disturbed images
     if target is None:
         return flipped_image, None
 
@@ -130,8 +125,6 @@ def resize(image, target, size, max_size=None):
             return get_size_with_aspect_ratio(image_size, size, max_size)
 
     size = get_size(image.size, size, max_size)
-    #size = (size, size) #transform modificata per fare stretching dell'immagine ma poter poi
-    #usarle con lvpga.
     rescaled_image = F.resize(image, size)
 
     if target is None:
@@ -278,7 +271,8 @@ class Normalize(object):
         if target is None:
             return image, None
         target = target.copy()
-        h, w = image.shape[-2:] ###RIMUOVO le modifiche alle bbox perchè sono già giuste
+        h, w = image.shape[-2:] 
+        #Removed bbox adjustment as they are already in right format for Faster RCNN
         #if "boxes" in target:
         #    boxes = target["boxes"]
         #    boxes = box_xyxy_to_cxcywh(boxes)

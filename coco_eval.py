@@ -1,3 +1,4 @@
+#Code mostly copy paster from Detr repository
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 """
 COCO evaluator that works in distributed mode.

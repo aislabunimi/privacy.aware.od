@@ -16,13 +16,12 @@ def plot_my_recons_classifier_metric(file_path, file_save):
    one_percentage = [(entry['1'] / entry['total']) if entry['total'] != 0 else 0 for entry in data]
    two_percentage = [(entry['2'] / entry['total']) if entry['total'] != 0 else 0 for entry in data]
    three_percentage = [(entry['3'] / entry['total']) if entry['total'] != 0 else 0 for entry in data]
-   """ Cosa rappresenta ciascun valore:
-   0 rappresentano img con solo rumore
-   1 img con contorni persone, non identificabili
-   2 img con presenza persone riconoscibile facilmente ma difficilmente identificabili
-   3 img con persone riconoscibili e identificabili    
-   """
-   
+   """ What every value represents:
+   0 images with only noiserappresentano img con solo rumore
+   1 images with people silhouette, not identifiable
+   2 images not identifiable but it's easy to see the presence of a person
+   3 images with person identifiable
+   """  
    plt.figure(figsize=(15, 10))
    plt.plot(epochs, zero_percentage, label='Noise', color='black', linewidth=3.0)
    plt.plot(epochs, one_percentage, label='Person Silhoutte', color='blue', linewidth=3.0)
@@ -59,13 +58,7 @@ def plot_my_recons_classifier_metric_probs(file_path, file_save):
    one_percentage = [(entry['prob1tot'] / entry['total']) if entry['total'] != 0 else 0 for entry in data]
    two_percentage = [(entry['prob2tot'] / entry['total']) if entry['total'] != 0 else 0 for entry in data]
    three_percentage = [(entry['prob3tot'] / entry['total']) if entry['total'] != 0 else 0 for entry in data]
-   """ Cosa rappresenta ciascun valore:
-   0 rappresentano img con solo rumore
-   1 img con contorni persone, non identificabili
-   2 img con presenza persone riconoscibile facilmente ma difficilmente identificabili
-   3 img con persone riconoscibili e identificabili    
-   """
-   
+ 
    plt.figure(figsize=(15, 10))
    plt.plot(epochs, zero_percentage, label='Noise', color='black', linewidth=3.0)
    plt.plot(epochs, one_percentage, label='Person Silhoutte', color='blue', linewidth=3.0)

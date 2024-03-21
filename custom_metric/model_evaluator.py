@@ -103,7 +103,7 @@ class ModelEvaluator:
         #print(targets, predictions)
         for target in targets:
             for label, [x, y, w, h] in zip(target['labels'].tolist(), target['boxes'].tolist()):
-                w = w - x #le mie bbox del gt sono già a posto per faster rcnn e sono già nel formato xmin, ymin, xmax, ymax; quindi le riconverto in xywh
+                w = w - x #my bbox of gt are already prepared for faster rcnn in format xmin, ymin, xmax, ymax; I convert them back in xywh; they are also in absolute, not relative
                 h = h - y
                 self._gt_bboxes.append(BoundingBox(
                     image_name=str(self._img_count),
