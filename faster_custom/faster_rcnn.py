@@ -37,7 +37,7 @@ __all__ = [
     "fasterrcnn_mobilenet_v3_large_320_fpn",
 ]
 
-#Funzione che si occupa di generare le ancore di diversa dimensione e ratio
+#default anchor generation function
 def _default_anchorgen():
     anchor_sizes = ((32,), (64,), (128,), (256,), (512,))
     aspect_ratios = ((0.5, 1.0, 2.0),) * len(anchor_sizes)
@@ -45,70 +45,58 @@ def _default_anchorgen():
 
 
 class FasterRCNN(GeneralizedRCNN):
-    """
-    Input del modello: lista di tensori con shape [C, H, W] uno per ogni img nella range 0-1.
-    Durante il training, il modello si aspetta i tensori e i targets (lista di dizionari) che contiene:
-     - boxes (``FloatTensor[N, 4]``): the ground-truth boxes in ``[x1, y1, x2, y2]`` format, with
-          ``0 <= x1 < x2 <= W`` and ``0 <= y1 < y2 <= H``.
-     - labels (Int64Tensor[N]): la class label per ogni bbox
-    Il modello ritorna un Dict[Tensor] che contiene le loss di classificazione e regressione della RPN e R-CNN.
-    Durante il testing, il modello si aspetta solo i tensori e ritorna una List[Dict[Tensor]] di predizioni, una per ogni img di input. I campi di Dict sono:
-     - boxes (``FloatTensor[N, 4]``): the predicted boxes in ``[x1, y1, x2, y2]`` format, with
-          ``0 <= x1 < x2 <= W`` and ``0 <= y1 < y2 <= H``.
-     - labels (Int64Tensor[N]): le labels predette per ogni img
-     - scores (Tensor[N]): gli score di ogni predizione
-    """
-    #Costruttore della Faster
+    #input: tensors with shape [C, H, W]
+    #during training:  boxes (``FloatTensor[N, 4]``): the ground-truth boxes in ``[x1, y1, x2, y2]`` format, with ``0 <= x1 < x2 <= W`` and ``0 <= y1 < y2 <= H``. labels (Int64Tensor[N])
     def __init__(
         self,
-        backbone, #la backbone usata per estrarre le feature
-        num_classes=None, #numero di classi in output dal modello, incluso il background. Usando il box predictor rimarrà a none
-        # transform parameters # NON interessanti per noi
-        min_size=800, #int, dimensione minima dell'immagine da fare il rescaling prima di darlo alla backbone
-        max_size=1333, #int, come sopra ma dimensione massima
-        image_mean=None, #Tuple[float, float, float], mean per normalizzare l'input
-        image_std=None, #Tuple[float, float, float], std per normalizzare l'input
-        # RPN parameters #Quelli più importanti
-        rpn_anchor_generator=None, #AnchorGenerator, modulo per generare le anchors da insieme di feature maps.
-        rpn_head=None, #nn.Module, la head del RPN network per calcolare l'objectness score e il regression bbox score
-        rpn_pre_nms_top_n_train=2000, #int, numero di proposals da tenere PRIMA di applicare NMS durante il training
-        rpn_pre_nms_top_n_test=1000, #int, come sopra ma per il testing
-        rpn_post_nms_top_n_train=2000, #int, numero di proposals da tenere DOPO aver applicato NMS durante il training
-        rpn_post_nms_top_n_test=1000, #int, come sopra ma per il testing
-        rpn_nms_thresh=0.7, #float, threshold NMS usata per il postprocessing delle proposals delle RPN
-        rpn_fg_iou_thresh=0.7, #float, minima IoU tra l'anchor e la GT box per poterle considerare come positive (ovvero contengono un oggetto) durante il training. In questo modo durante il training vado a scartare tutte quelle anchor che ho generato che non soddisfano questo overlap. Il modello imparerà a modificare l'anchor in modo che assomigli di ratio, dimensione e offset alla GT box. Otterrò così bbox raffinate. 
-        rpn_bg_iou_thresh=0.3, #float, come sopra, solo che qui è la massima IoU tra l'anchor e la GT box da considerare negative (ovvero non contenenti un oggetto ma solo lo sfondo) durante il training.
-        rpn_batch_size_per_image=256, #int, numero di anchors boxes che sono campionate, scelte (sampled) per computare la loss durante il training del RPN. Queste sono le anchors boxes che vengono tenute
-        rpn_positive_fraction=0.5, #float, rapporto di anchors positive in un mini-batch durante training of the RPN
-        rpn_score_thresh=0.0, #float, usato in inferenze; ritorna solo le proposals con uno score sopra la thresh definita da questo parametro
+        backbone, #backbone used for feature extraction
+        num_classes=None, #number of output classes including background
+        # transform parameters
+        min_size=800,
+        max_size=1333,
+        image_mean=None,
+        image_std=None,
+        # RPN parameters
+        rpn_anchor_generator=None,
+        rpn_head=None, 
+        rpn_pre_nms_top_n_train=2000, #int, number of proposals to keep before applying nms during training
+        rpn_pre_nms_top_n_test=1000, #int, number of proposals to keep before applying nms during testing
+        rpn_post_nms_top_n_train=2000, #int, number of proposals to keep after applying nms during training
+        rpn_post_nms_top_n_test=1000, #int, number of proposals to keep after applying nms during testing
+        rpn_nms_thresh=0.7, #float, threshold NMS used above; number of max remaining proposals is the parameter above
+        rpn_fg_iou_thresh=0.7, #float, minimum IoU between anchor and GT box to consider anchor positive
+        rpn_bg_iou_thresh=0.3, #float, maximum IoU between anchor and GT box to consider anchor negative
+        rpn_batch_size_per_image=256, #int, number of sampled anchors per image during rpn training for loss
+        rpn_positive_fraction=0.5, #float, ratio of positive anchors to satisfy by sampler
+        rpn_score_thresh=0.0, #float, used in inference; return only proposals above certain thresh
         # Box parameters
-        box_roi_pool=None, #MultiScaleRoIAlign, modulo che fa il crop e resize delle feature maps nelle posizioni indicate dalle bbox
-        box_head=None, #nn.Module, modulo che prende le cropped feature maps come input
-        box_predictor=None, #nn.Module, modulo che prende l'output di box_head e ritorna le classification logits e box regression deltas.
-        box_score_thresh=0.05, #float, durante inferenza ritorna solo le proposals sopra a tale classification score
-        box_nms_thresh=0.5, #float, NMS threshold per le predizioni della testa usata in inferenza.
-        box_detections_per_img=100, #int, numero massimo di detections per immagine per tutte le classi.
-        box_fg_iou_thresh=0.5, #float, minima IoU tra le proposals e la GT box per poterle considerare come positive (ovvero contengono un oggetto) durante il training della classification head.
-        box_bg_iou_thresh=0.5, #float, come sopra solo che qui è la massima IoU tra le proposals e la GT box da considerare negative durante il training della classification head.
-        box_batch_size_per_image=512, #int, numero di proposals che sono campionate (sampled) durante il training della classification head.
-        box_positive_fraction=0.25, #float, rapporto di proposals positive in un mini-batch durante training of the RPN
-        bbox_reg_weights=None, #(Tuple[float, float, float, float]), pesi per l'encoding/decoding delle bbox
-        rpn_use_custom_filter_anchors=False, #per usare il filter proposal custom. I parametri sotto vengono usati solo se questa variabile è a true
-        rpn_n_top_pos_to_keep=1, #quante anchors positive con top iou da tenere
-        #rpn_iou_neg_thresh=0.5, #thresh per considerare negative delle prop. Old.
-        rpn_n_top_neg_to_keep=5, #quante anchors negative con iou al di sotto del thresh imposto sopra da tenere
-        rpn_n_top_bg_to_keep=1, #quante proposal che sono sicuramente nel bg (cioè iou 0.0 con tutto) tengo
-        rpn_objectness_bg_thresh=0.0,
-	box_use_custom_filter_proposals_objectness=False,
-	box_use_custom_filter_proposals_scores=False, 
-	box_n_top_pos_to_keep=1, 
-	box_n_top_neg_to_keep=5,
-	box_n_top_bg_to_keep=0,
-	box_obj_bg_score_thresh=0.9,
+        box_roi_pool=None, #MultiScaleRoIAlign
+        box_head=None, #TwoMLPHead
+        box_predictor=None, #FastRCNNPredictor
+        box_score_thresh=0.05, #float, used in inference; return only proposals above certain thresh
+        box_nms_thresh=0.5, #float,  used in inference; nms thresh
+        box_detections_per_img=100, #int, maximum number of detection for each image.
+        box_fg_iou_thresh=0.5, #float, minimum IoU between proposals and GT to consider them as positive.
+        box_bg_iou_thresh=0.5, #float, maximum IoU between proposals and GT to consider them as background.
+        box_batch_size_per_image=512, #int, number of sampled proposals per image during roi training for loss
+        box_positive_fraction=0.25, #float, ratio of positive proposals to satisfy by sampler
+        bbox_reg_weights=None, #(Tuple[float, float, float, float])
+        #My parameters
+        rpn_use_custom_filter_anchors=False, #To activate filter anchors custom
+        rpn_n_top_pos_to_keep=1, #How many top positive anchors to keep for each gt
+        rpn_n_top_neg_to_keep=5, #How many top negative anchors to keep for each gt
+        rpn_n_top_bg_to_keep=1, #How many top background anchors to keep for each gt
+        rpn_objectness_bg_thresh=0.0, #Threshold to pick only background anchors with high obj score
+	box_use_custom_filter_proposals_objectness=False, #To activate filter proposal custom based on objectness
+	box_use_custom_filter_proposals_scores=False, #To activate filter proposal custom based on class score
+	box_n_top_pos_to_keep=1, #How many top positive proposals to keep for each gt
+	box_n_top_neg_to_keep=5, #How many top negative proposals to keep for each gt
+	box_n_top_bg_to_keep=0, #How many top background proposals to keep for each gt
+	box_obj_bg_score_thresh=0.9, #Threshold to pick only background anchors with above score
         **kwargs,
     ):
 
-        #CONTROLLI VARI DI INIZIALIZZAZIONE DELLA FASTER
+        #SOME CHECKS
         if not hasattr(backbone, "out_channels"):
             raise ValueError(
                 "backbone should contain an attribute out_channels "
@@ -132,7 +120,7 @@ class FasterRCNN(GeneralizedRCNN):
             if box_predictor is None:
                 raise ValueError("num_classes should not be None when box_predictor is not specified")
 
-        #SETTING vari dell'rpn
+        #additional rpn settings
         out_channels = backbone.out_channels
 
         if rpn_anchor_generator is None:
@@ -143,7 +131,7 @@ class FasterRCNN(GeneralizedRCNN):
         rpn_pre_nms_top_n = dict(training=rpn_pre_nms_top_n_train, testing=rpn_pre_nms_top_n_test)
         rpn_post_nms_top_n = dict(training=rpn_post_nms_top_n_train, testing=rpn_post_nms_top_n_test)
 
-        #Creazione oggetto RPN con i parametri passati
+        #rpn definition
         rpn = RegionProposalNetwork(
             rpn_anchor_generator,
             rpn_head,
@@ -157,13 +145,12 @@ class FasterRCNN(GeneralizedRCNN):
             score_thresh=rpn_score_thresh,
             use_custom_filter_anchors=rpn_use_custom_filter_anchors, #parametri miei
             n_top_pos_to_keep=rpn_n_top_pos_to_keep,
-            #iou_neg_thresh=rpn_iou_neg_thresh,
             n_top_neg_to_keep=rpn_n_top_neg_to_keep,
             n_top_bg_to_keep=rpn_n_top_bg_to_keep,
             objectness_bg_thresh=rpn_objectness_bg_thresh,
         )
 
-        #SETTING vari per l'head della faster
+        #SETTING for faster head
         if box_roi_pool is None:
             box_roi_pool = MultiScaleRoIAlign(featmap_names=["0", "1", "2", "3"], output_size=7, sampling_ratio=2)
 
@@ -176,7 +163,7 @@ class FasterRCNN(GeneralizedRCNN):
             representation_size = 1024
             box_predictor = FastRCNNPredictor(representation_size, num_classes)
 
-        #Creazione dell'head con i parametri passati
+        #roi heads definition
         roi_heads = RoIHeads(
             # Box
             box_roi_pool,
@@ -198,21 +185,19 @@ class FasterRCNN(GeneralizedRCNN):
             box_obj_bg_score_thresh,
         )
 
-        #Trasformazioni di default se non applicate prima
+        #default transformation
         if image_mean is None:
             image_mean = [0.485, 0.456, 0.406]
         if image_std is None:
             image_std = [0.229, 0.224, 0.225]
         transform = GeneralizedRCNNTransform(min_size, max_size, image_mean, image_std, **kwargs)
 
-        #init del padre Generalized RCNN
         super().__init__(backbone, rpn, roi_heads, transform)
 
 
 class TwoMLPHead(nn.Module):
     """
     Standard heads for FPN-based models
-
     Args:
         in_channels (int): number of input channels
         representation_size (int): size of the intermediate representation
@@ -329,7 +314,7 @@ class FasterRCNN_ResNet50_FPN_Weights(WeightsEnum):
     weights=("pretrained", FasterRCNN_ResNet50_FPN_Weights.COCO_V1),
     weights_backbone=("pretrained_backbone", ResNet50_Weights.IMAGENET1K_V1),
 )
-def fasterrcnn_resnet50_fpn_modificata(
+def fasterrcnn_resnet50_fpn_custom(
     *,
     weights: Optional[FasterRCNN_ResNet50_FPN_Weights] = None,
     progress: bool = True,
@@ -338,15 +323,7 @@ def fasterrcnn_resnet50_fpn_modificata(
     trainable_backbone_layers: Optional[int] = None,
     **kwargs: Any,
 ) -> FasterRCNN:
-    """ FUNZIONE per creare un'istanza della Faster.
-    Args: weights (:class:`~torchvision.models.detection.FasterRCNN_ResNet50_FPN_Weights`, optional). I weights pretraining.
-    progress (bool, optional): serve solo per mostrare la progress bar del download dei pesi.
-    num_classes (int, optional): numero di classi di output del modello incluso background
-    weights_backbone (:class:`~torchvision.models.ResNet50_Weights`, optional), pesi per la backbone
-    trainable_backbone_layers (int, optional): numero di layers trainabili. I valori vanno da 0 a 5 (tutti i layers). Default è 3
-    **kwargs: i parametri della classe FasterRCNN all'inizio del file
-    """
-    #CONFIGURAZIONE VARIA della faster
+    #Faster CONFIG
     weights = FasterRCNN_ResNet50_FPN_Weights.verify(weights)
     weights_backbone = ResNet50_Weights.verify(weights_backbone)
 

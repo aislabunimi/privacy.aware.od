@@ -81,7 +81,7 @@ if not train_only_tasknet:
    unet.to(device)
    unet_optimizer = torch.optim.SGD(unet.parameters(), lr=5e-4, momentum=0.9, weight_decay=5e-4, nesterov=True)
    #unet_scheduler = torch.optim.lr_scheduler.StepLR(unet_optimizer, step_size=10, gamma=0.5)
-   if train_model_backward: #more patience for Backward as we have slightly more data and augmentation
+   if train_model_backward: #more patience for Backward as we have slightly more data
       unet_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(unet_optimizer, mode='min', factor=0.5, patience=4, verbose=True)
    else:
       unet_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(unet_optimizer, mode='min', factor=0.5, patience=2, verbose=True)
@@ -99,16 +99,16 @@ if train_only_tasknet: #Default Tasknet
    tasknet_scheduler = torch.optim.lr_scheduler.StepLR(tasknet_optimizer, step_size=3, gamma=0.1)
    #tasknet_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(tasknet_optimizer, mode='min', factor=0.5, patience=2, verbose=True)
 elif not train_model_backward: #Modified Tasknet with custom proposal method
-   from faster_modificata.faster_rcnn import fasterrcnn_resnet50_fpn_modificata, FasterRCNN_ResNet50_FPN_Weights, FastRCNNPredictor
+   from faster_custom.faster_rcnn import fasterrcnn_resnet50_fpn_custom, FasterRCNN_ResNet50_FPN_Weights, FastRCNNPredictor
    weights = FasterRCNN_ResNet50_FPN_Weights.DEFAULT
    use_custom_filter_proposals_objectness = True #By default use this method, as it's faster
    if use_custom_filter_proposals_objectness:
-      tasknet = fasterrcnn_resnet50_fpn_modificata(weights=weights, progress=False, 
+      tasknet = fasterrcnn_resnet50_fpn_custom(weights=weights, progress=False, 
          rpn_use_custom_filter_anchors=False, rpn_n_top_pos_to_keep=2, rpn_n_top_neg_to_keep=2,
          rpn_n_top_bg_to_keep=0, rpn_objectness_bg_thresh=0.0, box_use_custom_filter_proposals_objectness=True, 
          box_n_top_pos_to_keep=4, box_n_top_neg_to_keep=4, box_n_top_bg_to_keep=0, box_obj_bg_score_thresh=0.9)
    else: #Based on score, slower and not necessarily better resutls
-      tasknet = fasterrcnn_resnet50_fpn_modificata(weights=weights, progress=False,
+      tasknet = fasterrcnn_resnet50_fpn_custom(weights=weights, progress=False,
          rpn_post_nms_top_n_train=5000, #5000 to keep all proposals, 500 for tradeoff with performance
          rpn_use_custom_filter_anchors=False, rpn_n_top_pos_to_keep=1, rpn_n_top_neg_to_keep=2,
          rpn_n_top_bg_to_keep=0, rpn_objectness_bg_thresh=0.0, box_use_custom_filter_proposals_scores=True, 

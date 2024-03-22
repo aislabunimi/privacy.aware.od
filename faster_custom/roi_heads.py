@@ -28,7 +28,7 @@ def fastrcnn_loss(class_logits, box_regression, labels, regression_targets):
     labels = torch.cat(labels, dim=0)
     regression_targets = torch.cat(regression_targets, dim=0)
 
-    #la classification loss è calcolata su tutte le pred, sia le pos che negative, in base alla probabilità di classe assegnata e rispettiva label.
+    #classification loss computed on all preds, positive and negative; based on confidence and assigned label
     classification_loss = F.cross_entropy(class_logits, labels)
 
     # get indices that correspond to the regression targets for
@@ -39,7 +39,7 @@ def fastrcnn_loss(class_logits, box_regression, labels, regression_targets):
     N, num_classes = class_logits.shape
     box_regression = box_regression.reshape(N, box_regression.size(-1) // 4, 4)
 
-    #la box loss è calcolata solo sulle positive ovvimanete.
+    #bbox loss only on positive
     box_loss = F.smooth_l1_loss(
         box_regression[sampled_pos_inds_subset, labels_pos],
         regression_targets[sampled_pos_inds_subset],
@@ -72,6 +72,7 @@ class RoIHeads(nn.Module):
         score_thresh,
         nms_thresh,
         detections_per_img,
+        #My parameters
         use_custom_filter_proposals_objectness=False,
         use_custom_filter_proposals_scores=False, 
         n_top_pos_to_keep=1, 
@@ -106,7 +107,7 @@ class RoIHeads(nn.Module):
         self.nms_thresh = nms_thresh
         self.detections_per_img = detections_per_img
         
-        #miei parametri
+        #My parameters
         self.use_custom_filter_proposals_objectness=use_custom_filter_proposals_objectness
         self.use_custom_filter_proposals_scores=use_custom_filter_proposals_scores
         self.n_top_pos_to_keep = n_top_pos_to_keep
@@ -114,7 +115,7 @@ class RoIHeads(nn.Module):
         self.n_top_bg_to_keep = n_top_bg_to_keep
         self.obj_bg_score_thresh = obj_bg_score_thresh
 
-        #per me inutili, tengo per backward compatibility
+        #Useless for me, keep only for compatibility
         self.mask_roi_pool = mask_roi_pool
         self.mask_head = mask_head
         self.mask_predictor = mask_predictor
@@ -123,7 +124,7 @@ class RoIHeads(nn.Module):
         self.keypoint_head = keypoint_head
         self.keypoint_predictor = keypoint_predictor
 
-    #questa e has_keypoint sono usate nel check target; non mi interessano, le tengo per backward compatibility
+    #Useless for me, keep only for compatibility; they're used when checking target
     def has_mask(self):
         if self.mask_roi_pool is None:
             return False
@@ -144,15 +145,13 @@ class RoIHeads(nn.Module):
 
     def assign_targets_to_proposals(self, proposals, gt_boxes, gt_labels):
         # type: (List[Tensor], List[Tensor], List[Tensor]) -> Tuple[List[Tensor], List[Tensor]]
-        #2 liste vuote. La label qui conterrà le label dell'oggetto preso dalla GT.
         matched_idxs = []
         labels = []
         match_q_matrixes = []
         for proposals_in_image, gt_boxes_in_image, gt_labels_in_image in zip(proposals, gt_boxes, gt_labels):
 
             if gt_boxes_in_image.numel() == 0:
-                # Background image
-                #img vuota sensa oggetti se dal GT vedo che non ci sono box. Allora tensore tutto a 0
+                # Background image. If image is without objects in GT, I create tensor of zeros
                 device = proposals_in_image.device
                 clamped_matched_idxs_in_image = torch.zeros(
                     (proposals_in_image.shape[0],), dtype=torch.int64, device=device
@@ -161,45 +160,41 @@ class RoIHeads(nn.Module):
             else:
                 #  set to self.box_similarity when https://github.com/pytorch/pytorch/issues/27495 lands
                
-                #calcolo IoU di ogni proposal rispetto al GT. Ottengo matrice di M gt x N prop.
+                #compute IoU for every proposal w.r.t. GT. Output: matrix M gt x N prop.
                 match_quality_matrix = box_ops.box_iou(gt_boxes_in_image, proposals_in_image)
-                #ad ogni proposal assegno la GT corrispondendente in base all'IoU se soddisfa thresh.
+                #to each proposal assign corresponding GT based on IoU thresh
                 matched_idxs_in_image = self.proposal_matcher(match_quality_matrix)
-                #otterrò un tensor([ 0, -1, -1,  0,  1,  2]) ad esempio
-                #il -1 indica che la prop non è associata a nessuna GT; 0 indica che la prop è associata alla prima GT; 1 alla seconda; 2 alla terza .... ci saranno n valori in base alle n gt possibili.
+                #I'll obtain a tensor([ 0, -1, -1,  0,  1,  2]) where
+                #-1 prop associated to any GT; 1 to first GT; 2 to second GT; and so on.
 
                 clamped_matched_idxs_in_image = matched_idxs_in_image.clamp(min=0)
-                #il -1 da quello che c'è scritto nel codice originale dà un errore con la parte sotto, quindi preparo questa variabile settando quei valori a 0
+                #-1 gives error, so clamping to 0
 
                 labels_in_image = gt_labels_in_image[clamped_matched_idxs_in_image]
-                #creo un tensore dove nel mio caso metterò tutti 1, perché ho solo classe persona. è come se partissi immaginando che tutte le proposal hanno label 1, e poi vado a filtrare i valori sotto
                 labels_in_image = labels_in_image.to(dtype=torch.int64)
 
-                # Label background (below the low threshold) #setto label di quegli indici a 0
+                # Label background (below the low threshold) #set label to 0
                 bg_inds = matched_idxs_in_image == self.proposal_matcher.BELOW_LOW_THRESHOLD
                 labels_in_image[bg_inds] = 0
 
-                # Label ignore proposals (between low and high thresholds) #-1 sono indici ignorati
+                # Label ignore proposals (between low and high thresholds) #-1 ignored index
                 ignore_inds = matched_idxs_in_image == self.proposal_matcher.BETWEEN_THRESHOLDS
                 labels_in_image[ignore_inds] = -1  # -1 is ignored by sampler
 
             matched_idxs.append(clamped_matched_idxs_in_image)
             labels.append(labels_in_image)
-            match_q_matrixes.append(match_quality_matrix) #le ritorno per usarle dopo nel mio filtro
+            match_q_matrixes.append(match_quality_matrix) #use them for my filter
         return matched_idxs, labels, match_q_matrixes
-
 
     def assign_targets_to_proposals_custom_v2(self, proposals, gt_boxes, gt_labels, obj_score):
         # type: (List[Tensor], List[Tensor], List[Tensor]) -> Tuple[List[Tensor], List[Tensor]]
-        #2 liste vuote. La label qui conterrà le label dell'oggetto preso dalla GT.
         labels = []
-        matched_idxs = [] #questo è un tensore contenente le gt boxes che le anchors matchano
+        matched_idxs = []
         indexes = []
         for proposals_in_image, gt_boxes_in_image, gt_labels_in_image, obj_score_in_image in zip(proposals, gt_boxes, gt_labels, obj_score):
 
             if gt_boxes_in_image.numel() == 0:
                 # Background image
-                #img vuota sensa oggetti se dal GT vedo che non ci sono box. Allora tensore tutto a 0
                 device = proposals_in_image.device
                 clamped_matched_idxs_in_image = torch.zeros(
                     (proposals_in_image.shape[0],), dtype=torch.int64, device=device
@@ -208,173 +203,87 @@ class RoIHeads(nn.Module):
                 my_clamped = clamped_matched_idxs_in_image
                 my_labels = labels_in_image
             else:
-                #  set to self.box_similarity when https://github.com/pytorch/pytorch/issues/27495 lands
-               
-                #calcolo IoU di ogni proposal rispetto al GT. Ottengo matrice di M gt x N prop.
+                #compute IoU for every proposal w.r.t. GT. Output: matrix M gt x N prop.
                 match_quality_matrix = box_ops.box_iou(gt_boxes_in_image, proposals_in_image)
                 matched_idxs_in_image = self.proposal_matcher(match_quality_matrix)
-                #otterrò un tensor([ 0, -1, -1,  0,  1,  2]) ad esempio
-                #il -1 indica che la prop non è associata a nessuna GT; 0 indica che la prop è associata alla prima GT; 1 alla seconda; 2 alla terza .... ci saranno n valori in base alle n gt possibili.
+                #I'll obtain a tensor([ 0, -1, -1,  0,  1,  2]) where
+                #-1 prop associated to any GT; 1 to first GT; 2 to second GT; and so on.
 
                 clamped_matched_idxs_in_image = matched_idxs_in_image.clamp(min=0)
-                #il -1 da quello che c'è scritto nel codice originale dà un errore con la parte sotto, quindi preparo questa variabile settando quei valori a 0
-                #è un numero 0, 1, 2 che rappresenta per ogni proposal a quale gt deve essere associata, sia le prop positive che le neg
+                #-1 gives error, so clamping to 0; number from 0-2 that represents to which gt a proposal must be associated
                 
                 labels_in_image = gt_labels_in_image[clamped_matched_idxs_in_image]
-                #creo un tensore dove nel mio caso metterò tutti 1, perché ho solo classe persona. è come se partissi immaginando che tutte le proposal hanno label 1, e poi vado a filtrare i valori sotto
                 labels_in_image = labels_in_image.to(dtype=torch.int64)
-
-                # Label background (below the low threshold) #setto label di quegli indici a 0
+                # Label background (below the low threshold) 
                 bg_inds = matched_idxs_in_image == self.proposal_matcher.BELOW_LOW_THRESHOLD
                 labels_in_image[bg_inds] = 0
-
-                # Label ignore proposals (between low and high thresholds) #-1 sono indici ignorati
+                # Label ignore proposals (between low and high thresholds) 
                 ignore_inds = matched_idxs_in_image == self.proposal_matcher.BETWEEN_THRESHOLDS
                 labels_in_image[ignore_inds] = -1  # -1 is ignored by sampler
-                
-                #original_index = torch.arange(len(proposals_in_image)) #rappresenta gli indici originali per perscare i corrispondenti clamped_matched e labels
-                
+
+                #FROM HERE MY CODE. I work on all proposals (using indexes)
                 n_gt = len(gt_boxes_in_image)
                 device = proposals_in_image.device
                 tensor_taken=torch.empty(0, dtype=torch.int64).to(device)
-                
-                """ Premessa 1 (attivare proposals): ordinerei tutte le proposals per ogni target in base a IOU con esso (tralasciando condifence e label), seleziono le prime n e le passo alla loss """
-                
-                #lavoro su tutte le proposal qui
-                labels_indexes = torch.arange(len(labels_in_image), device=device)
-                matched_vals, matches_idx = match_quality_matrix.max(dim=0)
+                #IDEA 1. Activating positive proposals. Order all of them based on their IoU with GT; keep first n.            
+                labels_indexes = torch.arange(len(labels_in_image), device=device) #length of all proposals
+                matched_vals, matches_idx = match_quality_matrix.max(dim=0) #max of this returns the gt with highest IoU for each proposal
                 sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True)
                 my_pos_sort = labels_indexes[sort_ma_val_idx]
                 matches_idx_sort = matches_idx[sort_ma_val_idx]
-                #le prime n sono il gt. I gt li devo tenere comunque perché così funziona l'originale, e poi prenderne altri n. Allora li seleziono rimuovendo le prime n_gt occorrenze, e recuperando tali n_gt occorrenze subito dopo il for
+                #Original Faster RCNN implementation contains gt as first n proposals (put gt inside proposals list). 
+                #I firstly remove the first n gt; then select best n proposals; and add back the n gt after the for loop
                 my_pos_sort_without_gt = my_pos_sort[n_gt:]
                 matches_idx_without_gt = matches_idx_sort[n_gt:]
                 for val in range(0, n_gt):
-                   index = (matches_idx_without_gt == val)
+                   index = (matches_idx_without_gt == val) #avoid duplicates; every prop can be assigned to only one gt at a time
                    true_idx = torch.where(index)[0]
                    true_idx = true_idx[:self.n_top_pos_to_keep]
                    tensor_taken = torch.cat([tensor_taken, my_pos_sort_without_gt[true_idx]])
-                   #devo sovrascrivere ora le label per essere sicuro che verrà considerate come positive
-                   #approccio generalizzato indipendente dal fatto che abbia 1 sola classe
+                   #I must overwrite old labels to be sure that the proposals will be considered as positive
+                   #Generalized approach indipendent of number of classes
                    labels_in_image[my_pos_sort_without_gt[true_idx]] = gt_labels_in_image[val]
 
                 tensor_taken = torch.cat([tensor_taken, my_pos_sort[:n_gt]])
-                #non posso prendere doppie proposals qui in quanto una proposal può avere associato solo una GT in base al suo valore di IoU
-                
-                """
-                #Vecchio metodo con i positivi
-                #estraggo i valori positivi
-                #IDEA: RECUPERO INDICI CON LABEL=1 che sono negativi o del primo gt o dell'altro
-                my_pos = torch.where(labels_in_image >= 1)[0]
-                only_pos = match_quality_matrix[:, my_pos]
-                #questi sono negativi o primo gt o degli altri
-                my_neg = torch.where(labels_in_image == 0)[0]   
-                only_neg = match_quality_matrix[:, my_neg]
-                
-                matched_vals, matches_idx = only_pos.max(dim=0)
-                sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True)      
-                my_pos_sort = my_pos[sort_ma_val_idx]
-                matches_idx_sort = matches_idx[sort_ma_val_idx]            
-                #le prime n sono il gt. I gt li devo tenere comunque perché così funziona l'originale, e poi prenderne altri n. Allora li seleziono rimuovendo le prime n_gt occorrenze, e recuperando tali n_gt occorrenze subito dopo il for
-                my_pos_sort_without_gt = my_pos_sort[n_gt:]
-                matches_idx_without_gt = matches_idx_sort[n_gt:]
-                for val in range(0, n_gt):
-                   index = (matches_idx_without_gt == val)
-                   true_idx = torch.where(index)[0]
-                   true_idx = true_idx[:self.n_top_pos_to_keep]
-                   tensor_taken = torch.cat([tensor_taken, my_pos_sort_without_gt[true_idx]])
-
-                tensor_taken = torch.cat([tensor_taken, my_pos_sort[:n_gt]])
-                """
-                """ Premessa 2 (sopprimere predicitions FPiou): considero solo le bbox con label 1 (persona), le ordino per confidence  e seleziono le prime t con IoU < di 0.5 (qui è il valore del matcher) """
-                
-                #Elimino le pos già prese. Alcune di quelle pos potrebbero ora essere considerate negative
-                #pos_taken_mask = torch.isin(labels_indexes, tensor_taken)
-                #labels_indexes_neg = labels_indexes[~pos_taken_mask] #ora conterrà solo indici non presi prima
-                #vedo tutte le labels con valore 0. Non può capitare che prendo una che avevo scelto prima, perché avevo settato la label a >=1 !
-                #sfrutto questi perché sono già con IoU<0.5; se voglio avere IoU più bassa, basta cambiare il matcher, che il metodo sopra per le pos non ne è influenzato !
-                
+                #IDEA 2. Suppressing wrong predictions. Pick negative proposals (under IoU thresh), sort them by score; select top n
+                #For selecting which are negative, I exploit the parameter of negative Matcher of bg_iou_thresh.
+                #It's impossible to take again the proposals picked up at step before
+                #When I do this line of code, I won't pick previously taken proposals as I have updated their label at step before!
                 my_neg = torch.where(labels_in_image == 0)[0]     
                 only_neg = match_quality_matrix[:, my_neg]
-                matched_vals, matches_idx = only_neg.max(dim=0) #prima sono ordinati per score
-                sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True) #ordina per iou          
-                sort_ma_val_idx_score, _ = torch.sort(sort_ma_val_idx, descending=False) #più facile poi da gestire, ordinati per score adesso
+                matched_vals, matches_idx = only_neg.max(dim=0) #By default proposals are ordered by objectness score
+                sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True)          
+                sort_ma_val_idx_score, _ = torch.sort(sort_ma_val_idx, descending=False)
                 my_neg_sort = my_neg[sort_ma_val_idx_score]
                 matches_idx_sort = matches_idx[sort_ma_val_idx_score]
                 neg_already_taken=torch.empty(0, dtype=torch.int64).to(device)
                 for val in range(0, n_gt):
-                   index = (matches_idx_sort == val) #evita duplicati; ogni prop può essere assegnata solo a un gt alla volta
+                   index = (matches_idx_sort == val)
                    true_idx = torch.where(index)[0]
                    true_idx = true_idx[:self.n_top_neg_to_keep]        
                    tensor_taken = torch.cat([tensor_taken, my_neg_sort[true_idx]])
                    neg_already_taken = torch.cat([neg_already_taken, my_neg_sort[true_idx]])
-                
-                """
-                #Vecchio metodo con i negativi
-                #Ora negativi
-                matched_vals, matches_idx = only_neg.max(dim=0) #prima sono ordinati per score
-                sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True) #ordina per iou          
-                sort_ma_val_idx_score, _ = torch.sort(sort_ma_val_idx, descending=False) #più facile poi da gestire, ordinati per score adesso
-                my_neg_sort = my_neg[sort_ma_val_idx_score]
-                matches_idx_sort = matches_idx[sort_ma_val_idx_score]
-                neg_already_taken=torch.empty(0, dtype=torch.int64).to(device)
-                for val in range(0, n_gt):
-                   index = (matches_idx_sort == val) #evita duplicati; ogni prop può essere assegnata solo a un gt alla volta
-                   true_idx = torch.where(index)[0]
-                   true_idx = true_idx[:self.n_top_neg_to_keep]        
-                   tensor_taken = torch.cat([tensor_taken, my_neg_sort[true_idx]])
-                   neg_already_taken = torch.cat([neg_already_taken, my_neg_sort[true_idx]])
-                """
-                
-                """ Premessa 3 Full background (IoU zero con tutti gli oggetti). Ordinate per score """
+                #IDEA 3. Remove totally wrong predictions on background (with IoU=0 with all GTs). Ordered by score, above a certain thresh
                 if self.n_top_bg_to_keep>0:
-                   
-                   bg_mask = (sort_ma_val == 0.0) #IoU pari a 0
+                   bg_mask = (sort_ma_val == 0.0) #IoU = 0
                    bg_ma_val_idx = sort_ma_val_idx[bg_mask]
-
-                   #elimino le neg già prese
+                   #Remove previously taken proposals
                    neg_taken_mask = torch.isin(bg_ma_val_idx, neg_already_taken)
                    bg_ma_val_idx = bg_ma_val_idx[~neg_taken_mask]
-                   
                    my_obj = obj_score_in_image[bg_ma_val_idx]
-                   
                    bg_ma_val_idx, _ = torch.sort(bg_ma_val_idx, descending=False)
                    my_bg_sort = my_neg[bg_ma_val_idx]
                    bg_matches_idx = matches_idx[bg_ma_val_idx]
-                   #in teoria sono già ordinati per score, perché avendo tutti IoU zero quando vengono riordinati per IoU rimarranno prima le prima occorrenze (ovvero quelli con score più alto). Li ho riordinati  per sicurezza
-                   #le background proposal sono tutte associate al primo gt. Quindi ne recupero n*bg_to_keep
-                   #index = (bg_matches_idx == 0) #giusto di sicurezza
-                   #true_idx = torch.where(index)[0]
-                   #true_idx = true_idx[:self.n_top_bg_to_keep*n_gt]        
-                   #tensor_taken = torch.cat([tensor_taken, my_bg_sort[true_idx]])
+                   #pick only proposals above a thresh
                    thresh = torch.nonzero(my_obj>=self.obj_bg_score_thresh).flatten()
-                   #true_idx = torch.arange(len(bg_matches_idx)) #sono già ordinati
-                   #true_idx = true_idx[:self.n_top_bg_to_keep*n_gt]
                    true_idx = thresh[:self.n_top_bg_to_keep*n_gt]
-                   tensor_taken = torch.cat([tensor_taken, my_bg_sort[true_idx]])
-                   #for i in true_idx:
-                   #   if my_bg_sort[i] not in tensor_taken: #guardia contro i doppi che potrebbero capitare (se già presi fra i negativi sopra)
-                   #      tensor_taken = torch.cat([tensor_taken, my_bg_sort[i].unsqueeze(0)])
-                   #   else: #per assicura di prendere n bg se ci sono; se trovo duplicato passo a prossima
-                   #      next_index = next((i for i in thresh if my_bg_sort[i] not in tensor_taken), None)
-                   #      if next_index is None: #se è None vuol dire che non ho trovato un indice
-                   #         break
-                   #      tensor_taken = torch.cat([tensor_taken, my_bg_sort[next_index].unsqueeze(0)])
-                   
-                #risorto le anchors, le matched gt boxes rispettive e labels
-                
+                   #being with IoU=0, these proposals are all assigned by convention to first GT. I don't care to which GT are assigned still.
+                   tensor_taken = torch.cat([tensor_taken, my_bg_sort[true_idx]])   
+                #Sorting back proposals, matched gt boxes and labels. Code expect it to be in original order
                 tensor_taken, orig_order = torch.sort(tensor_taken, descending=False)
                 my_clamped = clamped_matched_idxs_in_image[tensor_taken]
                 my_labels = labels_in_image[tensor_taken]
-                
-                #mask = torch.ones_like(labels_in_image, dtype=torch.bool)
-                #mask[tensor_taken] = False
-                # Set values to -1 where indexes are NOT present in 'tensor_taken'
-                #labels_in_image[mask] = -1
-                #print(labels_in_image)
 
-            #matched_idxs.append(clamped_matched_idxs_in_image)
-            #labels.append(labels_in_image)
             matched_idxs.append(my_clamped)
             labels.append(my_labels)
             indexes.append(tensor_taken)
@@ -382,27 +291,23 @@ class RoIHeads(nn.Module):
 
     def subsample(self, labels):
         # type: (List[Tensor]) -> List[Tensor]
-        sampled_pos_inds, sampled_neg_inds = self.fg_bg_sampler(labels) #2 maschere binarie dove è 1 se è indice pos ed è stato scelto oppure 0 se non lo è. Le labels originale con -1 verranno ignorate.
+        sampled_pos_inds, sampled_neg_inds = self.fg_bg_sampler(labels) #2 binary mask; 1 index pos and it has been chosen; 0 if not; -1 ignored.
         sampled_inds = []
         for img_idx, (pos_inds_img, neg_inds_img) in enumerate(zip(sampled_pos_inds, sampled_neg_inds)):
-            img_sampled_inds = torch.where(pos_inds_img | neg_inds_img)[0] #si fa un or fra le due maschere e si scelgono solo quegli indici che sono stati presi dal sampler o come pos o come neg o come entrambi.
+            img_sampled_inds = torch.where(pos_inds_img | neg_inds_img)[0] #OR between mask and pick only proposals took by positive sampler, negative sampler or both
             sampled_inds.append(img_sampled_inds)
         return sampled_inds
-    """
-	commento su sampler degli indici delle proposal. Valore di default dei campi: 512, 0.25. Il primo ti dice quante proposal tenere al massimo, scelte a caso. Il secondo ti dice: di quelle 512 proposal quante al massimo sono positive? Il sampler nel codice fa una roba del genere. Immaginiamo di avere 1 positiva (con IoU >0.5, il Roi head le discrimina così) e tenere 1000 negative (IoU<0.5).
-num_pos = int(self.batch_size_per_image * self.positive_fraction)   #num_pos = 512*0.25 -> 128
-# protect against not enough positive examples
-num_pos = min(positive.numel(), num_pos)   # num_pos = min(1, 128) -> 1
-num_neg = self.batch_size_per_image - num_pos    # num_neg = 512 - 1 -> 511
-# protect against not enough negative examples
-num_neg = min(negative.numel(), num_neg)    # num_neg = min(1000, 511) -> 511
-
-# randomly select positive and negative examples
-perm1 = torch.randperm(positive.numel(), device=positive.device)[:num_pos] #1 a caso fra le 1 pos che ho
-perm2 = torch.randperm(negative.numel(), device=negative.device)[:num_neg] #511 a caso fra le 1000 neg che ho
-
-Quindi:se voglio tenere tutte le negative, devo aumentare il 512 a un valore maggiore, ad esempio 2000, visto che di negative con basso IoU ne ho molte
-    """
+    #Example of how sampler works
+    #num_pos = int(self.batch_size_per_image * self.positive_fraction)   #num_pos = 512*0.25 -> 128
+    # protect against not enough positive examples
+    #num_pos = min(positive.numel(), num_pos)   # num_pos = min(1, 128) -> 1
+    #num_neg = self.batch_size_per_image - num_pos    # num_neg = 512 - 1 -> 511
+    # protect against not enough negative examples
+    #num_neg = min(negative.numel(), num_neg)    # num_neg = min(1000, 511) -> 511
+    # randomly select positive and negative examples
+    #perm1 = torch.randperm(positive.numel(), device=positive.device)[:num_pos] #1 random from the 1 that i have
+    #perm2 = torch.randperm(negative.numel(), device=negative.device)[:num_neg] #511 random from the 1000 neg that i have
+    #So if you want to take all negatives, you need to increment the batch_size from 512 to 10000 (way higher than the possible number of prop
 
     def add_gt_proposals(self, proposals, gt_boxes):
         # type: (List[Tensor], List[Tensor]) -> List[Tensor]
@@ -426,7 +331,7 @@ Quindi:se voglio tenere tutte le negative, devo aumentare il 512 a un valore mag
         self,
         proposals,  # type: List[Tensor]
         targets,  # type: Optional[List[Dict[str, Tensor]]]
-        obj_score, #aggiunto da me
+        obj_score, #added by me
     ):
         # type: (...) -> Tuple[List[Tensor], List[Tensor], List[Tensor], List[Tensor]]
         self.check_targets(targets)
@@ -439,24 +344,24 @@ Quindi:se voglio tenere tutte le negative, devo aumentare il 512 a un valore mag
         gt_labels = [t["labels"] for t in targets]
 
         # append ground-truth bboxes to propos
-        #Ora proposals conterrà le proposals dell'rpn originale + le GT boxes
+        #now proposals will contain original rpn proposals + GT boxes
         proposals = self.add_gt_proposals(proposals, gt_boxes)
-        
 
         # get matching gt indices for each proposal
-        if self.use_custom_filter_proposals_objectness:
+        if self.use_custom_filter_proposals_objectness: #If I use my method
            matched_idxs, labels, indexes = self.assign_targets_to_proposals_custom_v2(proposals, gt_boxes, gt_labels, obj_score)
-           #ora estraggo solo le prop che userò
+           #Extract now only proposals that I need
            my_proposals=[]
            for proposals_in_image, indexes_in_image in zip(proposals, indexes):
               my_proposals.append(proposals_in_image[indexes_in_image])
            proposals = my_proposals
            match_q_matrixes=None
         else:
-           matched_idxs, labels, match_q_matrixes = self.assign_targets_to_proposals(proposals, gt_boxes, gt_labels) #le match_q_matrixes mi servono poi per il compare
+           matched_idxs, labels, match_q_matrixes = self.assign_targets_to_proposals(proposals, gt_boxes, gt_labels) #Here I need match_q_matrixes for the compare
  
         # sample a fixed proportion of positive-negative proposals
-        #queste rispettano i due parametri di batch_size e pos_fraction. Di default sono a 512 e 0.25, quindi verranno prese 128 pos e il resto delle 512 a neg. Questo a patto che ce ne siano abbastanza di pos e neg; altrimenti, ne vengono tenute le n pos e le restanti 512 - npos sono negative.
+        #Subsample follows parameter batch_size and pos_fraction. By default they are 512 and 0.25, 
+        #So we'll get 128 pos and the rest are neg. This if there are enough positive; otherwise, we take n pos and the rest 512 - npos will be negative.
         sampled_inds = self.subsample(labels)
         matched_gt_boxes = []
         num_images = len(proposals)
@@ -472,9 +377,9 @@ Quindi:se voglio tenere tutte le negative, devo aumentare il 512 a un valore mag
             matched_gt_boxes.append(gt_boxes_in_image[matched_idxs[img_id]])
       
         regression_targets = self.box_coder.encode(matched_gt_boxes, proposals)
-        return proposals, matched_idxs, labels, regression_targets, match_q_matrixes #le ritorno mi serve poi per il compare
+        return proposals, matched_idxs, labels, regression_targets, match_q_matrixes #match_q_matrixes needed for compare
 
-    #Funzione qui sotto usata solo in testing
+    #Function used only in testing
     def postprocess_detections(
         self,
         class_logits,  # type: Tensor
@@ -562,25 +467,24 @@ Quindi:se voglio tenere tutte le negative, devo aumentare il 512 a un valore mag
                     if not t["keypoints"].dtype == torch.float32:
                         raise TypeError(f"target keypoints must of float type, instead got {t['keypoints'].dtype}")
 
-        #PASSO 0: preparo il necessario per il training. Recupero le proposals positive e negative
+        #STEP 0: grab necessary for training. Get positive and negative proposals.
         if self.training:
             #proposals, matched_idxs, labels, regression_targets = self.select_training_samples(proposals, targets)
-            proposals, matched_idxs, labels, regression_targets, match_q_matrixes = self.select_training_samples(proposals, targets, obj_score) #aggiungo io obj score; proviene da rpn ed è quanto è probabile che ogni box contenga oggetto
-            #le match q matrixes mi servono poi per il compare
+            proposals, matched_idxs, labels, regression_targets, match_q_matrixes = self.select_training_samples(proposals, targets, obj_score) #Added obj score; comes from rpn. # match q matrixes needed for compare
         else:
             labels = None
             regression_targets = None
             matched_idxs = None
         
-        #PASSO 1: uso le proposals della RPN e seleziono quelle che sono interessanti, facendo ROI pooling e cropping (selezionando gli oggetti). è MultiScaleRoIAlign
+        #STEP 1: ROI pooling and cropping. It's MultiScaleRoIAlign from faster_rcnn.py
         box_features = self.box_roi_pool(features, proposals, image_shapes)
-        #PASSO 2: uso le cropped feature maps di sopra che sono bbox e da li ottengo le bbox vere. è TwoMLPHead
+        #STEP 2: using cropped feature maps of above and grab real bbox. It's TwoMLPHead
         box_features = self.box_head(box_features)
-        #PASSO 3: calcolo la bbox regression e la probabilità della classe usando l'output sopra. è FastRCNNPredictor
+        #STEP 3: compute bbox regression and class logits using output above. It's FastRCNNPredictor
         class_logits, box_regression = self.box_predictor(box_features)
 
         if self.training and self.use_custom_filter_proposals_scores:
-           #attenzione, ora proposals contiene anche le gt
+           #!now proposals contains also GT. #This is used if i filter proposals based on score
            dtype = proposals[0].dtype
            device = proposals[0].device
            gt_boxes = [t["boxes"].to(dtype) for t in targets]
@@ -599,7 +503,7 @@ Quindi:se voglio tenere tutte le negative, devo aumentare il 512 a un valore mag
            
         result: List[Dict[str, torch.Tensor]] = []
         losses = {}
-        #PASSO 4: calcolo la loss. Questa è di classificazione e quanto buone sono le bbox.
+        #STEP 4: compute loss. Classification and bbox regression
         if self.training:
             if labels is None:
                 raise ValueError("labels cannot be None")
@@ -627,16 +531,15 @@ Quindi:se voglio tenere tutte le negative, devo aumentare il 512 a un valore mag
         
     def select_proposals_custom(self, proposals, gt_boxes, gt_labels, labels, match_q_matrixes, class_logits):
         # type: (List[Tensor], List[Tensor], List[Tensor]) -> Tuple[List[Tensor], List[Tensor]]
-        #2 liste vuote. La label qui conterrà le label dell'oggetto preso dalla GT.
         indexes = []
-        indexes_offset = [] #serve per batch_size>1, perchè l'objectness sono indici tutti insieme delle img
-        n_offset=0 #in base al batch size alla fine, quante len(anchors) devo sommare
+        indexes_offset = [] #needed for batch_size>1, because objectness is flattened and contains all indexes all together
+        n_offset=0 #based on batch size, how many len(anchors) I need to sum
         for proposals_in_image, gt_boxes_in_image, gt_labels_in_image, labels_in_image, match_quality_matrix in zip(proposals, gt_boxes, gt_labels, labels, match_q_matrixes):
            tot_offset=0
            if n_offset>0:
               for a in range(0, n_offset):
                  tot_offset+=len(proposals[a])
-           #recupero class_logits relative a questa proposal
+           #grab class logits related to this proposal
            max_index = len(proposals_in_image) + tot_offset
            min_index = tot_offset
            class_logits_image = class_logits[min_index:max_index]
@@ -645,14 +548,12 @@ Quindi:se voglio tenere tutte le negative, devo aumentare il 512 a un valore mag
            device = proposals_in_image.device
            tensor_taken=torch.empty(0, dtype=torch.int64).to(device)
                 
-           """ Premessa 1 (attivare proposals): ordinerei tutte le proposals per ogni target in base a IOU con esso (tralasciando condifence e label), seleziono le prime n e le passo alla loss """
-           #estraggo i valori positivi
+           #IDEA 1.
            labels_indexes = torch.arange(len(labels_in_image), device=device)
            matched_vals, matches_idx = match_quality_matrix.max(dim=0)
            sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True)     
            my_pos_sort = labels_indexes[sort_ma_val_idx]
            matches_idx_sort = matches_idx[sort_ma_val_idx]            
-           #le prime n sono il gt (ordinate per IoU). I gt li devo tenere comunque perché così funziona l'originale, e poi prenderne altri n. Allora li seleziono rimuovendo le prime n_gt occorrenze, e recuperando tali n_gt occorrenze subito dopo il for
            my_pos_sort_without_gt = my_pos_sort[n_gt:]
            matches_idx_without_gt = matches_idx_sort[n_gt:]
            for val in range(0, n_gt):
@@ -660,48 +561,17 @@ Quindi:se voglio tenere tutte le negative, devo aumentare il 512 a un valore mag
               true_idx = torch.where(index)[0]
               true_idx = true_idx[:self.n_top_pos_to_keep]
               tensor_taken = torch.cat([tensor_taken, my_pos_sort_without_gt[true_idx]])
-              #devo sovrascrivere ora le label per essere sicuro che verrà considerate come positive
-              #approccio generalizzato indipendente dal fatto che abbia 1 sola classe
               labels_in_image[my_pos_sort_without_gt[true_idx]] = gt_labels_in_image[val]
               
-           tensor_taken = torch.cat([tensor_taken, my_pos_sort[:n_gt]])
-           """
-           #Metodo vecchio
-           
-           #IDEA: RECUPERO INDICI CON LABEL=1 che sono negativi o del primo gt o dell'altro
-           my_pos = torch.where(labels_in_image >= 1)[0]
-           #questi sono negativi o primo gt o degli altri
+           tensor_taken = torch.cat([tensor_taken, my_pos_sort[:n_gt]])         
+           #IDEA 2.
            my_neg = torch.where(labels_in_image == 0)[0]
-           #recupero class_logits dei negativi
-           class_logits_neg = class_logits_image[my_neg]
-           only_pos = match_quality_matrix[:, my_pos]
-           only_neg = match_quality_matrix[:, my_neg]
-           
-           #estraggo i valori positivi
-           matched_vals, matches_idx = only_pos.max(dim=0)
-           sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True)     
-           my_pos_sort = my_pos[sort_ma_val_idx]
-           matches_idx_sort = matches_idx[sort_ma_val_idx]            
-           #le prime n sono il gt (ordinate per IoU). I gt li devo tenere comunque perché così funziona l'originale, e poi prenderne altri n. Allora li seleziono rimuovendo le prime n_gt occorrenze, e recuperando tali n_gt occorrenze subito dopo il for
-           my_pos_sort_without_gt = my_pos_sort[n_gt:]
-           matches_idx_without_gt = matches_idx_sort[n_gt:]
-           for val in range(0, n_gt):
-              index = (matches_idx_without_gt == val)
-              true_idx = torch.where(index)[0]
-              true_idx = true_idx[:self.n_top_pos_to_keep]
-              tensor_taken = torch.cat([tensor_taken, my_pos_sort_without_gt[true_idx]])
-              
-           tensor_taken = torch.cat([tensor_taken, my_pos_sort[:n_gt]])
-           """
-           """ Premessa 2 (sopprimere predicitions FPiou): considero solo le bbox con label 1 (persona), le ordino per confidence  e seleziono le prime t con iou < di 0.5 (qui è lo standard) """
-           
-           my_neg = torch.where(labels_in_image == 0)[0]
-           #recupero class_logits dei negativi
+           #grab negative class logits
            class_logits_neg = class_logits_image[my_neg]
            only_neg = match_quality_matrix[:, my_neg]
 
-           matched_vals, matches_idx = only_neg.max(dim=0) #prima sono ordinati per objectness score  
-           class_val, class_idx = torch.sort(class_logits_neg[:, 1], descending=True) #ora ordinati per class logits
+           matched_vals, matches_idx = only_neg.max(dim=0) #ordered by objectness score  
+           class_val, class_idx = torch.sort(class_logits_neg[:, 1], descending=True) #now order by class logits
            my_neg_sort = my_neg[class_idx]
            matches_idx_sort = matches_idx[class_idx]
            neg_already_taken=torch.empty(0, dtype=torch.int64).to(device)
@@ -711,28 +581,11 @@ Quindi:se voglio tenere tutte le negative, devo aumentare il 512 a un valore mag
               true_idx = true_idx[:self.n_top_neg_to_keep]        
               tensor_taken = torch.cat([tensor_taken, my_neg_sort[true_idx]])
               neg_already_taken = torch.cat([neg_already_taken, my_neg_sort[true_idx]])           
-                     
-           """
-           #Metodo vecchio
-           #Ora negativi
-           matched_vals, matches_idx = only_neg.max(dim=0) #prima sono ordinati per objectness score  
-           class_val, class_idx = torch.sort(class_logits_neg[:, 1], descending=True) #ora ordinati per class logits
-           my_neg_sort = my_neg[class_idx]
-           matches_idx_sort = matches_idx[class_idx]
-           neg_already_taken=torch.empty(0, dtype=torch.int64).to(device)
-           for val in range(0, n_gt):
-              index = (matches_idx_sort == val)
-              true_idx = torch.where(index)[0]
-              true_idx = true_idx[:self.n_top_neg_to_keep]        
-              tensor_taken = torch.cat([tensor_taken, my_neg_sort[true_idx]])
-              neg_already_taken = torch.cat([neg_already_taken, my_neg_sort[true_idx]])
-           """
-           
-           """ Premessa 3 Full background (IoU zero con tutti gli oggetti). Ordinate per score """
+
+           #IDEA 3.
            if self.n_top_bg_to_keep>0:
-              bg_mask = (sort_ma_val == 0.0) #IoU pari a 0
+              bg_mask = (sort_ma_val == 0.0)
               bg_ma_val_idx = sort_ma_val_idx[bg_mask]
-              #elimino le neg già prese
               neg_taken_mask = torch.isin(bg_ma_val_idx, neg_already_taken)
               bg_ma_val_idx = bg_ma_val_idx[~neg_taken_mask]
               my_obj = obj_score_in_image[bg_ma_val_idx]
@@ -743,10 +596,10 @@ Quindi:se voglio tenere tutte le negative, devo aumentare il 512 a un valore mag
               true_idx = thresh[:self.n_top_bg_to_keep*n_gt]
               tensor_taken = torch.cat([tensor_taken, my_bg_sort[true_idx]])
            
-           #riordino anchors nell'ordine originale
+           #order back to original order
            tensor_taken, orig_order = torch.sort(tensor_taken, descending=False)
            tensor_taken_offset = tensor_taken + tot_offset
-           #incremento offset per prossima img nel batch
+           #increment offset for next image in the batch
            n_offset=n_offset+1
            indexes.append(tensor_taken)
            indexes_offset.append(tensor_taken_offset)

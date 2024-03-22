@@ -14,11 +14,8 @@ from torchvision import transforms
 conf_threshold = 0.75
 device = 'cuda'
 unet_weights_load= "model_50.pt"
-#unet_weights_load= "mse.pt"
 video_path='parasite.mp4'
-#video_path='unet.avi'
 output_video_path = 'unet.avi'
-#output_video_path = 'mse_unet.avi'
 #unet
 unet = UNet(3, False)
 unet_optimizer = torch.optim.SGD(unet.parameters(), lr=0.005,
@@ -29,7 +26,7 @@ unet_scheduler = torch.optim.lr_scheduler.StepLR(unet_optimizer,
 load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler)
 unet.to(device)
 unet.eval()
-#norm e unnorm
+#norm and unnorm
 norm = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 mean = torch.tensor([0.485, 0.456, 0.406])
 std = torch.tensor([0.229, 0.224, 0.225])
@@ -37,50 +34,57 @@ unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
 
 cap = cv2.VideoCapture(video_path)
 if not cap.isOpened():
-    print("Error: Could not open the video file.")
-    exit()
+   print("Error: Could not open the video file.")
+   exit()
 #fps = FPS().start()
 fourcc = cv2.VideoWriter_fourcc(*'XVID')
 fps = cap.get(cv2.CAP_PROP_FPS)
 #width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 #height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-#Per simulare il validation
+#On raspberry pi 3 model B (not B+)
+#4:3			#removing last layer
+#256x192 -> 0.20 fps 	0.26
+#200x150 -> 0.33 fps	0.43	
+#160x120 -> 0.50 fps	0.68
+#16:9			#removing last layer
+#256x144 -> 0.27 fps	0.35
+#192x108 -> 0.48 fps	0.64
+#160x90 -> 0.70 fps	0.95 fps
+#For validation. Other resolution under
 width = 256
 height = 192
-#Risoluzioni utilizzabili
 #width = 320	#width = 384	#width = 512	#width = 640
 #height = 240	#height = 288	#height = 384	#height = 480
 
 out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height)) 
 while True:
-	ret, frame = cap.read()
-	if not ret:
-		break
-	#frame = imutils.resize(frame, width=400)
-	orig = frame.copy()
-	frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-	frame = cv2.resize(frame, (width, height))
-	frame = frame.transpose((2, 0, 1)) #inverto canali
-	frame = torch.from_numpy(frame).float().to(device)
-	frame = frame.unsqueeze(0) #aggiungo prima dim per simulare il batch
-	frame = frame / 255.0 #prima normalizzo fra 0 e 1, e poi normalizzo rispetto a ImageNet
-	frame = norm(frame)
-	reconstructed = unet(frame)
-	reconstructed = unnormalize(reconstructed)
-	reconstructed = reconstructed.squeeze(0) #tolgo la batch dim che non mi serve
-	numpy_array = reconstructed.cpu().detach().numpy() #ottengo la sua versione in numpy
-	reconstructed = numpy_array.transpose(1, 2, 0) #inverto i canali
-	reconstructed = (reconstructed - reconstructed.min()) / (reconstructed.max() - reconstructed.min()) #normalizzo rispetto il min e max, serve poi per quando converto in uint8
-	reconstructed = (reconstructed * 255).astype(np.uint8) #converto in uint8
-	reconstructed = cv2.cvtColor(reconstructed, cv2.COLOR_RGB2BGR)	#converto in bgr per cv2
-	
-	cv2.imshow("Frame", reconstructed)
-	out.write(reconstructed)
-	key = cv2.waitKey(1) & 0xFF
-	if key == ord("q"):
-		break
-	#fps.update()
+   ret, frame = cap.read()
+   if not ret:
+      break
+   #frame = imutils.resize(frame, width=400)
+   orig = frame.copy()
+   frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+   frame = cv2.resize(frame, (width, height))
+   frame = frame.transpose((2, 0, 1)) #inverting channels
+   frame = torch.from_numpy(frame).float().to(device)
+   frame = frame.unsqueeze(0) #adding first dim to simulate batch
+   frame = frame / 255.0 #first normalize between 0,1; then normalize w.r.t. ImageNet
+   frame = norm(frame)
+   reconstructed = unet(frame)
+   reconstructed = unnormalize(reconstructed)
+   reconstructed = reconstructed.squeeze(0) #remove first dim batch, don't needed
+   numpy_array = reconstructed.cpu().detach().numpy() #obtain numpy version for opencv
+   reconstructed = numpy_array.transpose(1, 2, 0) #inverting channels again
+   reconstructed = (reconstructed - reconstructed.min()) / (reconstructed.max() - reconstructed.min()) #normalize min-max; needed for converting then in uint8
+   reconstructed = (reconstructed * 255).astype(np.uint8) #convert in uint8
+   reconstructed = cv2.cvtColor(reconstructed, cv2.COLOR_RGB2BGR) #convert in bgr for cv2
+   cv2.imshow("Frame", reconstructed)
+   out.write(reconstructed)
+   key = cv2.waitKey(1) & 0xFF
+   if key == ord("q"):
+      break
+   #fps.update()
 cap.release()
 out.release()
 cv2.destroyAllWindows()

@@ -48,7 +48,7 @@ class GeneralizedRCNN(nn.Module):
         Returns: Durante training, dict[Tensor] con le loss.
         Durante testing, list[BoxList] che contengono scores, labels, bbox e (mask).
         """
-        #CONTROLLI generali prima di iniziare il training
+        #CHECKS before starting training
         if self.training:
             if targets is None:
                 torch._assert(False, "targets should not be none when in training mode")
@@ -63,7 +63,7 @@ class GeneralizedRCNN(nn.Module):
                     else:
                         torch._assert(False, f"Expected target boxes to be of type Tensor, got {type(boxes)}.")
 
-        #CONTROLLI sulle dimensioni
+        #CHECKS on sizes
         original_image_sizes: List[Tuple[int, int]] = []
         for img in images:
             val = img.shape[-2:]
@@ -73,7 +73,7 @@ class GeneralizedRCNN(nn.Module):
             )
             original_image_sizes.append((val[0], val[1]))
 
-        #TRASNFORMS di default
+        #Default transforms
         images, targets = self.transform(images, targets)
 
         # Check for degenerate boxes
@@ -92,7 +92,7 @@ class GeneralizedRCNN(nn.Module):
                         f" Found invalid box {degen_bb} for target at index {target_idx}.",
                     )
 
-        #PARTE DI EFFETTIVO FORWARD
+        #FORWARD, modified to send objectness score to roi_heads.py
         features = self.backbone(images.tensors)
         if isinstance(features, torch.Tensor):
             features = OrderedDict([("0", features)])

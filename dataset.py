@@ -225,19 +225,9 @@ class DisturbedDataset(torch.utils.data.Dataset):
          #Horizontal split and cropping must be done on the couple of images; I do it here
          if self.is_training and not self.generate_disturbed_dataset:
             p_hflip = random.random()
-            p_crop = random.random()
             if(p_hflip>=0.5):
                disturbed_image = F.hflip(disturbed_image)
                orig_image = F.hflip(orig_image)
-            if(p_crop>=0.25): #High cropping probability
-               w, h = disturbed_image.size #width, height
-               #Choose random top, left, crop_height and crop_width
-               top = random.randint(0, round(h/4))
-               left = random.randint(0, round(w/4))
-               crop_h = random.randint(2*round(h/3), h - top)
-               crop_w = random.randint(2*round(w/3), w - left)
-               disturbed_image = F.crop(disturbed_image, top, left, crop_h, crop_w)
-               orig_image = F.crop(orig_image, top, left, crop_h, crop_w)
             #I execute here the resize so it's done with same value. Using Detr resize that keeps ratio
             random_size = random.choice(self.resize_scales)
             random_size = [random_size]

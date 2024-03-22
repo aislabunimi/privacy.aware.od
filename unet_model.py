@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 #code mostly copy pasted from https://github.com/milesial/Pytorch-UNet
-#Removed n classes
+#Removed n classes. Added Unet_encoder and Unet_decoder for simulating deployment
 class UNet(nn.Module):
     def __init__(self, n_channels, bilinear=False):
         super(UNet, self).__init__()
@@ -45,7 +45,64 @@ class UNet(nn.Module):
         self.up3 = torch.utils.checkpoint(self.up3)
         self.up4 = torch.utils.checkpoint(self.up4)
         self.outc = torch.utils.checkpoint(self.outc)
-        
+
+class UNet_Encoder(nn.Module):
+    def __init__(self, n_channels, bilinear=False):
+        super(UNet_Encoder, self).__init__()
+        self.n_channels = n_channels
+        self.bilinear = bilinear
+
+        self.inc = (DoubleConv(n_channels, 64))
+        self.down1 = (Down(64, 128))
+        self.down2 = (Down(128, 256))
+        self.down3 = (Down(256, 512))
+        factor = 2 if bilinear else 1
+        self.down4 = (Down(512, 1024 // factor))
+
+        #Removed skip connections in forward
+    def forward(self, x):
+        x = self.inc(x)
+        x = self.down1(x)
+        x = self.down2(x)
+        x = self.down3(x)
+        x = self.down4(x)
+        return x
+    
+    def use_checkpointing(self):
+        self.inc = torch.utils.checkpoint(self.inc)
+        self.down1 = torch.utils.checkpoint(self.down1)
+        self.down2 = torch.utils.checkpoint(self.down2)
+        self.down3 = torch.utils.checkpoint(self.down3)
+        self.down4 = torch.utils.checkpoint(self.down4)
+
+class UNet_Decoder(nn.Module):
+    def __init__(self, n_channels, bilinear=False):
+        super(UNet_Decoder, self).__init__()
+        self.n_channels = n_channels
+        self.bilinear = bilinear
+
+        self.up1 = (Up(1024, 512 // factor, bilinear))
+        self.up2 = (Up(512, 256 // factor, bilinear))
+        self.up3 = (Up(256, 128 // factor, bilinear))
+        self.up4 = (Up(128, 64, bilinear))
+        self.outc = (OutConv(64, n_channels))
+
+        #Removed skip connections in forward
+    def forward(self, x):
+        x = self.up1(x)
+        x = self.up2(x)
+        x = self.up3(x)
+        x = self.up4(x)
+        logits = self.outc(x)
+        return logits
+    
+    def use_checkpointing(self):
+        self.up1 = torch.utils.checkpoint(self.up1)
+        self.up2 = torch.utils.checkpoint(self.up2)
+        self.up3 = torch.utils.checkpoint(self.up3)
+        self.up4 = torch.utils.checkpoint(self.up4)
+        self.outc = torch.utils.checkpoint(self.outc)
+
 class DoubleConv(nn.Module):
     """(convolution => [BN] => ReLU) * 2"""
 
