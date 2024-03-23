@@ -136,18 +136,17 @@ def plot_results(img, prob, boxes):
     plt.axis('off')
     plt.imshow(img.cpu().squeeze(0).permute(1, 2, 0).detach().numpy())
     ax = plt.gca()
-    prob = prob.cpu()
-    boxes = boxes.cpu()
-    for p, (xmin, ymin, xmax, ymax) in zip(prob, boxes.tolist()):
-        ax.add_patch(plt.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin,
-                                   fill=False, color='red', linewidth=3))
-        text = f'{p:0.3f}'
-        ax.text(xmin, ymin, text, fontsize=15,
-                bbox=dict(facecolor='yellow', alpha=0.5))
+    if (prob is not None and boxes is not None):
+       prob = prob.cpu()
+       boxes = boxes.cpu()
+       for p, (xmin, ymin, xmax, ymax) in zip(prob, boxes.tolist()):
+           ax.add_patch(plt.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin, fill=False, color='red', linewidth=3))
+           text = f'{p:0.3f}'
+           ax.text(xmin, ymin, text, fontsize=15, bbox=dict(facecolor='yellow', alpha=0.5))
 
 from pytorch_msssim import ms_ssim, MS_SSIM
 from .lpips import LPIPS
-def compare_two_results_unet(unet, tasknet, device, img_file_path, name_path_save, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler): 
+def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device, img_file_path, name_path_save, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler): 
    unet.eval()
    tasknet.eval()
    plt.figure(figsize=(15, 10))
@@ -185,7 +184,10 @@ def compare_two_results_unet(unet, tasknet, device, img_file_path, name_path_sav
    pred_recon = reconstructed[0]
    nms_pred_recon = apply_nms(pred_recon, iou_thresh=0.1) #per applicare nms e salvare l'ultima box
    filename = os.path.basename(unet_weights_load)
-   name = os.path.splitext(filename)[0]	
+   if print_forward_along_backward:
+      name = 'Forward'
+   else:
+      name = os.path.splitext(filename)[0]	
    
    out_to_plot = torch.clamp(out_to_plot, min=0, max=1)
    orig_img = torch.clamp(orig_img, min=0, max=1)
@@ -201,11 +203,16 @@ def compare_two_results_unet(unet, tasknet, device, img_file_path, name_path_sav
    load_checkpoint(unet, unet_weights_to_compare, unet_optimizer, unet_scheduler)
    out = unet(img)
    out_to_plot = unnormalize(out)
-   reconstructed = tasknet(out)
-   pred_recon = reconstructed[0]
-   nms_pred_recon = apply_nms(pred_recon, iou_thresh=0.1)
-   filename = os.path.basename(unet_weights_to_compare)
-   name = os.path.splitext(filename)[0]
+   if print_forward_along_backward:
+      nms_pred_recon['scores'] = None
+      nms_pred_recon['boxes'] = None
+      name = 'Backward'
+   else:
+      reconstructed = tasknet(out)
+      pred_recon = reconstructed[0]
+      nms_pred_recon = apply_nms(pred_recon, iou_thresh=0.1)
+      filename = os.path.basename(unet_weights_to_compare)
+      name = os.path.splitext(filename)[0]
    
    out_to_plot = torch.clamp(out_to_plot, min=0, max=1)
    trans_te = transforms.Resize((64, 64), antialias=False)

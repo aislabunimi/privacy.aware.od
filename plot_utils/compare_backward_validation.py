@@ -86,7 +86,7 @@ def plot_curves(file_paths, labels, save_name):
 
 file_paths = ["file1.txt", "file2.txt", "file3.txt"] 
 labels = ["Curve 1", "Curve 2", "Curve 3"]
-save_name = "normalized_plot.png"
+save_name = "backward_val_loss_comparison_normalized.png"
 plot_normalized_curves(file_paths, labels, save_name)
-save_name = "plot.png"
+save_name = "backward_val_loss_comparison.png"
 plot_curves(file_paths, labels, save_name)

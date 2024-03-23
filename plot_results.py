@@ -33,7 +33,8 @@ tasknet_save_path = "tasknet_weights/tasknet"
 unet_weights_load= "model_weights/model_50.pt"
 unet_weights_to_compare= "model_weights/model_100.pt"
 tasknet_weights_load= "tasknet_weights/tasknet_10.pt"
-plot_backward_images=True #If you want to plot only the backward images
+plot_only_backward_images=False #If you want to plot only the backward images
+print_forward_along_backward=True #If you want to plot forward image (defined by unet_weights_load) with alongside the backward reconstruction model (defined by unet_weights_to_compare)
 #Config Test images folders:
 image_save_prefix='test'
 image_list_folder='test_data'
@@ -143,12 +144,12 @@ plot_ap(f'{results_dir}/ext_myinterp_ap_scoreabovethresh_iou75.txt', f'{save_dir
 plot_compare_between_two_ap(f'{results_dir}/ext_standard_ap2.txt', f'{results_dir}/ext_standard_ap.txt', ap_model_name='Unet2', ap_to_compare_model_name='Unet', plotted_comparison_save_path=f'{save_dir}/compare_AP.png', ap_plot_title='(IoU=0.75, area=all, maxDets=100) AP, AR Over Epochs')
 
 #Image Samples plotting
-if not plot_backward_images:
+if not plot_only_backward_images:
    for img in image_name_list:
       image_path=''
       image_path=f'{image_list_folder}/{img}.jpg'
       image_save_name=f'{save_dir}/{image_save_prefix}_{img}.png'
-      compare_two_results_unet(unet, tasknet, device, image_path, image_save_name, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler)
+      compare_two_results_unet(print_forward_along_backward, unet, tasknet, device, image_path, image_save_name, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler)
       plt.clf()
       
    if not os.path.exists(f'{save_dir}/{image_val_folder}'):
@@ -157,7 +158,7 @@ if not plot_backward_images:
       image_path=''
       image_path=f'{image_list_folder}/{image_val_folder}/{img}.jpg'
       image_save_name=f'{save_dir}/{image_val_folder}/{image_save_prefix}_{img}.png'
-      compare_two_results_unet(unet, tasknet, device, image_path, image_save_name, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler)
+      compare_two_results_unet(print_forward_along_backward, unet, tasknet, device, image_path, image_save_name, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler)
       plt.clf()
 
 else:
