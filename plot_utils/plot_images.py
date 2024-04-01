@@ -159,7 +159,7 @@ def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device
    img = eval_transform(image)
    img = img.unsqueeze(0)
    img = img.to(device)
-   img, _ = resize(img, None, 256) #simulating validation first size
+   #img, _ = resize(img, None, 256) #simulating validation first size
    
    res_tasknet = tasknet(img)
    img_primo_plot = img.squeeze(0)
@@ -179,6 +179,7 @@ def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device
    
    plt.subplot(1, 3, 2)
    out_to_plot = unnormalize(out)
+   out_to_plot = torch.clamp(out_to_plot, min=0, max=1)
    
    reconstructed = tasknet(out)
    pred_recon = reconstructed[0]
@@ -186,38 +187,45 @@ def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device
    filename = os.path.basename(unet_weights_load)
    if print_forward_along_backward:
       name = 'Forward'
+      save_image(out_to_plot, 'temp_for_backward.jpg')
    else:
       name = os.path.splitext(filename)[0]	
    
-   out_to_plot = torch.clamp(out_to_plot, min=0, max=1)
    orig_img = torch.clamp(orig_img, min=0, max=1)
    trans_te = transforms.Resize((64, 64), antialias=False)
    orig_img_r = trans_te(orig_img_r)
-   out = trans_te(out)
+   out_lpips = trans_te(out)
    
    lpips_model = LPIPS(net='vgg').to(device)
-   lpips_score = lpips_model(out, orig_img_r).item()
+   lpips_score = lpips_model(out_lpips, orig_img_r).item()
    plt.title(f'{name}, LPIPS: {lpips_score:0.3f}', fontsize=20)
    plot_results(out_to_plot, nms_pred_recon['scores'], nms_pred_recon['boxes'])
    plt.subplot(1, 3, 3)
    load_checkpoint(unet, unet_weights_to_compare, unet_optimizer, unet_scheduler)
-   out = unet(img)
-   out_to_plot = unnormalize(out)
+
    if print_forward_along_backward:
+      image = Image.open('temp_for_backward.jpg').convert("RGB")
+      img = eval_transform(image)
+      img = img.unsqueeze(0)
+      img = img.to(device)
+      img, _ = resize(img, None, 256)
+      out = unet(img)
       nms_pred_recon['scores'] = None
       nms_pred_recon['boxes'] = None
       name = 'Backward'
    else:
+      out = unet(img)
       reconstructed = tasknet(out)
       pred_recon = reconstructed[0]
       nms_pred_recon = apply_nms(pred_recon, iou_thresh=0.1)
       filename = os.path.basename(unet_weights_to_compare)
       name = os.path.splitext(filename)[0]
    
+   out_to_plot = unnormalize(out)
    out_to_plot = torch.clamp(out_to_plot, min=0, max=1)
    trans_te = transforms.Resize((64, 64), antialias=False)
-   out = trans_te(out)
-   lpips_score = lpips_model(out, orig_img_r).item()
+   out_lpips = trans_te(out)
+   lpips_score = lpips_model(out_lpips, orig_img_r).item()
    plt.title(f'{name}, LPIPS: {lpips_score:0.3f}', fontsize=20)
    plot_results(out_to_plot, nms_pred_recon['scores'], nms_pred_recon['boxes'])
    plt.subplots_adjust(wspace=0.05)
@@ -225,18 +233,29 @@ def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device
    plt.clf()
 
 from torchvision.utils import save_image
-def save_disturbed_pred(unet, device, img_file_path, name_path_save):
+def save_disturbed_pred(unet, device, img_file_path, name_path_save, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler):
    unet.eval()
    image = Image.open(img_file_path).convert("RGB")
    eval_transform = get_transform()
-   img = eval_transform(image)
-   img = img.unsqueeze(0)
-   img = img.to(device)
-   img, _ = resize(img, None, 256) #in validation ora è così
-   recons = unet(img)
    mean = torch.tensor([0.485, 0.456, 0.406])
    std = torch.tensor([0.229, 0.224, 0.225])
    unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
+   img = eval_transform(image)
+   img = img.unsqueeze(0)
+   img = img.to(device)
+   #img, _ = resize(img, None, 256) #in validation ora è così
+   load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler)
+   out = unet(img)
+   out = unnormalize(out)
+   out = torch.clamp(out, min=0, max=1)
+   save_image(out, 'temp_for_backward.jpg')   
+   load_checkpoint(unet, unet_weights_to_compare, unet_optimizer, unet_scheduler)
+   image = Image.open('temp_for_backward.jpg').convert("RGB")
+   img = eval_transform(image)
+   img = img.unsqueeze(0)
+   img = img.to(device)
+   img, _ = resize(img, None, 256)
+   recons = unet(img)
    recons = unnormalize(recons)
    recons = torch.clamp(recons, min=0, max=1)
    trans_r = transforms.Resize((img.shape[2], img.shape[3]), antialias=False)

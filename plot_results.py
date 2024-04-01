@@ -33,8 +33,8 @@ tasknet_save_path = "tasknet_weights/tasknet"
 unet_weights_load= "model_weights/model_50.pt"
 unet_weights_to_compare= "model_weights/model_100.pt"
 tasknet_weights_load= "tasknet_weights/tasknet_10.pt"
-plot_only_backward_images=False #If you want to plot only the backward images
-print_forward_along_backward=True #If you want to plot forward image (defined by unet_weights_load) with alongside the backward reconstruction model (defined by unet_weights_to_compare)
+plot_only_backward_images=True #If you want to plot only the backward images
+print_forward_along_backward=False #If you want to plot forward image (defined by unet_weights_load) with alongside the backward reconstruction model (defined by unet_weights_to_compare)
 #Config Test images folders:
 image_save_prefix='test'
 image_list_folder='test_data'
@@ -159,8 +159,9 @@ if not plot_only_backward_images:
       image_path=f'{image_list_folder}/{image_val_folder}/{img}.jpg'
       image_save_name=f'{save_dir}/{image_val_folder}/{image_save_prefix}_{img}.png'
       compare_two_results_unet(print_forward_along_backward, unet, tasknet, device, image_path, image_save_name, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler)
-      plt.clf()
-
+      plt.clf()      
+   if os.path.exists('temp_for_backward.jpg'):
+      os.remove('temp_for_backward.jpg')
 else:
 #show_res_test_unet(unet, tasknet, device, 'plot/val.jpg', True, 'plot/reconstructed_person.png')
 #load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler)
@@ -168,7 +169,7 @@ else:
    for img in image_name_list:
       image_path=f'{image_list_folder}/{img}.jpg'
       image_save_name=f'{save_dir}/disturbed_{img}.png'
-      save_disturbed_pred(unet, device, image_path, image_save_name)
+      save_disturbed_pred(unet, device, image_path, image_save_name, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler)
       plt.clf()
       
    if not os.path.exists(f'{save_dir}/{image_val_folder}'):
@@ -177,5 +178,7 @@ else:
       image_path=''
       image_path=f'{image_list_folder}/{image_val_folder}/{img}.jpg'
       image_save_name=f'{save_dir}/{image_val_folder}/disturbed_{img}.png'
-      save_disturbed_pred(unet, device, image_path, image_save_name)
+      save_disturbed_pred(unet, device, image_path, image_save_name, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler)
       plt.clf()
+   if os.path.exists('temp_for_backward.jpg'):
+      os.remove('temp_for_backward.jpg')

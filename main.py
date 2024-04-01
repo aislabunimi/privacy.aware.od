@@ -82,9 +82,9 @@ if not train_only_tasknet:
    unet_optimizer = torch.optim.SGD(unet.parameters(), lr=5e-4, momentum=0.9, weight_decay=5e-4, nesterov=True)
    #unet_scheduler = torch.optim.lr_scheduler.StepLR(unet_optimizer, step_size=10, gamma=0.5)
    if train_model_backward: #more patience for Backward as we have slightly more data
-      unet_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(unet_optimizer, mode='min', factor=0.5, patience=4, verbose=True)
+      unet_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(unet_optimizer, mode='min', factor=0.5, patience=4)
    else:
-      unet_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(unet_optimizer, mode='min', factor=0.5, patience=2, verbose=True)
+      unet_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(unet_optimizer, mode='min', factor=0.5, patience=2)
 
 if train_only_tasknet: #Default Tasknet
    from torchvision.models.detection import fasterrcnn_resnet50_fpn, FasterRCNN_ResNet50_FPN_Weights
@@ -125,7 +125,7 @@ elif not train_model_backward: #Modified Tasknet with custom proposal method
 if save_disturbed_dataset: #If it's True, we save the dataset and exit the script.
    train_dataloader_gen_disturbed, val_dataloader_gen_disturbed = load_dataset_for_generating_disturbed_set(
       disturbed_train_img_gen, disturbed_train_ann_gen, val_img_folder, val_ann_file, 
-      use_dataset_subset, use_coco_for_disturbed_set)
+      use_dataset_subset, use_coco_for_disturbed_set, resize_scales_transform)
    if not os.path.exists(disturbed_train_img_folder):
       os.makedirs(disturbed_train_img_folder)
    if not os.path.exists(disturbed_val_img_folder):
