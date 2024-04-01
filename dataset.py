@@ -140,6 +140,13 @@ def make_coco_transforms(image_set, scales=None):
             RandomResize(first_size, max_size=None),
             normalize,
         ])
+    
+    if image_set == 'val_gen_disturbed':
+        first_size = [scales[0]] #Force the image to be at max 256 size (first size default value) for height or width to simulate attacker that collects images
+        return Compose([
+            RandomResize(first_size, max_size=scales[0]),
+            normalize,
+        ])
 
     raise ValueError(f'unknown {image_set}')
 
@@ -282,11 +289,11 @@ def load_dataset(train_img_folder, train_ann_file, val_img_folder, val_ann_file,
    return train_dataloader, val_dataloader, example_dataloader
 	
 def load_dataset_for_generating_disturbed_set(train_img_folder, train_ann_file, val_img_folder, val_ann_file, use_dataset_subset, use_coco_train, resize_scales_transform):
-   val_coco_dataset = CocoDetection(val_img_folder, val_ann_file, transforms=make_coco_transforms('val_resize', resize_scales_transform), return_masks=False)
+   val_coco_dataset = CocoDetection(val_img_folder, val_ann_file, transforms=make_coco_transforms('val_gen_disturbed', resize_scales_transform), return_masks=False)
    if use_coco_train:
-      disturbed_train_dataset_gen = CocoDetection(train_img_folder, train_ann_file, transforms=make_coco_transforms('val_resize', resize_scales_transform), return_masks=None)
+      disturbed_train_dataset_gen = CocoDetection(train_img_folder, train_ann_file, transforms=make_coco_transforms('val_gen_disturbed', resize_scales_transform), return_masks=None)
    else:
-      disturbed_train_dataset_gen = DisturbedDataset(train_ann_file, train_img_folder, transform=make_coco_transforms('val_resize', resize_scales_transform), is_training=False, generate_disturbed_dataset=True)
+      disturbed_train_dataset_gen = DisturbedDataset(train_ann_file, train_img_folder, transform=make_coco_transforms('val_gen_disturbed', resize_scales_transform), is_training=False, generate_disturbed_dataset=True)
    
    train_indices = list(range(0, len(disturbed_train_dataset_gen), 1))
    val_indices = list(range(0, len(val_coco_dataset), 1))
