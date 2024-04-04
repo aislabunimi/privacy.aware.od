@@ -159,7 +159,7 @@ def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device
    img = eval_transform(image)
    img = img.unsqueeze(0)
    img = img.to(device)
-   #img, _ = resize(img, None, 256) #simulating validation first size
+   img, _ = resize(img, None, 256) #simulating validation first size
    
    res_tasknet = tasknet(img)
    img_primo_plot = img.squeeze(0)

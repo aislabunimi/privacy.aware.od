@@ -171,12 +171,13 @@ if not train_only_tasknet:
    my_recons_classifier = load_my_recons_classifier(my_recons_classifier_weights, device)
    my_regressor = load_my_regressor(my_regressor_weights, device)
    from lpips.lpips import LPIPS
-   lpips_model = LPIPS(net='vgg').to(device)
+   lpips_model = LPIPS().to(device) #LPIPS(net='vgg').to(device) #vgg best if i backpropagate with LPIPS loss; I want to use it only as metric, so Alex is faster and perform better
    lpips_model.eval()
    from pytorch_msssim import ms_ssim, MS_SSIM
-   ms_ssim_module = MS_SSIM(data_range=1, size_average=True, channel=3, weights=[0.0448, 0.2856, 0.3001, 0.2363, 0.1333], K=(0.01, 0.07))
+   ms_ssim_module = MS_SSIM(data_range=1, size_average=True, channel=3) #for backward standard MS_SSIM works well
+   #ms_ssim_module = MS_SSIM(data_range=1, size_average=True, channel=3, weights=[0.0448, 0.2856, 0.3001, 0.2363, 0.1333], K=(0.01, 0.07)) #older approach, but discarded for forward
    #size average is a reduction to average the MS SSIM of images in batch.
-   #With k2=0.07 we avoid cases where MS SSIM doesn't perform well (with default 0.03 values are more unstable)
+   #With k2=0.07 we avoid cases where MS SSIM doesn't perform well (with default 0.03 values are more unstable with forward; with backward we don't have this problem as much)
 
 #TRAINING TASKNET BLOCK
 if(train_only_tasknet and not train_model_backward):
