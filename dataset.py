@@ -141,7 +141,7 @@ def make_coco_transforms(image_set, scales=None):
             normalize,
         ])
     
-    if image_set == 'val_gen_disturbed':
+    if image_set == 'val_max_size':
         first_size = [scales[0]] #Force the image to be at max 256 size (default first size value) for height or width to simulate attacker that collects images
         return Compose([
             RandomResize(first_size, max_size=scales[0]),

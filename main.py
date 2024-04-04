@@ -183,7 +183,7 @@ if not train_only_tasknet:
 if(train_only_tasknet and not train_model_backward):
    if tasknet_get_AP_for_comparison:
       load_checkpoint(tasknet, tasknet_weights_load, tasknet_optimizer, tasknet_scheduler)
-      val_temp_loss = val_tasknet(val_dataloader, epoch, device, tasknet_save_path, tasknet, tasknet_optimizer,
+      val_temp_loss = val_tasknet(val_dataloader, starting_epoch, device, tasknet_save_path, tasknet, tasknet_optimizer,
          tasknet_scheduler, ap_score_threshold, results_dir)
       print("Computed AP for comparison with UNet indoor set")
       sys.exit()
