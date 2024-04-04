@@ -196,7 +196,7 @@ def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device
    orig_img_r = trans_te(orig_img_r)
    out_lpips = trans_te(out)
    
-   lpips_model = LPIPS(net='vgg').to(device)
+   lpips_model = LPIPS().to(device)
    lpips_score = lpips_model(out_lpips, orig_img_r).item()
    plt.title(f'{name}, LPIPS: {lpips_score:0.3f}', fontsize=20)
    plot_results(out_to_plot, nms_pred_recon['scores'], nms_pred_recon['boxes'])
