@@ -235,15 +235,23 @@ class RoIHeads(nn.Module):
                 #I firstly remove the first n gt; then select best n proposals; and add back the n gt after the for loop
                 my_pos_sort_without_gt = my_pos_sort[n_gt:]
                 matches_idx_without_gt = matches_idx_sort[n_gt:]
+                #sort_ma_val = sort_ma_val[n_gt:] #Debug only, to see the IoU of prop with gt present also in for loop
                 for val in range(0, n_gt):
                    index = (matches_idx_without_gt == val) #avoid duplicates; every prop can be assigned to only one gt at a time
                    true_idx = torch.where(index)[0]
                    true_idx = true_idx[:self.n_top_pos_to_keep]
+                   #print(torch.mean(sort_ma_val[true_idx])) #to see for each gt the IoU of the selected proposal with the gt, debug only
                    tensor_taken = torch.cat([tensor_taken, my_pos_sort_without_gt[true_idx]])
                    #I must overwrite old labels to be sure that the proposals will be considered as positive
                    #Generalized approach indipendent of number of classes
                    labels_in_image[my_pos_sort_without_gt[true_idx]] = gt_labels_in_image[val]
 
+                #Debug only, to see the IoU of positive proposals between each other. Doesn't include the gt "fake proposal" as we add them right before IDEA 2
+                #pos_iou_set = proposals_in_image[tensor_taken]
+                #iou_pos = box_ops.box_iou(pos_iou_set, pos_iou_set)
+                #iou_pos = iou_pos[iou_pos != 1] #Remove IoU of proposals with themselves, that is 1
+                #mean_iou_pos = torch.mean(iou_pos)
+                
                 tensor_taken = torch.cat([tensor_taken, my_pos_sort[:n_gt]])
                 #IDEA 2. Suppressing wrong predictions. Pick negative proposals (under IoU thresh), sort them by score; select top n
                 #For selecting which are negative, I exploit the parameter of negative Matcher of bg_iou_thresh.
@@ -263,6 +271,14 @@ class RoIHeads(nn.Module):
                    true_idx = true_idx[:self.n_top_neg_to_keep]        
                    tensor_taken = torch.cat([tensor_taken, my_neg_sort[true_idx]])
                    neg_already_taken = torch.cat([neg_already_taken, my_neg_sort[true_idx]])
+                
+                #Debug only, to see the IoU of negative proposals between each other.
+                #neg_iou_set = proposals_in_image[neg_already_taken]
+                #iou_neg = box_ops.box_iou(neg_iou_set, neg_iou_set)
+                #iou_neg = iou_neg[iou_neg != 1] #Remove IoU of proposals with themselves, that is 1
+                #mean_iou_neg = torch.mean(iou_neg)
+                #print(mean_iou_pos, mean_iou_neg)
+                              
                 #IDEA 3. Remove totally wrong predictions on background (with IoU=0 with all GTs). Ordered by score, above a certain thresh
                 if self.n_top_bg_to_keep>0:
                    bg_mask = (sort_ma_val == 0.0) #IoU = 0
