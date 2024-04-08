@@ -195,7 +195,7 @@ def save_image_examples(example_dataloader, results_dir, model, epoch, device):
    unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
    model.eval()
    coco = get_coco_api_from_dataset(example_dataloader.dataset)
-   with torch.no_grad(): #non calcolo il gradiente, sto testando e bassa
+   with torch.no_grad(): 
       for imgs, targets in tqdm(example_dataloader, desc=f'Epoch {epoch} - Saving Validation examples'):
          imgs, _ = imgs.decompose()
          imgs = imgs.to(device)
@@ -227,7 +227,9 @@ def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_ge
             coco_image_id = targets[0]["image_id"].item()
             path = coco.loadImgs(coco_image_id)[0]["file_name"]
             if keep_original_size: #for fine tune Tasknet on disturbed set; less meaningful for backward
-               orig_size = [imgs.shape[2], imgs.shape[3]]
+               orig_h, orig_w = targets[0]['orig_size']
+               #orig_size = [imgs.shape[2], imgs.shape[3]]
+               orig_size = [orig_h, orig_w]
                trans = transforms.Resize(orig_size, antialias=False)
                reconstructed = trans(reconstructed)
             reconstructed = unnormalize(reconstructed) #unnormalized and clamping needed before storing images in [0,1]
@@ -256,8 +258,10 @@ def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_ge
          reconstructed = model(imgs)
          coco_image_id = targets[0]["image_id"].item()
          path = coco.loadImgs(coco_image_id)[0]["file_name"]
-         if keep_original_size:
-            orig_size = [imgs.shape[2], imgs.shape[3]]
+         if keep_original_size: #for fine tune Tasknet on disturbed set
+            orig_h, orig_w = targets[0]['orig_size']
+            #orig_size = [imgs.shape[2], imgs.shape[3]]
+            orig_size = [orig_h, orig_w]
             trans = transforms.Resize(orig_size, antialias=False)
             reconstructed = trans(reconstructed)
          reconstructed = unnormalize(reconstructed)
