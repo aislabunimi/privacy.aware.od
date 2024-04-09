@@ -13,16 +13,13 @@ from torchvision import transforms
 #config
 conf_threshold = 0.75
 device = 'cuda'
-unet_weights_load= "model_50.pt"
-video_path='parasite.mp4'
+unet_weights_load= "model_weights/model_50.pt"
+video_path='parasite380x256.mp4'
 output_video_path = 'unet.avi'
 #unet
 unet = UNet(3, False)
-unet_optimizer = torch.optim.SGD(unet.parameters(), lr=0.005,
-                                momentum=0.9, weight_decay=0.0005, nesterov=True)
-unet_scheduler = torch.optim.lr_scheduler.StepLR(unet_optimizer,
-                                                   step_size=10,
-                                                   gamma=0.5)
+unet_optimizer = torch.optim.SGD(unet.parameters(), lr=5e-4, momentum=0.9, weight_decay=5e-4, nesterov=True)
+unet_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(unet_optimizer, mode='min', factor=0.5, patience=4)
 load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler)
 unet.to(device)
 unet.eval()
@@ -52,8 +49,8 @@ fps = cap.get(cv2.CAP_PROP_FPS)
 #192x108 -> 0.48 fps	0.64
 #160x90 -> 0.70 fps	0.95 fps
 #For validation. Other resolution under
-width = 256
-height = 192
+width = 380 #256
+height = 256 #192
 #width = 320	#width = 384	#width = 512	#width = 640
 #height = 240	#height = 288	#height = 384	#height = 480
 
@@ -78,6 +75,7 @@ while True:
    reconstructed = numpy_array.transpose(1, 2, 0) #inverting channels again
    reconstructed = (reconstructed - reconstructed.min()) / (reconstructed.max() - reconstructed.min()) #normalize min-max; needed for converting then in uint8
    reconstructed = (reconstructed * 255).astype(np.uint8) #convert in uint8
+   reconstructed = cv2.resize(reconstructed, (width, height)) #guard against loss of size related to assence of skip connection
    reconstructed = cv2.cvtColor(reconstructed, cv2.COLOR_RGB2BGR) #convert in bgr for cv2
    cv2.imshow("Frame", reconstructed)
    out.write(reconstructed)
