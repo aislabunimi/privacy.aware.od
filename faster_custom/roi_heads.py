@@ -197,12 +197,12 @@ class RoIHeads(nn.Module):
             if gt_boxes_in_image.numel() == 0:
                 # Background image
                 device = proposals_in_image.device
-                clamped_matched_idxs_in_image = torch.zeros(
-                    (proposals_in_image.shape[0],), dtype=torch.int64, device=device
+                #I keep self.n_top_neg_to_keep if i have a background image
+                my_clamped = torch.zeros(
+                    (self.n_top_neg_to_keep), dtype=torch.int64, device=device
                 )
-                labels_in_image = torch.zeros((proposals_in_image.shape[0],), dtype=torch.int64, device=device)
-                my_clamped = clamped_matched_idxs_in_image
-                my_labels = labels_in_image
+                my_labels = torch.zeros((self.n_top_neg_to_keep), dtype=torch.int64, device=device)
+                tensor_taken = torch.arange((self.n_top_neg_to_keep), dtype=torch.int64, device=device)
             else:
                 #compute IoU for every proposal w.r.t. GT. Output: matrix M gt x N prop.
                 match_quality_matrix = box_ops.box_iou(gt_boxes_in_image, proposals_in_image)
@@ -304,6 +304,8 @@ class RoIHeads(nn.Module):
             matched_idxs.append(my_clamped)
             labels.append(my_labels)
             indexes.append(tensor_taken)
+            #torch.set_printoptions(threshold=10_000)
+            #print(my_clamped)
         return matched_idxs, labels, indexes
 
     def subsample(self, labels):
@@ -552,14 +554,18 @@ class RoIHeads(nn.Module):
         indexes_offset = [] #needed for batch_size>1, because objectness is flattened and contains all indexes all together
         n_offset=0 #based on batch size, how many len(anchors) I need to sum
         for proposals_in_image, gt_boxes_in_image, gt_labels_in_image, labels_in_image, match_quality_matrix in zip(proposals, gt_boxes, gt_labels, labels, match_q_matrixes):
-           if match_quality_matrix is None:
-              n_offset=n_offset+1
-              continue #means it's a image without gt
            tot_offset=0
            if n_offset>0:
               for a in range(0, n_offset):
                  tot_offset+=len(proposals[a])
            #grab class logits related to this proposal
+           if match_quality_matrix is None: #means it's an image without gt
+              tensor_taken = torch.zeros((self.n_top_neg_to_keep), dtype=torch.int64, device=device)
+              tensor_taken_offset = tensor_taken + tot_offset
+              indexes.append(tensor_taken)
+              indexes_offset.append(tensor_taken_offset)
+              n_offset=n_offset+1
+              continue 
            max_index = len(proposals_in_image) + tot_offset
            min_index = tot_offset
            class_logits_image = class_logits[min_index:max_index]

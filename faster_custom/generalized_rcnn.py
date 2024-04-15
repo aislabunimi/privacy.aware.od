@@ -16,13 +16,6 @@ from torchvision.utils import _log_api_usage_once
 #####
 
 class GeneralizedRCNN(nn.Module):
-    """
-    Classe padre Generalized R-CNN usata anche dalla faster.
-    Argomenti: la backbone (nn.Module), rpn (nn.Module), 
-    roi_heads (nn.Module)(prende features e proposals dall'RPN e computa le detections),
-    transform (nn.Module), esegue le transforms se specificate
-    """
-
     def __init__(self, backbone: nn.Module, rpn: nn.Module, roi_heads: nn.Module, transform: nn.Module) -> None:
         super().__init__()
         _log_api_usage_once(self)
@@ -43,11 +36,6 @@ class GeneralizedRCNN(nn.Module):
 
     def forward(self, images, targets=None):
         # type: (List[Tensor], Optional[List[Dict[str, Tensor]]]) -> Tuple[Dict[str, Tensor], List[Dict[str, Tensor]]]
-        """
-        Args: images (list[Tensor]), targets (list[Dict[str, Tensor]]): ground-truth delle img (optional)
-        Returns: Durante training, dict[Tensor] con le loss.
-        Durante testing, list[BoxList] che contengono scores, labels, bbox e (mask).
-        """
         #CHECKS before starting training
         if self.training:
             if targets is None:
