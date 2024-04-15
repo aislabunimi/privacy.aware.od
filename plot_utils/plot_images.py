@@ -36,7 +36,7 @@ def show_res_test_unet(model, tasknet, device, img_file_path, not_reconstructed,
    res_tasknet = tasknet(img)
    img_primo_plot = img.squeeze(0)
    img_primo_plot = unnormalize(img_primo_plot)
-   nms_pred = apply_nms(res_tasknet[0], iou_thresh=0.1)
+   nms_pred = apply_nms(res_tasknet[0], iou_thresh=0.5)
    plt.subplot(1, 3, 1)
    
    print("Original Labels and scores: ", nms_pred["labels"], nms_pred["scores"])
@@ -57,7 +57,7 @@ def show_res_test_unet(model, tasknet, device, img_file_path, not_reconstructed,
    plt.subplot(1, 3, 3)
    reconstructed = tasknet(out)
    pred_recon = reconstructed[0]
-   nms_pred_recon = apply_nms(pred_recon, iou_thresh=0.1) #per applicare nms e salvare l'ultima box
+   nms_pred_recon = apply_nms(pred_recon, iou_thresh=0.5) #per applicare nms e salvare l'ultima box
    
    print("Reconstructed Labels and Scores: ", nms_pred_recon["labels"], nms_pred_recon["scores"])
    plot_results(out_to_plot, nms_pred_recon['scores'], nms_pred_recon['boxes'])
@@ -164,7 +164,7 @@ def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device
    res_tasknet = tasknet(img)
    img_primo_plot = img.squeeze(0)
    img_primo_plot = unnormalize(img_primo_plot)
-   nms_pred = apply_nms(res_tasknet[0], iou_thresh=0.1)
+   nms_pred = apply_nms(res_tasknet[0], iou_thresh=0.5) #saving last bboxes
    
    load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler)
    out = unet(img)
@@ -183,7 +183,7 @@ def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device
    
    reconstructed = tasknet(out)
    pred_recon = reconstructed[0]
-   nms_pred_recon = apply_nms(pred_recon, iou_thresh=0.1) #per applicare nms e salvare l'ultima box
+   nms_pred_recon = apply_nms(pred_recon, iou_thresh=0.5) 
    filename = os.path.basename(unet_weights_load)
    if print_forward_along_backward:
       name = 'Forward'
@@ -217,7 +217,7 @@ def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device
       out = unet(img)
       reconstructed = tasknet(out)
       pred_recon = reconstructed[0]
-      nms_pred_recon = apply_nms(pred_recon, iou_thresh=0.1)
+      nms_pred_recon = apply_nms(pred_recon, iou_thresh=0.5)
       filename = os.path.basename(unet_weights_to_compare)
       name = os.path.splitext(filename)[0]
    

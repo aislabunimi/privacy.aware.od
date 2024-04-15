@@ -120,7 +120,8 @@ def make_coco_transforms(image_set, scales=None):
     normalize = Compose([
         ToTensor(),
         Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ])
+    ]) #Note: faster receive images normalized, and applies an additional hard coded normalization with same values.
+    # this double normalization is intended as faster achieves better AP and AR in this way. UNet uses images normalized only one time instead (no norm is hard coded in the model).
     
     if image_set == 'train':
         return Compose([

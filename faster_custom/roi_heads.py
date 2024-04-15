@@ -157,6 +157,7 @@ class RoIHeads(nn.Module):
                     (proposals_in_image.shape[0],), dtype=torch.int64, device=device
                 )
                 labels_in_image = torch.zeros((proposals_in_image.shape[0],), dtype=torch.int64, device=device)
+                match_quality_matrix = None
             else:
                 #  set to self.box_similarity when https://github.com/pytorch/pytorch/issues/27495 lands
                
@@ -551,6 +552,9 @@ class RoIHeads(nn.Module):
         indexes_offset = [] #needed for batch_size>1, because objectness is flattened and contains all indexes all together
         n_offset=0 #based on batch size, how many len(anchors) I need to sum
         for proposals_in_image, gt_boxes_in_image, gt_labels_in_image, labels_in_image, match_quality_matrix in zip(proposals, gt_boxes, gt_labels, labels, match_q_matrixes):
+           if match_quality_matrix is None:
+              n_offset=n_offset+1
+              continue #means it's a image without gt
            tot_offset=0
            if n_offset>0:
               for a in range(0, n_offset):
