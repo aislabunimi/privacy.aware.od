@@ -197,11 +197,12 @@ class RoIHeads(nn.Module):
             if gt_boxes_in_image.numel() == 0:
                 # Background image
                 device = proposals_in_image.device
-                #I keep self.n_top_neg_to_keep if i have a background image
+                #I keep highest scoring self.n_top_neg_to_keep if i have a background image
                 my_clamped = torch.zeros(
                     (self.n_top_neg_to_keep), dtype=torch.int64, device=device
                 )
                 my_labels = torch.zeros((self.n_top_neg_to_keep), dtype=torch.int64, device=device)
+                #By default proposals are ordered by objectness score, I can just keep directly first n proposals
                 tensor_taken = torch.arange((self.n_top_neg_to_keep), dtype=torch.int64, device=device)
             else:
                 #compute IoU for every proposal w.r.t. GT. Output: matrix M gt x N prop.
@@ -260,8 +261,8 @@ class RoIHeads(nn.Module):
                 #When I do this line of code, I won't pick previously taken proposals as I have updated their label at step before!
                 my_neg = torch.where(labels_in_image == 0)[0]     
                 only_neg = match_quality_matrix[:, my_neg]
-                matched_vals, matches_idx = only_neg.max(dim=0) #By default proposals are ordered by objectness score
-                sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True)          
+                matched_vals, matches_idx = only_neg.max(dim=0) #By default proposals are ordered by objectness score. In theory next two lines are useless and could be changed with a torch.arange.
+                sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True)
                 sort_ma_val_idx_score, _ = torch.sort(sort_ma_val_idx, descending=False)
                 my_neg_sort = my_neg[sort_ma_val_idx_score]
                 matches_idx_sort = matches_idx[sort_ma_val_idx_score]
@@ -559,19 +560,24 @@ class RoIHeads(nn.Module):
               for a in range(0, n_offset):
                  tot_offset+=len(proposals[a])
            #grab class logits related to this proposal
+           max_index = len(proposals_in_image) + tot_offset
+           min_index = tot_offset
+           class_logits_image = class_logits[min_index:max_index]
+           device = proposals_in_image.device
+           
            if match_quality_matrix is None: #means it's an image without gt
-              tensor_taken = torch.zeros((self.n_top_neg_to_keep), dtype=torch.int64, device=device)
+              #I keep highest scored self.n_top_neg_to_keep if i have a background image
+              max_neg_noclass, _ = torch.max(class_logits_image[:, 1:], dim=1) #grab the prediction with highest score indipendent from associated class. The 1: is for skipping the background associated score
+              class_val, class_idx = torch.sort(max_neg_noclass, descending=True)
+              
+              tensor_taken = class_idx[:self.n_top_neg_to_keep]
               tensor_taken_offset = tensor_taken + tot_offset
               indexes.append(tensor_taken)
               indexes_offset.append(tensor_taken_offset)
               n_offset=n_offset+1
-              continue 
-           max_index = len(proposals_in_image) + tot_offset
-           min_index = tot_offset
-           class_logits_image = class_logits[min_index:max_index]
+              continue
            
            n_gt = len(gt_boxes_in_image)
-           device = proposals_in_image.device
            tensor_taken=torch.empty(0, dtype=torch.int64).to(device)
                 
            #IDEA 1.
@@ -595,9 +601,12 @@ class RoIHeads(nn.Module):
            #grab negative class logits
            class_logits_neg = class_logits_image[my_neg]
            only_neg = match_quality_matrix[:, my_neg]
-
+ 
            matched_vals, matches_idx = only_neg.max(dim=0) #ordered by objectness score  
-           class_val, class_idx = torch.sort(class_logits_neg[:, 1], descending=True) #now order by class logits
+           max_neg_noclass, _ = torch.max(class_logits_neg[:, 1:], dim=1) #grab the prediction with highest score indipendent from associated class. The 1: is for skipping the background associated score
+           class_val, class_idx = torch.sort(max_neg_noclass, descending=True)
+           
+           #class_val, class_idx = torch.sort(class_logits_neg[:, 1], descending=True) #now order by class logits
            my_neg_sort = my_neg[class_idx]
            matches_idx_sort = matches_idx[class_idx]
            neg_already_taken=torch.empty(0, dtype=torch.int64).to(device)
@@ -614,7 +623,7 @@ class RoIHeads(nn.Module):
               bg_ma_val_idx = sort_ma_val_idx[bg_mask]
               neg_taken_mask = torch.isin(bg_ma_val_idx, neg_already_taken)
               bg_ma_val_idx = bg_ma_val_idx[~neg_taken_mask]
-              my_obj = obj_score_in_image[bg_ma_val_idx]
+              my_obj = class_logits_image[bg_ma_val_idx]
               bg_ma_val_idx, _ = torch.sort(bg_ma_val_idx, descending=False)
               my_bg_sort = my_neg[bg_ma_val_idx]
               bg_matches_idx = matches_idx[bg_ma_val_idx]

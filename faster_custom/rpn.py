@@ -320,13 +320,15 @@ class RegionProposalNetwork(torch.nn.Module):
             if gt_boxes.numel() == 0:
                 # Background image (negative example)
                 device = anchors_per_image.device
-                #I keep self.n_top_neg_to_keep if i have a background image
-                print(anchors_per_image.shape)
+                #I keep highest scored self.n_top_neg_to_keep if i have a background image
                 #4 is for the feature levels
                 my_matched_gt_boxes = torch.zeros(([self.n_top_neg_to_keep, 4]), dtype=torch.float32, device=device)
                 my_labels = torch.zeros((self.n_top_neg_to_keep), dtype=torch.float32, device=device)
-                tensor_taken=torch.arange((self.n_top_neg_to_keep), dtype=torch.int64, device=device)
-                tensor_taken_offset= tensor_taken + tot_offset
+                objectness = objectness.flatten() #extract objectness
+                my_obj = objectness[sort_ma_val_idx+tot_offset]
+                my_obj_sort, my_obj_sort_idx = torch.sort(my_obj, descending=True) #sort by score
+                tensor_taken = my_obj_sort_idx[:self.n_top_neg_to_keep]
+                tensor_taken_offset = tensor_taken + tot_offset
             else:
                 match_quality_matrix = self.box_similarity(gt_boxes, anchors_per_image)
                 #grab IoU of every anchor with each gt
