@@ -623,11 +623,12 @@ class RoIHeads(nn.Module):
               bg_ma_val_idx = sort_ma_val_idx[bg_mask]
               neg_taken_mask = torch.isin(bg_ma_val_idx, neg_already_taken)
               bg_ma_val_idx = bg_ma_val_idx[~neg_taken_mask]
-              my_obj = class_logits_image[bg_ma_val_idx]
-              bg_ma_val_idx, _ = torch.sort(bg_ma_val_idx, descending=False)
-              my_bg_sort = my_neg[bg_ma_val_idx]
-              bg_matches_idx = matches_idx[bg_ma_val_idx]
-              thresh = torch.nonzero(my_obj>=self.obj_bg_score_thresh).flatten()
+              class_bg = class_logits_image[bg_ma_val_idx]
+              
+              max_neg_noclass, _ = torch.max(class_bg[:, 1:], dim=1) #grab the prediction with highest score indipendent from associated class. The 1: is for skipping the background associated score
+              class_val, class_idx = torch.sort(max_neg_noclass, descending=True)
+              my_bg_sort = my_neg[class_idx]
+              thresh = torch.nonzero(class_val>=self.obj_bg_score_thresh).flatten()
               true_idx = thresh[:self.n_top_bg_to_keep*n_gt]
               tensor_taken = torch.cat([tensor_taken, my_bg_sort[true_idx]])
            
