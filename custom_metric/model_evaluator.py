@@ -100,8 +100,9 @@ class ModelEvaluator:
 
     def add_predictions_faster_rcnn(self, targets, predictions, img_size):
         img_count_temp = self._img_count
-        #print(targets, predictions)
         for target in targets:
+            if len(target['boxes']) == 0: #images without ground truths are discarded
+                continue
             for label, [x, y, w, h] in zip(target['labels'].tolist(), target['boxes'].tolist()):
                 w = w - x #my bbox of gt are already prepared for faster rcnn in format xmin, ymin, xmax, ymax; I convert them back in xywh; they are also in absolute, not relative
                 h = h - y
@@ -118,6 +119,8 @@ class ModelEvaluator:
             self._img_count += 1
 
         for prediction in predictions:
+            if len(target['boxes']) == 0: #images without ground truths are discarded
+                continue
             for [x1, y1, x2, y2], label, score in zip(prediction['boxes'].tolist(), prediction['labels'].tolist(), prediction['scores'].tolist()):
 
                 if label >= 0:

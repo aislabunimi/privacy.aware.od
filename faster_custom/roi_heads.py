@@ -25,7 +25,11 @@ def fastrcnn_loss(class_logits, box_regression, labels, regression_targets):
         box_loss (Tensor)
     """
 
+    #torch.set_printoptions(threshold=10_000)
+    #print(labels)
     labels = torch.cat(labels, dim=0)
+    #print(class_logits, labels)
+    #x=input()
     regression_targets = torch.cat(regression_targets, dim=0)
 
     #classification loss computed on all preds, positive and negative; based on confidence and assigned label
@@ -214,8 +218,10 @@ class RoIHeads(nn.Module):
                 clamped_matched_idxs_in_image = matched_idxs_in_image.clamp(min=0)
                 #-1 gives error, so clamping to 0; number from 0-2 that represents to which gt a proposal must be associated
                 
+               
                 labels_in_image = gt_labels_in_image[clamped_matched_idxs_in_image]
                 labels_in_image = labels_in_image.to(dtype=torch.int64)
+                
                 # Label background (below the low threshold) 
                 bg_inds = matched_idxs_in_image == self.proposal_matcher.BELOW_LOW_THRESHOLD
                 labels_in_image[bg_inds] = 0
@@ -247,6 +253,7 @@ class RoIHeads(nn.Module):
                    #I must overwrite old labels to be sure that the proposals will be considered as positive
                    #Generalized approach indipendent of number of classes
                    labels_in_image[my_pos_sort_without_gt[true_idx]] = gt_labels_in_image[val]
+                   
 
                 #Debug only, to see the IoU of positive proposals between each other. Doesn't include the gt "fake proposal" as we add them right before IDEA 2
                 #pos_iou_set = proposals_in_image[tensor_taken]
@@ -259,9 +266,10 @@ class RoIHeads(nn.Module):
                 #For selecting which are negative, I exploit the parameter of negative Matcher of bg_iou_thresh.
                 #It's impossible to take again the proposals picked up at step before
                 #When I do this line of code, I won't pick previously taken proposals as I have updated their label at step before!
-                my_neg = torch.where(labels_in_image == 0)[0]     
+                #By default proposals are ordered by objectness score. So my_neg is already ordered for score, but I need to grab the corresponding GT
+                my_neg = torch.where(labels_in_image == 0)[0]
                 only_neg = match_quality_matrix[:, my_neg]
-                matched_vals, matches_idx = only_neg.max(dim=0) #By default proposals are ordered by objectness score. In theory next two lines are useless and could be changed with a torch.arange.
+                matched_vals, matches_idx = only_neg.max(dim=0)
                 sort_ma_val, sort_ma_val_idx = torch.sort(matched_vals, descending=True)
                 sort_ma_val_idx_score, _ = torch.sort(sort_ma_val_idx, descending=False)
                 my_neg_sort = my_neg[sort_ma_val_idx_score]

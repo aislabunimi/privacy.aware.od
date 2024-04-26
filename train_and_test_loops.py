@@ -162,6 +162,8 @@ def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, mo
          #Before passing reconstructed, input needs to be normalized as ImageNet and resized to 64x64
          trans_te = transforms.Resize((64, 64), antialias=False)
          reconstructed = trans_te(reconstructed)
+         nor = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+         reconstructed = nor(reconstructed)
          compute_my_recons_classifier_pred(my_recons_classifier, reconstructed, my_rec_class_dict)			
          recon_rate += torch.mean(my_regressor(reconstructed)).item()
          

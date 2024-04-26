@@ -3,11 +3,11 @@ import torchvision
 import random
 import os
 import numpy as np
-#import per la funzione compute_ap
+#import for compute_ap function
 from coco_eval import *
 from coco_eval import _get_iou_types
 import sys
-#import per la funzione di compute_custom_metric
+#import for compute_custom_metric function
 import json
 from custom_metric.my_evaluators_complete_metric import MyEvaluatorCompleteMetric
 
@@ -125,10 +125,10 @@ def compute_custom_metric(evaluator_complete_metric, custom_metric_folder, epoch
          complete_metrics[(iou_threshold, confidence_threshold)] = evaluator_complete_metric.get_metrics(
             iou_threshold=iou_threshold, confidence_threshold=confidence_threshold, 
             door_no_door_task=False, plot_curves=False)
-   filtered_metrics = {key: value['1'] for key, value in complete_metrics.items()} #prendo solo label persone
+   filtered_metrics = {key: value['1'] for key, value in complete_metrics.items()} #get only people label
    for m in filtered_metrics.items():
       save_path=f'{custom_metric_folder}/iou{m[0][0]}_score{m[0][1]}.json'
-      m[1]['epoch'] = epoch #aggiungo il campo epoca cosi recupero più facilmente
+      m[1]['epoch'] = epoch #I add epoch field for retrieving it easily
       if epoch>1:
          with open(save_path, 'r') as json_file:
             data = json.load(json_file)
@@ -179,7 +179,7 @@ def compute_my_recons_classifier_pred(my_recons_classifier, reconstructed, my_re
             my_rec_class_dict[value_item] += occurrence_item
          else:
             my_rec_class_dict[value_item] = occurrence_item
-      outputs = torch.nn.functional.softmax(outputs) #ottengo le prob per ogni classe
+      outputs = torch.nn.functional.softmax(outputs) #probs for every class
       if 'prob0tot' not in my_rec_class_dict:
          my_rec_class_dict['prob0tot']=0
       if 'prob1tot' not in my_rec_class_dict:

@@ -19,7 +19,7 @@ from torchvision.models.detection.backbone_utils import _resnet_fpn_extractor, _
 from .generalized_rcnn import GeneralizedRCNN
 from .roi_heads import RoIHeads
 from .rpn import RegionProposalNetwork, RPNHead
-from torchvision.models.detection.transform import GeneralizedRCNNTransform
+from .transform_faster_removed import GeneralizedRCNNTransformRemoved #custom transform class to avoid transforms and leave them on the dataset
 
 #####
 # CODE COPYPASTED FROM TORCHVISION DETECTION, ADDED MY COMMENTS AND PARAMETERS; REMOVED USELESS PARTS FOR ME LIKE KEYPOINTS AND MASKS
@@ -52,10 +52,12 @@ class FasterRCNN(GeneralizedRCNN):
         backbone, #backbone used for feature extraction
         num_classes=None, #number of output classes including background
         # transform parameters
-        min_size=800,
-        max_size=1333,
-        image_mean=None,
-        image_std=None,
+        min_size=256, #changed this parameter but I don't use them at all as I skip resize code in Faster RCNN.
+        max_size=800,
+        image_mean = [0.0, 0.0, 0.0], #Forcing to not applying normalization as default; it's done in the dataset
+        image_std = [1.0, 1.0, 1.0],
+        #image_mean=None,
+        #image_std=None,
         # RPN parameters
         rpn_anchor_generator=None,
         rpn_head=None, 
@@ -185,12 +187,13 @@ class FasterRCNN(GeneralizedRCNN):
             box_obj_bg_score_thresh,
         )
 
-        #default transformation
-        if image_mean is None:
-            image_mean = [0.485, 0.456, 0.406]
-        if image_std is None:
-            image_std = [0.229, 0.224, 0.225]
-        transform = GeneralizedRCNNTransform(min_size, max_size, image_mean, image_std, **kwargs)
+        #Removing Useless Default transformation. I'll normalize in the dataset as it should be done.
+        #if image_mean is None:
+        #    image_mean = [0.485, 0.456, 0.406]
+        #if image_std is None:
+        #    image_std = [0.229, 0.224, 0.225]
+        #My custom RCNN transform class that skips resize forcefully
+        transform = GeneralizedRCNNTransformRemoved(min_size, max_size, image_mean, image_std, _skip_resize=True)
 
         super().__init__(backbone, rpn, roi_heads, transform)
 

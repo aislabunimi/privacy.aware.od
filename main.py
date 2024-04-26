@@ -263,7 +263,7 @@ def main(args):
          print("Computed AP for comparison with UNet indoor set")
          sys.exit()
       for epoch in range(starting_epoch, args.num_epochs_tasknet+1):
-         train_temp_loss = train_tasknet(train_dataloader, epoch, args.device, tasknet_save_path, tasknet, tasknet_optimizer)
+         train_temp_loss = train_tasknet(train_dataloader, epoch, args.device, args.tasknet_save_path, tasknet, tasknet_optimizer)
          val_temp_loss = val_tasknet(val_dataloader, epoch, args.device, args.tasknet_save_path, tasknet, tasknet_optimizer,
             tasknet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_tasknet, args.save_all_weights, skip_saving_weights=False)
          tasknet_scheduler.step()
