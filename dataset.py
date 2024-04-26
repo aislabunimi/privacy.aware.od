@@ -120,8 +120,7 @@ def make_coco_transforms(image_set, scales=None):
     normalize = Compose([
         ToTensor(),
         Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ]) #Note: faster receive images normalized, and applies an additional hard coded normalization with same values.
-    # this double normalization is intended as faster achieves better AP and AR in this way. UNet uses images normalized only one time instead (no norm is hard coded in the model).
+    ])
     
     if image_set == 'train':
         return Compose([
@@ -148,6 +147,9 @@ def make_coco_transforms(image_set, scales=None):
             RandomResize(first_size, max_size=scales[0]),
             normalize,
         ])
+    
+    if image_set == 'similarity_metrics':
+       return ToTensor()
 
     raise ValueError(f'unknown {image_set}')
 
@@ -289,17 +291,20 @@ def load_dataset(train_img_folder, train_ann_file, val_img_folder, val_ann_file,
       
    return train_dataloader, val_dataloader, example_dataloader
 	
-def load_dataset_for_generating_disturbed_set(train_img_folder, train_ann_file, val_img_folder, val_ann_file, use_dataset_subset, use_coco_train, resize_scales_transform):
+def load_dataset_for_generating_disturbed_set(train_img_folder, train_ann_file, val_img_folder, val_ann_file, use_dataset_subset, use_openimages_train, resize_scales_transform):
    val_coco_dataset = CocoDetection(val_img_folder, val_ann_file, transforms=make_coco_transforms('val_resize', resize_scales_transform), return_masks=False)
-   if use_coco_train:
-      disturbed_train_dataset_gen = CocoDetection(train_img_folder, train_ann_file, transforms=make_coco_transforms('val_resize', resize_scales_transform), return_masks=None)
-   else:
+   if use_openimages_train:
       disturbed_train_dataset_gen = DisturbedDataset(train_ann_file, train_img_folder, transform=make_coco_transforms('val_resize', resize_scales_transform), is_training=False, generate_disturbed_dataset=True)
+   else:
+      disturbed_train_dataset_gen = CocoDetection(train_img_folder, train_ann_file, transforms=make_coco_transforms('val_resize', resize_scales_transform), return_masks=None)
    
    train_indices = list(range(0, len(disturbed_train_dataset_gen), 1))
    val_indices = list(range(0, len(val_coco_dataset), 1))
+   example_indices = [1, 3, 13, 15, 60, 92, 97, 99, 101, 128, 134, 176, 208, 209, 214]
+   combined_indices = list(set(val_indices[:use_dataset_subset] + example_indices)) #to be sure to generate the example indices and avoid error
+   
    if use_dataset_subset>0:
-      val_coco_dataset = torch.utils.data.Subset(val_coco_dataset, val_indices[:use_dataset_subset])
+      val_coco_dataset = torch.utils.data.Subset(val_coco_dataset, combined_indices)
       disturbed_train_dataset_gen = torch.utils.data.Subset(disturbed_train_dataset_gen, train_indices[:use_dataset_subset])
    
    disturbed_train_dataloader_gen = torch.utils.data.DataLoader(disturbed_train_dataset_gen, 
@@ -333,3 +338,20 @@ def load_disturbed_dataset(disturbed_train_img_folder, disturbed_train_ann, dist
       pin_memory=True, collate_fn=collate_fn_nested_tensors, worker_init_fn=deterministic_worker, generator=deterministic_generator())
       
    return disturbed_train_dataloader, disturbed_val_dataloader, example_dataloader
+   
+def load_similarity_dataset(disturbed_val_img_folder, disturbed_val_ann, orig_val_folder, resize_scales_transform, use_dataset_subset, generate_similarity_dataset):
+
+   if generate_similarity_dataset:
+      trans = make_coco_transforms('val_resize', resize_scales_transform)
+   else:
+      trans = make_coco_transforms('similarity_metrics', resize_scales_transform)
+   disturbed_val_dataset = DisturbedDataset(disturbed_val_ann, disturbed_val_img_folder, orig_val_folder, transform=trans, is_training=False, resize_scales=resize_scales_transform, generate_disturbed_dataset=generate_similarity_dataset) #just data in 0-1 range
+   
+   val_indices = list(range(0, len(disturbed_val_dataset), 1)) 
+   if use_dataset_subset>0:
+      disturbed_val_dataset = torch.utils.data.Subset(disturbed_val_dataset, val_indices[:use_dataset_subset])
+
+   similarity_dataloader = torch.utils.data.DataLoader(disturbed_val_dataset, batch_size=1, 
+      shuffle=False, num_workers=4, pin_memory=True, collate_fn=None, worker_init_fn=deterministic_worker, generator=deterministic_generator())	
+      
+   return similarity_dataloader

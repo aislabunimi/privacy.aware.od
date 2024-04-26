@@ -58,6 +58,7 @@ def train_model(train_dataloader, epoch, device, model, tasknet, model_optimizer
    tasknet.train()
    batch_size = len(train_dataloader)
    running_loss = 0
+   
    for imgs, targets in tqdm(train_dataloader, desc=f'Epoch {epoch} - Train model'):
       imgs, _ = imgs.decompose()
       imgs = imgs.to(device)
@@ -80,10 +81,10 @@ def train_model(train_dataloader, epoch, device, model, tasknet, model_optimizer
       ax.add_patch(plt.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin, fill=False, color='red', linewidth=3))
       plt.show()
       plt.clf()
-      """
+      """    
       reconstructed_loss_dict = tasknet(reconstructed, targets) #grab tasknet losses
       reconstructed_losses = sum(loss for loss in reconstructed_loss_dict.values()) 
-      
+
       true_loss=reconstructed_losses
       model_optimizer.zero_grad(set_to_none=True) #backpropagation
       true_loss.backward()
@@ -94,7 +95,7 @@ def train_model(train_dataloader, epoch, device, model, tasknet, model_optimizer
    return running_loss
 
 
-def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_score_threshold, results_dir, my_recons_classifier, my_regressor, lpips_model, ms_ssim_module, example_dataloader):
+def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_score_threshold, results_dir, tot_epochs, save_all_weights, my_recons_classifier, my_regressor, lpips_model, ms_ssim_module, example_dataloader):
    model.eval()
    batch_size = len(val_dataloader)
    res={} #dictionary to store all prediction for AP
@@ -108,7 +109,8 @@ def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, mo
    recon_rate=0 #for regressor
    lpips_score = 0 #for lpips
    ms_ssim_score = 0 #for msssim
-   running_loss = 0 
+   running_loss = 0
+   
    with torch.no_grad(): #not computing gradient
       for imgs, targets in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):
          imgs, _ = imgs.decompose()
@@ -126,7 +128,7 @@ def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, mo
          outputs = [{k: v.to(device) for k, v in t.items()} for t in outputs]
          outputs_evaluator = [{k: v.clone().to(device) for k, v in t.items()} for t in outputs] #need to clone them as they will be modified after
          
-         # in validation targets need to be converted to original size, otherwise coco ap is wrong i target devono poi essere riconvertiti alle dim originali, se no l'AP non va!
+         # in validation targets need to be converted to original size, otherwise coco ap is wrong
          adj_outputs = adjust_outputs_to_cocoeval_api(targets, outputs, reconstructed)
          
          res.update({target["image_id"].item(): output for target, output in zip(targets, adj_outputs)})
@@ -146,23 +148,24 @@ def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, mo
          
          trans = transforms.Resize((reconstructed.shape[2], reconstructed.shape[3]), antialias=False)
          orig_imgs = trans(imgs)
-         reconstructed_ms=unnormalize(reconstructed)
-         orig_imgs_ms = unnormalize(orig_imgs)
          #clamping to avoid small negative values related to not perfect unnormalize
-         reconstructed_ms = torch.clamp(reconstructed_ms, min=0, max=1)
-         orig_imgs_ms = torch.clamp(orig_imgs_ms, min=0, max=1)
-         ms_ssim_score += ms_ssim_module(reconstructed_ms, orig_imgs_ms).item()
-         trans_te = transforms.Resize((64, 64), antialias=False)
-         reconstructed = trans_te(reconstructed)
-         orig_imgs = trans_te(imgs)
-         lpips_loss = lpips_model(reconstructed, orig_imgs)
-         lpips_score += (torch.mean(lpips_loss)).item()
+         reconstructed = torch.clamp(unnormalize(reconstructed), min=0, max=1)
+         orig_imgs = torch.clamp(unnormalize(orig_imgs), min=0, max=1)
+         ms_ssim_score += ms_ssim_module(reconstructed, orig_imgs).item()
+         
+         true_loss=reconstructed_losses
+         
+         #LPIPS expects input to be [-1,1]. As they normalize input multiple times, it's best to just give input between [0,1] and let LPIPS code handle the normalization
+         lpips_temp = lpips_model(reconstructed, orig_imgs, normalize=True)
+         lpips_score += (torch.mean(lpips_temp)).item()
          
          #Before passing reconstructed, input needs to be normalized as ImageNet and resized to 64x64
+         trans_te = transforms.Resize((64, 64), antialias=False)
+         reconstructed = trans_te(reconstructed)
          compute_my_recons_classifier_pred(my_recons_classifier, reconstructed, my_rec_class_dict)			
          recon_rate += torch.mean(my_regressor(reconstructed)).item()
          
-         true_loss=reconstructed_losses
+         #true_loss=reconstructed_losses
          running_loss += true_loss.item()	
    running_loss /= batch_size #the val loss if custom proposal is active is computed w.r.t. the custom method, 
    #to remain consistent and show meaningful loss for understanding if training is going in the right way
@@ -183,9 +186,13 @@ def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, mo
 	
    my_recons_classifier_path = f"{results_dir}/my_recons_classifier_log.json"
    save_my_recons_classifier_dict(my_recons_classifier_path, epoch, my_rec_class_dict)
-	
-   model_save_path = f'{model_save_path}_{epoch}.pt'   
-   create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
+   
+   if save_all_weights:
+      model_save_path = f'{model_save_path}_fw_{epoch}.pt' 
+      create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
+   if epoch==tot_epochs or epoch==int(tot_epochs/2):
+      model_save_path = f'{model_save_path}_fw_{epoch}.pt'
+      create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
    save_image_examples(example_dataloader, results_dir, model, epoch, device)
    return running_loss
 
@@ -209,46 +216,13 @@ def save_image_examples(example_dataloader, results_dir, model, epoch, device):
             os.makedirs(save_dir_path)
          save_image(reconstructed, os.path.join(save_dir_path, path))
 
-def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, device, model, train_img_folder, train_ann, val_img_folder, val_ann, keep_original_size, use_coco_train): #for generating disturbed set
+def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, device, model, train_img_folder, train_ann, val_img_folder, val_ann, keep_original_size, use_openimages_train): #for generating disturbed set
    model.eval()
-   batch_size = len(train_dataloader_gen_disturbed) #first disturbed trainset
-   if use_coco_train:
-      coco = get_coco_api_from_dataset(train_dataloader_gen_disturbed.dataset)
-   disturbed_list = []
    mean = torch.tensor([0.485, 0.456, 0.406]).to(device)
    std = torch.tensor([0.229, 0.224, 0.225]).to(device)
    unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
-   with torch.no_grad():
-      for imgs, targets in tqdm(train_dataloader_gen_disturbed, desc=f'Generating disturbed train images from dataset'):
-         imgs, _ = imgs.decompose()
-         imgs = imgs.to(device)
-         reconstructed = model(imgs)
-         if use_coco_train:
-            coco_image_id = targets[0]["image_id"].item()
-            path = coco.loadImgs(coco_image_id)[0]["file_name"]
-            if keep_original_size: #for fine tune Tasknet on disturbed set; less meaningful for backward
-               orig_h, orig_w = targets[0]['orig_size']
-               #orig_size = [imgs.shape[2], imgs.shape[3]]
-               orig_size = [orig_h, orig_w]
-               trans = transforms.Resize(orig_size, antialias=False)
-               reconstructed = trans(reconstructed)
-            reconstructed = unnormalize(reconstructed) #unnormalized and clamping needed before storing images in [0,1]
-            reconstructed = torch.clamp(reconstructed, min=0, max=1)
-            save_image(reconstructed, os.path.join(train_img_folder, path))
-            disturbed_list.append({"image_path": path,"coco_image_id": coco_image_id})
-         else:
-            path = ''.join(targets)
-            if keep_original_size:
-               orig_size = [imgs.shape[2], imgs.shape[3]]
-               trans = transforms.Resize(orig_size, antialias=False)
-               reconstructed = trans(reconstructed)
-            reconstructed = unnormalize(reconstructed)
-            reconstructed = torch.clamp(reconstructed, min=0, max=1)
-            save_image(reconstructed, os.path.join(train_img_folder, path))
-            disturbed_list.append({"image_path": path,})
-   with open(train_ann, 'w') as json_file:
-      json.dump(disturbed_list, json_file, indent=2)
-   batch_size = len(val_dataloader_gen_disturbed) #now disturbed valset
+   #First validation set
+   batch_size = len(val_dataloader_gen_disturbed)
    coco = get_coco_api_from_dataset(val_dataloader_gen_disturbed.dataset)
    disturbed_list = []
    with torch.no_grad():
@@ -270,13 +244,48 @@ def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_ge
          disturbed_list.append({"image_path": path, "coco_image_id": coco_image_id})
    with open(val_ann, 'w') as json_file:
       json.dump(disturbed_list, json_file, indent=2)
-   model.train()
+   #Then training set
+   batch_size = len(train_dataloader_gen_disturbed)
+   if not use_openimages_train:
+      coco = get_coco_api_from_dataset(train_dataloader_gen_disturbed.dataset)
+   disturbed_list = []
+   with torch.no_grad():
+      for imgs, targets in tqdm(train_dataloader_gen_disturbed, desc=f'Generating disturbed train images from dataset'):
+         imgs, _ = imgs.decompose()
+         imgs = imgs.to(device)
+         reconstructed = model(imgs)
+         if use_openimages_train:
+            path = ''.join(targets)
+            if keep_original_size:
+               orig_size = [imgs.shape[2], imgs.shape[3]]
+               trans = transforms.Resize(orig_size, antialias=False)
+               reconstructed = trans(reconstructed)
+            reconstructed = unnormalize(reconstructed)
+            reconstructed = torch.clamp(reconstructed, min=0, max=1)
+            save_image(reconstructed, os.path.join(train_img_folder, path))
+            disturbed_list.append({"image_path": path,})
+         else:
+            coco_image_id = targets[0]["image_id"].item()
+            path = coco.loadImgs(coco_image_id)[0]["file_name"]
+            if keep_original_size: #for fine tune Tasknet on disturbed set; less meaningful for backward
+               orig_h, orig_w = targets[0]['orig_size']
+               #orig_size = [imgs.shape[2], imgs.shape[3]]
+               orig_size = [orig_h, orig_w]
+               trans = transforms.Resize(orig_size, antialias=False)
+               reconstructed = trans(reconstructed)
+            reconstructed = unnormalize(reconstructed) #unnormalized and clamping needed before storing images in [0,1]
+            reconstructed = torch.clamp(reconstructed, min=0, max=1)
+            save_image(reconstructed, os.path.join(train_img_folder, path))
+            disturbed_list.append({"image_path": path,"coco_image_id": coco_image_id})
+   with open(train_ann, 'w') as json_file:
+      json.dump(disturbed_list, json_file, indent=2)
+   return
 
-
-def train_model_on_disturbed_images(train_dataloader, epoch, device, model, model_optimizer, loss_fn): #train model backward
+def train_model_on_disturbed_images(train_dataloader, epoch, device, model, model_optimizer, ms_ssim_module): #train model backward
    model.train()
    batch_size = len(train_dataloader)
    running_loss = 0
+   loss = torch.nn.L1Loss()
    for disturbed_imgs, orig_imgs in tqdm(train_dataloader, desc=f'Epoch {epoch} - Train model'):
       disturbed_imgs, _ = disturbed_imgs.decompose()
       disturbed_imgs = disturbed_imgs.to(device)
@@ -304,7 +313,8 @@ def train_model_on_disturbed_images(train_dataloader, epoch, device, model, mode
       reconstructed = model(disturbed_imgs) #from disturbed img, create back original
       trans = transforms.Resize((reconstructed.shape[2], reconstructed.shape[3]), antialias=False)
       orig_imgs = trans(orig_imgs) #resize original to reconstructed one as it will have slighlty less pixels
-      true_loss = loss_fn(reconstructed, orig_imgs)
+      
+      true_loss = loss(reconstructed, orig_imgs)
       
       model_optimizer.zero_grad(set_to_none=True)
       true_loss.backward() 
@@ -313,7 +323,7 @@ def train_model_on_disturbed_images(train_dataloader, epoch, device, model, mode
    running_loss /= batch_size
    return running_loss
 
-def val_model_on_disturbed_images(val_dataloader, epoch, device, model, model_save_path, model_optimizer, model_scheduler, results_dir, lpips_model, ms_ssim_module, example_dataloader, loss_fn):
+def val_model_on_disturbed_images(val_dataloader, epoch, device, model, model_save_path, model_optimizer, model_scheduler, results_dir, tot_epochs, save_all_weights, lpips_model, ms_ssim_module, example_dataloader, compute_right_similarity_metrics=False):
    model.eval()
    batch_size = len(val_dataloader)
    mean = torch.tensor([0.485, 0.456, 0.406]).to(device)
@@ -322,6 +332,9 @@ def val_model_on_disturbed_images(val_dataloader, epoch, device, model, model_sa
    ms_ssim_score = 0
    lpips_score = 0
    running_loss = 0
+   mse_as_metric = torch.nn.MSELoss()
+   mse_score = 0
+   loss = torch.nn.L1Loss()
    with torch.no_grad():
       for disturbed_imgs, orig_imgs in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):
          disturbed_imgs, _ = disturbed_imgs.decompose()
@@ -332,35 +345,99 @@ def val_model_on_disturbed_images(val_dataloader, epoch, device, model, model_sa
          reconstructed = model(disturbed_imgs)
          trans = transforms.Resize((reconstructed.shape[2], reconstructed.shape[3]), antialias=False)
          orig_imgs = trans(orig_imgs)
-         true_loss = loss_fn(reconstructed, orig_imgs)
          
-         trans_lpips = transforms.Resize((64, 64), antialias=False)
-         reconstructed_lpips = trans_lpips(reconstructed)
-         orig_imgs_lpips = trans_lpips(orig_imgs)
-         lpips_temp = lpips_model(reconstructed_lpips, orig_imgs_lpips)
-         lpips_score += (torch.mean(lpips_temp)).item()
+         true_loss = loss(reconstructed, orig_imgs)
+         
+         mse_score += mse_as_metric(reconstructed, orig_imgs).item()
          
          reconstructed=unnormalize(reconstructed)
          orig_imgs=unnormalize(orig_imgs)
          reconstructed = torch.clamp(reconstructed, min=0, max=1)
-         orig_imgs = torch.clamp(orig_imgs, min=0, max=1)	
-         ms_ssim_score += ms_ssim_module(reconstructed, orig_imgs).item()
-         running_loss += true_loss.item()		
+         orig_imgs = torch.clamp(orig_imgs, min=0, max=1)
+         
+         ms_ssim_score += ms_ssim_module(reconstructed, orig_imgs).item() #compute msssim
+         
+         #LPIPS expects input to be [-1,1]. As they normalize input multiple times, it's best to just give input between [0,1] and let LPIPS code handle the normalization
+         lpips_temp = lpips_model(reconstructed, orig_imgs, normalize=True)
+         lpips_score += (torch.mean(lpips_temp)).item()
+         
+         running_loss += true_loss.item() #used for appending in train and val loss file	
    running_loss /= batch_size
-   lpips_score /= batch_size 
-   lpips_path = f"{results_dir}/lpips_score_log.txt"
+   lpips_score /= batch_size
+   ms_ssim_score /= batch_size
+   mse_score /= batch_size
+   if compute_right_similarity_metrics:
+      lpips_path = f"{results_dir}/lpips_score_log_batch1.txt"
+      ms_ssim_path = f"{results_dir}/ms_ssim_score_log_batch1.txt"
+      mse_path = f"{results_dir}/mse_score_log_batch1.txt"
+      val_loss_path = f"{results_dir}/only_val_loss_log_batch1.txt"
+      with open(val_loss_path, 'a') as file:
+         file.write(f"{epoch} {running_loss}\n")
+   else:
+      lpips_path = f"{results_dir}/lpips_score_log.txt"
+      ms_ssim_path = f"{results_dir}/ms_ssim_score_log.txt"
+      mse_path = f"{results_dir}/mse_score_log.txt"
    with open(lpips_path, 'a') as file:
       file.write(f"{epoch} {lpips_score}\n")
-   ms_ssim_score /= batch_size
-   ms_ssim_path = f"{results_dir}/ms_ssim_score_log.txt"
    with open(ms_ssim_path, 'a') as file:
       file.write(f"{epoch} {ms_ssim_score}\n")
-   model_save_path = f'{model_save_path}_{epoch}.pt'   
-   if epoch%5==0:
+   with open(mse_path, 'a') as file:
+      file.write(f"{epoch} {mse_score}\n")
+   if compute_right_similarity_metrics:
+      return running_loss #don't care of saving weights or image examples, I have done it in the real validation loop
+   if save_all_weights:
+      model_save_path = f'{model_save_path}_bw_{epoch}.pt' 
+      create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
+   elif epoch==tot_epochs or epoch==int(tot_epochs/2):
+      model_save_path = f'{model_save_path}_bw_{epoch}.pt' 
       create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
    save_image_examples(example_dataloader, results_dir, model, epoch, device)
    return running_loss
 
+def generate_similarity_dataset(similarity_dataloader, device, model, val_img_folder, val_ann):
+   model.eval()
+   mean = torch.tensor([0.485, 0.456, 0.406]).to(device)
+   std = torch.tensor([0.229, 0.224, 0.225]).to(device)
+   unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
+   batch_size = len(similarity_dataloader)
+   disturbed_list = []
+   with torch.no_grad():
+      for imgs, targets in tqdm(similarity_dataloader, desc=f'Generating reconstructed images from disturbed val set'):
+         imgs = imgs.to(device)
+         reconstructed = model(imgs)
+         path = ''.join(targets)
+         reconstructed = unnormalize(reconstructed)
+         reconstructed = torch.clamp(reconstructed, min=0, max=1)
+         save_image(reconstructed, os.path.join(val_img_folder, path))
+         disturbed_list.append({"image_path": path,})
+   with open(val_ann, 'w') as json_file:
+      json.dump(disturbed_list, json_file, indent=2)
+   return
+
+def val_similarity_disturbed_images(val_dataloader, device, results_dir, lpips_model, ms_ssim_module):
+   batch_size = len(val_dataloader)
+   mse_as_metric = torch.nn.MSELoss()
+   mae_as_metric = torch.nn.L1Loss()
+   mse_score = mae_score = ms_ssim_score = lpips_score = 0
+   with torch.no_grad():
+      for disturbed_imgs, orig_imgs in tqdm(val_dataloader, desc=f'Computing Similarity Metrics'):
+         disturbed_imgs = disturbed_imgs.to(device)
+         orig_imgs = orig_imgs.to(device)
+         trans = transforms.Resize((disturbed_imgs.shape[2], disturbed_imgs.shape[3]), antialias=False)
+         orig_imgs = trans(orig_imgs) #force original image to be scaled down to the smaller reconstructed one
+         mse_score += mse_as_metric(disturbed_imgs, orig_imgs).item()
+         mae_score += mae_as_metric(disturbed_imgs, orig_imgs).item()
+         ms_ssim_score += ms_ssim_module(disturbed_imgs, orig_imgs).item() #compute msssim
+         lpips_score += lpips_model(disturbed_imgs, orig_imgs, normalize=True).item() #let LPIPS normalize itself, it wants images in [0,1]
+         
+   mse_score /= batch_size
+   mae_score /= batch_size
+   ms_ssim_score /= batch_size
+   lpips_score /= batch_size
+   similarity_path = f"{results_dir}/similarity_log.txt"
+   with open(similarity_path, 'w') as file:
+      file.write(f"MSE: {mse_score}\nMAE: {mae_score}\nMS_SSIM: {ms_ssim_score}\nLPIPS: {lpips_score}\n")
+   return
 
 def train_tasknet(train_dataloader, epoch, device, tasknet_save_path, tasknet, tasknet_optimizer): #tasknet training
    tasknet.train()
@@ -380,7 +457,7 @@ def train_tasknet(train_dataloader, epoch, device, tasknet_save_path, tasknet, t
    running_loss /= batch_size
    return running_loss
 
-def val_tasknet(val_dataloader, epoch, device, tasknet_save_path, tasknet, tasknet_optimizer, tasknet_scheduler, ap_score_threshold, results_dir):
+def val_tasknet(val_dataloader, epoch, device, tasknet_save_path, tasknet, tasknet_optimizer, tasknet_scheduler, ap_score_threshold, results_dir, tot_epochs, save_all_weights, skip_saving_weights=False):
    for param in tasknet.parameters():
       param.requires_grad = False
    res={}
@@ -409,7 +486,12 @@ def val_tasknet(val_dataloader, epoch, device, tasknet_save_path, tasknet, taskn
          running_loss += losses.item()
    running_loss /= batch_size
    compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, results_dir, res)	
-   compute_custom_metric(evaluator_complete_metric, results_dir, epoch)	
-   tasknet_save_path = f'{tasknet_save_path}_{epoch}.pt' 
-   create_checkpoint(tasknet, tasknet_optimizer, epoch, running_loss, tasknet_scheduler, tasknet_save_path)
+   compute_custom_metric(evaluator_complete_metric, results_dir, epoch)	 
+   if not skip_saving_weights:
+      if save_all_weights:
+         tasknet_save_path = f'{tasknet_save_path}_{epoch}.pt'
+         create_checkpoint(tasknet, tasknet_optimizer, epoch, running_loss, tasknet_scheduler, tasknet_save_path)
+      elif epoch==tot_epochs or epoch==int(tot_epochs/2):
+         tasknet_save_path = f'{tasknet_save_path}_{epoch}.pt'
+         create_checkpoint(tasknet, tasknet_optimizer, epoch, running_loss, tasknet_scheduler, tasknet_save_path)
    return running_loss
