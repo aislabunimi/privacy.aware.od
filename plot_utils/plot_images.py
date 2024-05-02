@@ -185,7 +185,7 @@ def save_disturbed_pred(unet, device, img_file_path, name_path_save, unet_weight
    img = eval_transform(image)
    img = img.unsqueeze(0)
    img = img.to(device)
-   #img, _ = resize(img, None, 256) #in validation ora è così
+   img, _ = resize(img, None, 256)
    load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler)
    out = unet(img)
    out = unnormalize(out)

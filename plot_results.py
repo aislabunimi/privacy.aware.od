@@ -70,10 +70,12 @@ def main(args):
    custom_metric_file_list=[f'{args.results_dir}/iou0.5_score0.5.json', f'{args.results_dir}/iou0.5_score0.75.json', f'{args.results_dir}/iou0.75_score0.5.json', f'{args.results_dir}/iou0.75_score0.75.json']
    custom_metric_file_save_list=[f'{args.save_dir}/iou0.5_score0.5.png', f'{args.save_dir}/iou0.5_score0.75.png', f'{args.save_dir}/iou0.75_score0.5.png', f'{args.save_dir}/iou0.75_score0.75.png']
    #image_save_prefix='test'
+   extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp']
    image_list_folder='test_data'
-   image_name_list=['val', 'cat', 'lenna', 'people']
-   val_set_list=['000000004395','000000008532','000000019924', '000000020992', '000000070739', '000000117525', '000000131444','000000133343', '000000138115', '000000170099', '000000179112', '000000224337', '000000258541', '000000262895', '000000271997']
-   image_val_folder='from_val_set'
+   image_name_list= [file for file in os.listdir(image_list_folder) if file.lower().endswith(tuple(extensions))]   #['val', 'cat', 'lenna', 'people']
+   image_val_folder='test_data/from_val_set'
+   val_set_list=  [file for file in os.listdir(image_val_folder) if file.lower().endswith(tuple(extensions))] #['000000004395','000000008532','000000019924', '000000020992', '000000070739', '000000117525', '000000131444','000000133343', '000000138115', '000000170099', '000000179112', '000000224337', '000000258541', '000000262895', '000000271997']
+   
    
    #LOSS, MS_SSIM, LPIPS, MY RECONS CLASSIFIER, RECON REGRESSOR, CUSTOM METRIC
    from plot_utils.plot_similarity_metric import plot_sim_metric
@@ -186,18 +188,18 @@ def main(args):
       #load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler)
       load_checkpoint(unet, args.unet_weights_backward, unet_optimizer, unet_scheduler)
       for img in image_name_list:
-         image_path=f'{image_list_folder}/{img}.jpg'
-         image_save_name=f'{args.save_dir}/{img}.png'
+         image_path=f'{image_list_folder}/{img}'
+         image_save_name=f'{args.save_dir}/{img}'
          save_disturbed_pred(unet, args.device, image_path, image_save_name, args.unet_weights_forward, args.unet_weights_backward, unet_optimizer, unet_scheduler)
          plt.clf()
          
-      if not os.path.exists(f'{save_dir}/{image_val_folder}'):
-         os.makedirs(f'{save_dir}/{image_val_folder}')
+      if not os.path.exists(f'{args.save_dir}/from_val_set'):
+         os.makedirs(f'{args.save_dir}/from_val_set')
       
       for img in val_set_list:
-         image_path=f'{image_list_folder}/{image_val_folder}/{img}.jpg'
-         image_save_name=f'{args.save_dir}/{image_val_folder}/{img}.png'
-         save_disturbed_pred(unet, device, image_path, image_save_name, args.unet_weights_forward, args.unet_weights_backward, unet_optimizer, unet_scheduler)
+         image_path=f'{image_val_folder}/{img}'
+         image_save_name=f'{args.save_dir}/from_val_set/{img}'
+         save_disturbed_pred(unet, args.device, image_path, image_save_name, args.unet_weights_forward, args.unet_weights_backward, unet_optimizer, unet_scheduler)
          plt.clf()
          
       if os.path.exists('temp_for_backward.jpg'):
@@ -205,18 +207,18 @@ def main(args):
 
    else:
       for img in image_name_list:
-         image_path=f'{image_list_folder}/{img}.jpg'
-         image_save_name=f'{args.save_dir}/{img}.png'
+         image_path=f'{image_list_folder}/{img}'
+         image_save_name=f'{args.save_dir}/{img}'
          compare_two_results_unet(args.plot_fw_along_bw, unet, tasknet, args.device, image_path, image_save_name, args.unet_weights_forward, args.unet_weights_backward, unet_optimizer, unet_scheduler)
          plt.clf()
       
-      if not os.path.exists(f'{args.save_dir}/{image_val_folder}'):
-         os.makedirs(f'{args.save_dir}/{image_val_folder}')
+      if not os.path.exists(f'{args.save_dir}/from_val_set'):
+         os.makedirs(f'{args.save_dir}/from_val_set')
          
       for img in val_set_list:
          image_path=''
-         image_path=f'{image_list_folder}/{image_val_folder}/{img}.jpg'
-         image_save_name=f'{args.save_dir}/{image_val_folder}/{img}.png'
+         image_path=f'{image_val_folder}/{img}'
+         image_save_name=f'{args.save_dir}/from_val_set/{img}'
          compare_two_results_unet(args.plot_fw_along_bw, unet, tasknet, args.device, image_path, image_save_name, args.unet_weights_forward, args.unet_weights_backward, unet_optimizer, unet_scheduler)
          plt.clf()
       
