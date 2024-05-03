@@ -204,26 +204,7 @@ def main(args):
    if not os.path.exists(tasknet_weights_dir):
       os.makedirs(tasknet_weights_dir)
    
-   starting_epoch=1 #Used for counting epoch from 1
-   if args.resume_training:
-      if args.train_tasknet: #+1 to start at next epoch
-         starting_epoch = load_checkpoint(tasknet, args.tasknet_weights_load, tasknet_optimizer, tasknet_scheduler) + 1
-      else:
-         starting_epoch = load_checkpoint(unet, args.unet_weights_load, unet_optimizer, unet_scheduler) + 1
-         #load_checkpoint_encoder(unet, args.unet_weights_load, unet_optimizer, unet_scheduler, load_optim_scheduler=False)
-         #load_checkpoint_decoder(unet, args.unet_weights_load, unet_optimizer, unet_scheduler, load_optim_scheduler=False)
-         #freeze_encoder(unet)
-         #freeze_decoder(unet)
-   else: #Remove results folder as it's from old experiment
-      shutil.rmtree(args.results_dir)
-      os.makedirs(args.results_dir)
-      shutil.rmtree(unet_weights_dir)
-      os.makedirs(unet_weights_dir)
-      if args.train_tasknet and not args.tasknet_get_indoor_AP: #otherwise I might remove tasknet weights stored in this folders used for training the UNet
-         shutil.rmtree(tasknet_weights_dir)
-         os.makedirs(tasknet_weights_dir)
-      
-   #Models used for measuring reconstruction
+      #Models used for measuring reconstruction
    if not args.train_tasknet:
       my_recons_classifier = load_my_recons_classifier(args.my_classifier_weights, args.device)
       my_regressor = load_my_regressor(args.my_regressor_weights, args.device)
@@ -253,6 +234,25 @@ def main(args):
       print("Computed similarity metrics")
       shutil.rmtree('temp_dir')
       sys.exit()
+   
+   starting_epoch=1 #Used for counting epoch from 1
+   if args.resume_training:
+      if args.train_tasknet: #+1 to start at next epoch
+         starting_epoch = load_checkpoint(tasknet, args.tasknet_weights_load, tasknet_optimizer, tasknet_scheduler) + 1
+      else:
+         starting_epoch = load_checkpoint(unet, args.unet_weights_load, unet_optimizer, unet_scheduler) + 1
+         #load_checkpoint_encoder(unet, args.unet_weights_load, unet_optimizer, unet_scheduler, load_optim_scheduler=False)
+         #load_checkpoint_decoder(unet, args.unet_weights_load, unet_optimizer, unet_scheduler, load_optim_scheduler=False)
+         #freeze_encoder(unet)
+         #freeze_decoder(unet)
+   else: #Remove results folder as it's from old experiment
+      shutil.rmtree(args.results_dir)
+      os.makedirs(args.results_dir)
+      shutil.rmtree(unet_weights_dir)
+      os.makedirs(unet_weights_dir)
+      if args.train_tasknet and not args.tasknet_get_indoor_AP: #otherwise I might remove tasknet weights stored in this folders used for training the UNet
+         shutil.rmtree(tasknet_weights_dir)
+         os.makedirs(tasknet_weights_dir)     
       
    #TRAINING TASKNET BLOCK
    if((args.train_tasknet or args.tasknet_get_indoor_AP) and not args.train_model_backward):
