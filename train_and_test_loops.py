@@ -58,7 +58,6 @@ def train_model(train_dataloader, epoch, device, model, tasknet, model_optimizer
    tasknet.train()
    batch_size = len(train_dataloader)
    running_loss = 0
-   
    for imgs, targets in tqdm(train_dataloader, desc=f'Epoch {epoch} - Train model'):
       imgs, _ = imgs.decompose()
       imgs = imgs.to(device)
@@ -76,15 +75,15 @@ def train_model(train_dataloader, epoch, device, model, tasknet, model_optimizer
       unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
       plt.imshow(unnormalize(reconstructed[0]).detach().cpu().permute(1, 2, 0).numpy())
       ax = plt.gca()
-      xmin, ymin, xmax, ymax = targets[0]['boxes'][0]
-      xmin, ymin, xmax, ymax = int(xmin), int(ymin), int(xmax), int(ymax)
-      ax.add_patch(plt.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin, fill=False, color='red', linewidth=3))
+      for t in targets[0]['boxes']:
+         xmin, ymin, xmax, ymax = t
+         xmin, ymin, xmax, ymax = int(xmin), int(ymin), int(xmax), int(ymax)
+         ax.add_patch(plt.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin, fill=False, color='red', linewidth=3))
       plt.show()
       plt.clf()
-      """    
+      """ 
       reconstructed_loss_dict = tasknet(reconstructed, targets) #grab tasknet losses
       reconstructed_losses = sum(loss for loss in reconstructed_loss_dict.values()) 
-
       true_loss=reconstructed_losses
       model_optimizer.zero_grad(set_to_none=True) #backpropagation
       true_loss.backward()
@@ -106,11 +105,7 @@ def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, mo
    mean = torch.tensor([0.485, 0.456, 0.406]).to(device) #for ms ssim
    std = torch.tensor([0.229, 0.224, 0.225]).to(device)
    unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
-   recon_rate=0 #for regressor
-   lpips_score = 0 #for lpips
-   ms_ssim_score = 0 #for msssim
-   running_loss = 0
-   
+   recon_rate = lpips_score = ms_ssim_score = running_loss = 0
    with torch.no_grad(): #not computing gradient
       for imgs, targets in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):
          imgs, _ = imgs.decompose()
@@ -197,6 +192,121 @@ def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, mo
       create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
    save_image_examples(example_dataloader, results_dir, model, epoch, device)
    return running_loss
+
+def train_model_dissim(train_dataloader, epoch, device, model, tasknet, model_optimizer, weight): #Train model
+   model.train()
+   tasknet.train()
+   batch_size = len(train_dataloader)
+   running_loss = 0
+   mae_loss = torch.nn.L1Loss()
+   for imgs, targets in tqdm(train_dataloader, desc=f'Epoch {epoch} - Train model'):
+      imgs, _ = imgs.decompose()
+      imgs = imgs.to(device)
+      targets = [{k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in t.items()} for t in targets]		
+      tasknet.train()
+      reconstructed = model(imgs)
+      targets = adjust_orig_target_to_reconstructed_imgs(targets, imgs, reconstructed) #needed as explained before
+      reconstructed_loss_dict = tasknet(reconstructed, targets) #grab tasknet losses
+      reconstructed_losses = sum(loss for loss in reconstructed_loss_dict.values()) 
+      noise = torch.zeros(reconstructed.size(), dtype=torch.float32, device=device)
+      true_loss = (1-weight)*reconstructed_losses + weight*mae_loss(reconstructed, noise)
+      model_optimizer.zero_grad(set_to_none=True) #backpropagation
+      true_loss.backward()
+      model_optimizer.step()		
+      running_loss += true_loss.item() #storing value   
+   running_loss /= batch_size #average loss
+   return running_loss
+
+def val_model_dissim(val_dataloader, epoch, device, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_score_threshold, results_dir, tot_epochs, save_all_weights, my_recons_classifier, my_regressor, lpips_model, ms_ssim_module, example_dataloader, weight):
+   model.eval()
+   batch_size = len(val_dataloader)
+   res={} #dictionary to store all prediction for AP
+   evaluator_complete_metric = MyEvaluatorCompleteMetric() #for custom metric
+   my_rec_class_dict = {}
+   my_rec_class_dict['epoch']=epoch
+   my_rec_class_dict['total']=0
+   mean = torch.tensor([0.485, 0.456, 0.406]).to(device) #for ms ssim
+   std = torch.tensor([0.229, 0.224, 0.225]).to(device)
+   unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
+   recon_rate = lpips_score = ms_ssim_score = running_loss = 0
+   mae_loss = torch.nn.L1Loss()
+   with torch.no_grad(): #not computing gradient
+      for imgs, targets in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):
+         imgs, _ = imgs.decompose()
+         imgs = imgs.to(device)
+         targets = [{k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in t.items()} for t in targets]
+         reconstructed = model(imgs)
+         tasknet.train()
+         
+         targets = adjust_orig_target_to_reconstructed_imgs(targets, imgs, reconstructed)
+         
+         reconstructed_loss_dict = tasknet(reconstructed, targets)
+         reconstructed_losses = sum(loss for loss in reconstructed_loss_dict.values())		
+         tasknet.eval()
+         outputs = tasknet(reconstructed)
+         outputs = [{k: v.to(device) for k, v in t.items()} for t in outputs]
+         outputs_evaluator = [{k: v.clone().to(device) for k, v in t.items()} for t in outputs] #need to clone them as they will be modified after
+         
+         # in validation targets need to be converted to original size, otherwise coco ap is wrong
+         adj_outputs = adjust_outputs_to_cocoeval_api(targets, outputs, reconstructed)
+         
+         res.update({target["image_id"].item(): output for target, output in zip(targets, adj_outputs)})
+         preds = [apply_nms(pred, iou_thresh=0.5, score_thresh=0.01) for pred in outputs_evaluator]
+         evaluator_complete_metric.add_predictions_faster_rcnn(targets=targets, predictions=preds, img_size=imgs.size()[2:][::-1])
+         
+         trans = transforms.Resize((reconstructed.shape[2], reconstructed.shape[3]), antialias=False)
+         orig_imgs = trans(imgs)
+         #clamping to avoid small negative values related to not perfect unnormalize
+         reconstructed = torch.clamp(unnormalize(reconstructed), min=0, max=1)
+         orig_imgs = torch.clamp(unnormalize(orig_imgs), min=0, max=1)
+         ms_ssim_score += ms_ssim_module(reconstructed, orig_imgs).item()
+         
+         noise = torch.zeros(reconstructed.size(), dtype=torch.float32, device=device)
+         true_loss = (1-weight)*reconstructed_losses + weight*mae_loss(reconstructed, noise)
+         
+         #LPIPS expects input to be [-1,1]. As they normalize input multiple times, it's best to just give input between [0,1] and let LPIPS code handle the normalization
+         lpips_temp = lpips_model(reconstructed, orig_imgs, normalize=True)
+         lpips_score += (torch.mean(lpips_temp)).item()
+         
+         #Before passing reconstructed, input needs to be normalized as ImageNet and resized to 64x64
+         trans_te = transforms.Resize((64, 64), antialias=False)
+         reconstructed = trans_te(reconstructed)
+         nor = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+         reconstructed = nor(reconstructed)
+         compute_my_recons_classifier_pred(my_recons_classifier, reconstructed, my_rec_class_dict)			
+         recon_rate += torch.mean(my_regressor(reconstructed)).item()
+         
+         #true_loss=reconstructed_losses
+         running_loss += true_loss.item()	
+   running_loss /= batch_size #the val loss if custom proposal is active is computed w.r.t. the custom method, 
+   #to remain consistent and show meaningful loss for understanding if training is going in the right way
+   compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, results_dir, res)
+   compute_custom_metric(evaluator_complete_metric, results_dir, epoch)
+   ms_ssim_score /= batch_size
+   ms_ssim_path= f"{results_dir}/ms_ssim_score_log.txt"
+   with open(ms_ssim_path, 'a') as file:
+      file.write(f"{epoch} {ms_ssim_score}\n")
+   lpips_score /= batch_size
+   lpips_path = f"{results_dir}/lpips_score_log.txt"
+   with open(lpips_path, 'a') as file:
+      file.write(f"{epoch} {lpips_score}\n")
+   recon_rate /= batch_size
+   recon_path= f"{results_dir}/recon_rate_log.txt"
+   with open(recon_path, 'a') as file:
+      file.write(f"{epoch} {recon_rate}\n")
+	
+   my_recons_classifier_path = f"{results_dir}/my_recons_classifier_log.json"
+   save_my_recons_classifier_dict(my_recons_classifier_path, epoch, my_rec_class_dict)
+   if save_all_weights:
+      model_save_path = f'{model_save_path}_fw_{epoch}.pt' 
+      create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
+   if epoch==tot_epochs or epoch==int(tot_epochs/2):
+      model_save_path = f'{model_save_path}_fw_{epoch}.pt'
+      create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
+   save_image_examples(example_dataloader, results_dir, model, epoch, device)
+   return running_loss
+
+
 
 def save_image_examples(example_dataloader, results_dir, model, epoch, device):
    mean = torch.tensor([0.485, 0.456, 0.406]).to(device)
@@ -331,11 +441,8 @@ def val_model_on_disturbed_images(val_dataloader, epoch, device, model, model_sa
    mean = torch.tensor([0.485, 0.456, 0.406]).to(device)
    std = torch.tensor([0.229, 0.224, 0.225]).to(device)
    unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
-   ms_ssim_score = 0
-   lpips_score = 0
-   running_loss = 0
+   ms_ssim_score = lpips_score = running_loss = mse_score = 0
    mse_as_metric = torch.nn.MSELoss()
-   mse_score = 0
    loss = torch.nn.L1Loss()
    with torch.no_grad():
       for disturbed_imgs, orig_imgs in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):

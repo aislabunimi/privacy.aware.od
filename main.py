@@ -82,6 +82,7 @@ def get_args_parser():
    parser.add_argument('--tasknet_get_indoor_AP', action='store_true', default=False, help='Needed for getting the AP for comparison with UNet')
    parser.add_argument('--save_disturbed_dataset', action='store_true', default=False, help='To use for creating the disturbed dataset for Backward training')
    parser.add_argument('--keep_original_size', action='store_true', default=False, help='Must be True if you want to fine tune the Tasknet on the disturbed COCO set; can be false for Backward training. This is done to enforce the disturbed images to have exact same size of original ones')
+   parser.add_argument('--weight', default=0.0, type=float, help='Weight for affecting the MAE loss as dissimilarity during forward. A value above 0.5 means that you weight more the MAE loss than the Faster one; viceversa, a value below 0.5 means you weight more the Faster loss than the MAE one. Default is 0, meaning that MAE loss is not used. Valid values should be between (0.0, 1.0)')
    parser.add_argument('--train_model_backward', action='store_true', default=False, help='For executing Backward training on disturbed dataset')
    parser.add_argument('--compute_similarity_metrics', action='store_true', default=False, help='Needed for getting the right similarities metrics')
    parser.add_argument('--resume_training', action='store_true', default=False, help='For resuming training by restoring the specified weights from "unet_weights_load" or "tasknet_weights_load" variable')
@@ -279,10 +280,16 @@ def main(args):
       for param in tasknet.parameters(): #Freeze layers as Faster R-CNN is not modifiable
          param.requires_grad = False
       for epoch in range(starting_epoch, args.num_epochs_unet_forward+1):
-         train_temp_loss = train_model(train_dataloader, epoch, args.device, unet, tasknet, unet_optimizer)
-         val_temp_loss = val_model(val_dataloader, epoch, args.device, unet, args.unet_save_path, tasknet, unet_optimizer,
-            unet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_unet_forward, args.save_all_weights, my_recons_classifier, my_regressor, 
-            lpips_model, ms_ssim_module, example_dataloader)
+         if args.weight == 0.0: #loops without weights
+            train_temp_loss = train_model(train_dataloader, epoch, args.device, unet, tasknet, unet_optimizer)
+            val_temp_loss = val_model(val_dataloader, epoch, args.device, unet, args.unet_save_path, tasknet, unet_optimizer,
+               unet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_unet_forward, args.save_all_weights, my_recons_classifier, my_regressor, 
+               lpips_model, ms_ssim_module, example_dataloader)
+         else:
+            train_temp_loss = train_model_dissim(train_dataloader, epoch, args.device, unet, tasknet, unet_optimizer, args.weight)
+            val_temp_loss = val_model_dissim(val_dataloader, epoch, args.device, unet, args.unet_save_path, tasknet, unet_optimizer,
+               unet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_unet_forward, args.save_all_weights, my_recons_classifier, my_regressor, 
+               lpips_model, ms_ssim_module, example_dataloader, args.weight)
          #unet_scheduler.step()
          unet_scheduler.step(val_temp_loss)
          print(f'EPOCH {epoch} SUMMARY: Train loss {train_temp_loss}, Val loss {val_temp_loss}')
