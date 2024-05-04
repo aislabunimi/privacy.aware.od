@@ -104,6 +104,7 @@ class GeneralizedRCNNTransformRemoved(nn.Module):
         max_size: int,
         image_mean: List[float],
         image_std: List[float],
+        use_resize : bool, #added this
         size_divisible: int = 32,
         fixed_size: Optional[Tuple[int, int]] = None,
         **kwargs: Any,
@@ -115,6 +116,7 @@ class GeneralizedRCNNTransformRemoved(nn.Module):
         self.max_size = max_size
         self.image_mean = image_mean
         self.image_std = image_std
+        self.use_resize = use_resize
         self.size_divisible = size_divisible
         self.fixed_size = fixed_size
         self._skip_resize = kwargs.pop("_skip_resize", False)
@@ -142,7 +144,8 @@ class GeneralizedRCNNTransformRemoved(nn.Module):
             if image.dim() != 3:
                 raise ValueError(f"images is expected to be a list of 3d tensors of shape [C, H, W], got {image.shape}")
             image = self.normalize(image) #normalize values are set to mean: 0,0,0: std: 1,1,1
-            #image, target_index = self.resize(image, target_index) #Forcefully skip resize
+            if self.use_resize: #Forcefully skip resize if not using all classes
+               image, target_index = self.resize(image, target_index) 
             images[i] = image
             if targets is not None and target_index is not None:
                 targets[i] = target_index

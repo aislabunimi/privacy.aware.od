@@ -94,7 +94,7 @@ def train_model(train_dataloader, epoch, device, model, tasknet, model_optimizer
    return running_loss
 
 
-def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_score_threshold, results_dir, tot_epochs, save_all_weights, my_recons_classifier, my_regressor, lpips_model, ms_ssim_module, example_dataloader):
+def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_score_threshold, results_dir, tot_epochs, save_all_weights, my_recons_classifier, my_regressor, lpips_model, ms_ssim_module, example_dataloader, all_classes):
    model.eval()
    batch_size = len(val_dataloader)
    res={} #dictionary to store all prediction for AP
@@ -167,7 +167,7 @@ def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, mo
    running_loss /= batch_size #the val loss if custom proposal is active is computed w.r.t. the custom method, 
    #to remain consistent and show meaningful loss for understanding if training is going in the right way
    compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, results_dir, res)
-   compute_custom_metric(evaluator_complete_metric, results_dir, epoch)
+   compute_custom_metric(evaluator_complete_metric, results_dir, epoch, all_classes)
    ms_ssim_score /= batch_size
    ms_ssim_path= f"{results_dir}/ms_ssim_score_log.txt"
    with open(ms_ssim_path, 'a') as file:
@@ -217,7 +217,7 @@ def train_model_dissim(train_dataloader, epoch, device, model, tasknet, model_op
    running_loss /= batch_size #average loss
    return running_loss
 
-def val_model_dissim(val_dataloader, epoch, device, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_score_threshold, results_dir, tot_epochs, save_all_weights, my_recons_classifier, my_regressor, lpips_model, ms_ssim_module, example_dataloader, weight):
+def val_model_dissim(val_dataloader, epoch, device, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_score_threshold, results_dir, tot_epochs, save_all_weights, my_recons_classifier, my_regressor, lpips_model, ms_ssim_module, example_dataloader, weight, all_classes):
    model.eval()
    batch_size = len(val_dataloader)
    res={} #dictionary to store all prediction for AP
@@ -281,7 +281,7 @@ def val_model_dissim(val_dataloader, epoch, device, model, model_save_path, task
    running_loss /= batch_size #the val loss if custom proposal is active is computed w.r.t. the custom method, 
    #to remain consistent and show meaningful loss for understanding if training is going in the right way
    compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, results_dir, res)
-   compute_custom_metric(evaluator_complete_metric, results_dir, epoch)
+   compute_custom_metric(evaluator_complete_metric, results_dir, epoch, all_classes)
    ms_ssim_score /= batch_size
    ms_ssim_path= f"{results_dir}/ms_ssim_score_log.txt"
    with open(ms_ssim_path, 'a') as file:
@@ -566,7 +566,7 @@ def train_tasknet(train_dataloader, epoch, device, tasknet_save_path, tasknet, t
    running_loss /= batch_size
    return running_loss
 
-def val_tasknet(val_dataloader, epoch, device, tasknet_save_path, tasknet, tasknet_optimizer, tasknet_scheduler, ap_score_threshold, results_dir, tot_epochs, save_all_weights, skip_saving_weights=False):
+def val_tasknet(val_dataloader, epoch, device, tasknet_save_path, tasknet, tasknet_optimizer, tasknet_scheduler, ap_score_threshold, results_dir, tot_epochs, save_all_weights, all_classes, skip_saving_weights=False):
    for param in tasknet.parameters():
       param.requires_grad = False
    res={}
@@ -595,7 +595,7 @@ def val_tasknet(val_dataloader, epoch, device, tasknet_save_path, tasknet, taskn
          running_loss += losses.item()
    running_loss /= batch_size
    compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, results_dir, res)	
-   compute_custom_metric(evaluator_complete_metric, results_dir, epoch)	 
+   compute_custom_metric(evaluator_complete_metric, results_dir, epoch, all_classes)	 
    if not skip_saving_weights:
       if save_all_weights:
          tasknet_save_path = f'{tasknet_save_path}_{epoch}.pt'

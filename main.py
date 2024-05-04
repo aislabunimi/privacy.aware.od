@@ -30,6 +30,7 @@ def get_args_parser():
    
    #Config Dataset. Paths to image folders and annotations. Paths to disturbed dataset and annotations.
    parser.add_argument('--use_openimages_for_disturbed_set', action='store_true', default=False, help='If you want to use openimages train dataset for generating disturbed training dataset instead of default COCO one')
+   parser.add_argument('--coco_allclasses_path', default='/home/math0012/Tesi_magistrale/coco2017', type=str, help='Path of the folder containing the whole COCO dataset. The folder is expected to contain three subfolders, "train2017", "val2017" and annotations. train2017 and val2017 contains the images, while annotations folder contains the annotations called "instances_train2017.json" and "instances_val2017.json".')
    parser.add_argument('--coco_allpeople_path', default='/home/alberti/coco_person', type=str, help='Path of the folder containing all the people of the COCO dataset. The folder is expected to contain two subfolders, "train" and "val". Each one of these folders contains an "images" folder (with the images) and an annotation file called "train.json" and "val.json" respectively.')
    parser.add_argument('--coco_indoor_path', default='/home/alberti/coco_people_indoor', type=str, help='Path of the folder containing the COCO indoor dataset. The folder is expected to contain two subfolders, "train" and "val". Each one of these folders contains an "images" folder (with the images) and an annotation file called "train.json" and "val.json" respectively.')
    parser.add_argument('--disturbed_dataset_path', default='disturbed_dataset', type=str, help='Path of the folder used for containing the generated disturbed dataset. WARNING: this folder and its contents will be deleted before starting next backward training experiment, be aware of the folder you choose: you may delete your whole system!')
@@ -86,9 +87,9 @@ def get_args_parser():
    parser.add_argument('--train_model_backward', action='store_true', default=False, help='For executing Backward training on disturbed dataset')
    parser.add_argument('--compute_similarity_metrics', action='store_true', default=False, help='Needed for getting the right similarities metrics')
    parser.add_argument('--resume_training', action='store_true', default=False, help='For resuming training by restoring the specified weights from "unet_weights_load" or "tasknet_weights_load" variable')
+   parser.add_argument('--all_classes', action='store_true', default=False, help='For executing the experiments using all COCO classes. Default is False, meaning the experiments are made with only the Person class. If set to True, standard Tasknet with pretrained weights is loaded.')
    
    return parser
-
 
 def main(args):
    seed_everything(args.seed) #Deterministic experiments
@@ -125,7 +126,12 @@ def main(args):
       val_img_folder = f'{args.coco_indoor_path}/val/images'
       val_ann_file = f'{args.coco_indoor_path}/val/val.json'
       resize_scales_transform = [256, 288, 320, 352, 384, 416]
-      
+   
+   if args.all_classes: #use whole COCO dataset
+      train_img_folder = f'{args.coco_allclasses_path}/train2017'
+      train_ann_file = f'{args.coco_allclasses_path}/annotations/instances_train2017.json'
+      val_img_folder = f'{args.coco_allclasses_path}/val2017'
+      val_ann_file = f'{args.coco_allclasses_path}/annotations/instances_val2017.json'
    if not args.train_tasknet:
       unet = UNet(n_channels=3, bilinear=False) #UNet modified without skip connection
       unet.to(args.device)
@@ -155,24 +161,25 @@ def main(args):
       from faster_custom.faster_rcnn import fasterrcnn_resnet50_fpn_custom, FasterRCNN_ResNet50_FPN_Weights, FastRCNNPredictor
       weights = FasterRCNN_ResNet50_FPN_Weights.DEFAULT  
       if args.train_tasknet or args.tasknet_get_indoor_AP or args.not_use_custom_filter_prop:
-         tasknet = fasterrcnn_resnet50_fpn_custom(weights=weights, progress=False) #Default Tasknet
+         tasknet = fasterrcnn_resnet50_fpn_custom(weights=weights, progress=False, resize=args.all_classes) #Default Tasknet. If all classes are used, then resize is done
       else:
          if args.filter_prop_objectness:
-            tasknet = fasterrcnn_resnet50_fpn_custom(weights=weights, progress=False, 
+            tasknet = fasterrcnn_resnet50_fpn_custom(weights=weights, progress=False, resize=args.all_classes, 
                rpn_use_custom_filter_anchors=args.filter_anchors, rpn_n_top_pos_to_keep=args.anc_pos, rpn_n_top_neg_to_keep=args.anc_neg,
                rpn_n_top_bg_to_keep=args.anc_bg, rpn_objectness_bg_thresh=args.anc_bg_thresh, box_use_custom_filter_proposals_objectness=True, 
                box_n_top_pos_to_keep=args.prop_pos, box_n_top_neg_to_keep=args.prop_neg, box_n_top_bg_to_keep=args.prop_bg, box_obj_bg_score_thresh=args.prop_bg_thresh, box_batch_size_per_image=100000) #100000 for be sure that sampler keep all proposals, as we want to use all of them in custom filtering selection
                #rpn_objectness_bg_thresh is set to 0, as it's objectness score (so 0 is already a decent high confidence that the anchor contains an object.
          else: #Based on score, slower and not necessarily better resutls
-            tasknet = fasterrcnn_resnet50_fpn_custom(weights=weights, progress=False,
+            tasknet = fasterrcnn_resnet50_fpn_custom(weights=weights, progress=False, resize=args.all_classes,
                rpn_post_nms_top_n_train=args.n_prop_class_method,
                rpn_use_custom_filter_anchors=args.filter_anchors, rpn_n_top_pos_to_keep=args.anc_pos, rpn_n_top_neg_to_keep=args.anc_neg,
                rpn_n_top_bg_to_keep=args.anc_bg, rpn_objectness_bg_thresh=args.anc_bg_thresh, box_use_custom_filter_proposals_scores=True, 
                box_n_top_pos_to_keep=args.prop_pos, box_n_top_neg_to_keep=args.prop_neg, box_n_top_bg_to_keep=args.prop_bg, box_obj_bg_score_thresh=args.prop_bg_thresh,
                box_batch_size_per_image=100000) #100000 for be sure that sampler keep all proposals, as we want to use all of them in custom filtering selection
-      num_classes = 2
-      in_features = tasknet.roi_heads.box_predictor.cls_score.in_features
-      tasknet.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
+      if not args.all_classes:
+         num_classes = 2
+         in_features = tasknet.roi_heads.box_predictor.cls_score.in_features
+         tasknet.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
       tasknet.to(args.device)
       tasknet_optimizer = torch.optim.SGD(tasknet.parameters(), lr=args.lr_tasknet, momentum=args.momentum_tasknet, weight_decay=args.weight_decay_tasknet, nesterov=args.no_nesterov_tasknet)
       tasknet_scheduler = torch.optim.lr_scheduler.StepLR(tasknet_optimizer, step_size=args.step_size_tasknet, gamma=args.gamma_tasknet)
@@ -204,8 +211,8 @@ def main(args):
    tasknet_weights_dir = args.tasknet_save_path.split('/')[0]
    if not os.path.exists(tasknet_weights_dir):
       os.makedirs(tasknet_weights_dir)
-   
-      #Models used for measuring reconstruction
+      
+   #Models used for measuring reconstruction
    if not args.train_tasknet:
       my_recons_classifier = load_my_recons_classifier(args.my_classifier_weights, args.device)
       my_regressor = load_my_regressor(args.my_regressor_weights, args.device)
@@ -253,7 +260,8 @@ def main(args):
       os.makedirs(unet_weights_dir)
       if args.train_tasknet and not args.tasknet_get_indoor_AP: #otherwise I might remove tasknet weights stored in this folders used for training the UNet
          shutil.rmtree(tasknet_weights_dir)
-         os.makedirs(tasknet_weights_dir)     
+         os.makedirs(tasknet_weights_dir)
+   
       
    #TRAINING TASKNET BLOCK
    if((args.train_tasknet or args.tasknet_get_indoor_AP) and not args.train_model_backward):
@@ -266,7 +274,7 @@ def main(args):
       for epoch in range(starting_epoch, args.num_epochs_tasknet+1):
          train_temp_loss = train_tasknet(train_dataloader, epoch, args.device, args.tasknet_save_path, tasknet, tasknet_optimizer)
          val_temp_loss = val_tasknet(val_dataloader, epoch, args.device, args.tasknet_save_path, tasknet, tasknet_optimizer,
-            tasknet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_tasknet, args.save_all_weights, skip_saving_weights=False)
+            tasknet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_tasknet, args.save_all_weights, args.all_classes, skip_saving_weights=False)
          tasknet_scheduler.step()
          #tasknet_scheduler.step(val_temp_loss)
          print(f'EPOCH {epoch} SUMMARY: Train loss {train_temp_loss}, Val loss {val_temp_loss}')
@@ -276,7 +284,8 @@ def main(args):
    
    #TRAINING MODEL BLOCK
    elif (not args.train_model_backward):
-      load_checkpoint(tasknet, args.tasknet_weights_load, tasknet_optimizer, tasknet_scheduler)
+      if not args.all_classes:
+         load_checkpoint(tasknet, args.tasknet_weights_load, tasknet_optimizer, tasknet_scheduler)
       for param in tasknet.parameters(): #Freeze layers as Faster R-CNN is not modifiable
          param.requires_grad = False
       for epoch in range(starting_epoch, args.num_epochs_unet_forward+1):
@@ -284,12 +293,12 @@ def main(args):
             train_temp_loss = train_model(train_dataloader, epoch, args.device, unet, tasknet, unet_optimizer)
             val_temp_loss = val_model(val_dataloader, epoch, args.device, unet, args.unet_save_path, tasknet, unet_optimizer,
                unet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_unet_forward, args.save_all_weights, my_recons_classifier, my_regressor, 
-               lpips_model, ms_ssim_module, example_dataloader)
+               lpips_model, ms_ssim_module, example_dataloader, args.all_classes)
          else:
             train_temp_loss = train_model_dissim(train_dataloader, epoch, args.device, unet, tasknet, unet_optimizer, args.weight)
             val_temp_loss = val_model_dissim(val_dataloader, epoch, args.device, unet, args.unet_save_path, tasknet, unet_optimizer,
                unet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_unet_forward, args.save_all_weights, my_recons_classifier, my_regressor, 
-               lpips_model, ms_ssim_module, example_dataloader, args.weight)
+               lpips_model, ms_ssim_module, example_dataloader, args.weight, args.all_classes)
          #unet_scheduler.step()
          unet_scheduler.step(val_temp_loss)
          print(f'EPOCH {epoch} SUMMARY: Train loss {train_temp_loss}, Val loss {val_temp_loss}')

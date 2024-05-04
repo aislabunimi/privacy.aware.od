@@ -116,7 +116,7 @@ def execute_coco_eval(ap_log_path, print_msg, coco_evaluator, res):
    sys.stdout = orig_stdout
    f.close()
 
-def compute_custom_metric(evaluator_complete_metric, custom_metric_folder, epoch):
+def compute_custom_metric(evaluator_complete_metric, custom_metric_folder, epoch, all_classes):
    complete_metrics = {}
    for iou_threshold in np.arange(0.5, 0.76, 0.25):
       for confidence_threshold in np.arange(0.5, 0.76, 0.25):
@@ -125,7 +125,10 @@ def compute_custom_metric(evaluator_complete_metric, custom_metric_folder, epoch
          complete_metrics[(iou_threshold, confidence_threshold)] = evaluator_complete_metric.get_metrics(
             iou_threshold=iou_threshold, confidence_threshold=confidence_threshold, 
             door_no_door_task=False, plot_curves=False)
-   filtered_metrics = {key: value['1'] for key, value in complete_metrics.items()} #get only people label
+   if not all_classes: #meaning only Person class
+      filtered_metrics = {key: value['1'] for key, value in complete_metrics.items()} #get only people label
+   else:
+      filtered_metrics = complete_metrics
    for m in filtered_metrics.items():
       save_path=f'{custom_metric_folder}/iou{m[0][0]}_score{m[0][1]}.json'
       m[1]['epoch'] = epoch #I add epoch field for retrieving it easily

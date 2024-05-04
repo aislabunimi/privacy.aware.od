@@ -84,21 +84,40 @@ def get_transform():
     transform.append(transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]))
     return transforms.Compose(transform)   
 
-def plot_results(img, prob, boxes):
+def plot_results(img, labels, prob, boxes, all_classes):
     #plt.figure(figsize=(16,10))
+    COCO_91_CLASSES=[
+    '__background__', 
+    'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
+    'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'N/A', 'stop sign',
+    'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow',
+    'elephant', 'bear', 'zebra', 'giraffe', 'N/A', 'backpack', 'umbrella', 'N/A', 'N/A',
+    'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball',
+    'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket',
+    'bottle', 'N/A', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl',
+    'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza',
+    'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'N/A', 'dining table',
+    'N/A', 'N/A', 'toilet', 'N/A', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone',
+    'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'N/A', 'book',
+    'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush']
     plt.axis('off')
     plt.imshow(img.cpu().squeeze(0).permute(1, 2, 0).detach().numpy())
     ax = plt.gca()
     if (prob is not None and boxes is not None):
        prob = prob.cpu()
        boxes = boxes.cpu()
-       for p, (xmin, ymin, xmax, ymax) in zip(prob, boxes.tolist()):
+       labels = labels.cpu()
+       for p, label, (xmin, ymin, xmax, ymax) in zip(prob, labels, boxes.tolist()):
            ax.add_patch(plt.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin, fill=False, color='red', linewidth=3))
-           text = f'{p:0.3f}'
+           if all_classes:
+              label_name=COCO_91_CLASSES[label]
+              text = f'{label_name} {p:0.3f}'
+           else:
+              text = f'{p:0.3f}'
            ax.text(xmin, ymin, text, fontsize=15, bbox=dict(facecolor='yellow', alpha=0.5))
 
 
-def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device, img_file_path, name_path_save, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler): 
+def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device, img_file_path, name_path_save, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler, all_classes): 
    unet.eval()
    tasknet.eval()
    plt.figure(figsize=(15, 10))
@@ -127,7 +146,7 @@ def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device
    img_primo_plot = trans_r(img_primo_plot) #for making first image equal in size to the reconstructed ones
    plt.subplot(1, 3, 1)
    plt.title('Original Image', fontsize=20)	
-   plot_results(img_primo_plot, nms_pred['scores'], nms_pred['boxes'])
+   plot_results(img_primo_plot, nms_pred['labels'], nms_pred['scores'], nms_pred['boxes'], all_classes)
    
    plt.subplot(1, 3, 2)
    out_to_plot = unnormalize(out)
@@ -144,7 +163,7 @@ def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device
       name = os.path.splitext(filename)[0]	
    
    plt.title(f'{name}', fontsize=20)
-   plot_results(out_to_plot, nms_pred_recon['scores'], nms_pred_recon['boxes'])
+   plot_results(out_to_plot, nms_pred['labels'], nms_pred_recon['scores'], nms_pred_recon['boxes'], all_classes)
    plt.subplot(1, 3, 3)
    load_checkpoint(unet, unet_weights_to_compare, unet_optimizer, unet_scheduler)
 
@@ -155,6 +174,7 @@ def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device
       img = img.to(device)
       img, _ = resize(img, None, 256)
       out = unet(img)
+      nms_pred_recon['labels'] = None
       nms_pred_recon['scores'] = None
       nms_pred_recon['boxes'] = None
       name = 'Backward'
@@ -169,7 +189,7 @@ def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device
    out_to_plot = unnormalize(out)
    out_to_plot = torch.clamp(out_to_plot, min=0, max=1)
    plt.title(f'{name}', fontsize=20)
-   plot_results(out_to_plot, nms_pred_recon['scores'], nms_pred_recon['boxes'])
+   plot_results(out_to_plot, nms_pred_recon['labels'], nms_pred_recon['scores'], nms_pred_recon['boxes'], all_classes)
    plt.subplots_adjust(wspace=0.05)
    plt.savefig(name_path_save, format='png', bbox_inches='tight')
    plt.clf()

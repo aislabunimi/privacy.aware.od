@@ -52,12 +52,11 @@ class FasterRCNN(GeneralizedRCNN):
         backbone, #backbone used for feature extraction
         num_classes=None, #number of output classes including background
         # transform parameters
-        min_size=256, #changed this parameter but I don't use them at all as I skip resize code in Faster RCNN.
-        max_size=800,
+        min_size=800, #changed this parameter but I don't use them at all as I skip resize code in Faster RCNN.
+        max_size=1333,
         image_mean = [0.0, 0.0, 0.0], #Forcing to not applying normalization as default; it's done in the dataset
         image_std = [1.0, 1.0, 1.0],
-        #image_mean=None,
-        #image_std=None,
+        use_resize = False,
         # RPN parameters
         rpn_anchor_generator=None,
         rpn_head=None, 
@@ -192,8 +191,8 @@ class FasterRCNN(GeneralizedRCNN):
         #    image_mean = [0.485, 0.456, 0.406]
         #if image_std is None:
         #    image_std = [0.229, 0.224, 0.225]
-        #My custom RCNN transform class that skips resize forcefully
-        transform = GeneralizedRCNNTransformRemoved(min_size, max_size, image_mean, image_std, _skip_resize=True)
+        #My custom RCNN transform class that skips resize forcefully if not using all classes 
+        transform = GeneralizedRCNNTransformRemoved(min_size, max_size, image_mean, image_std, use_resize)
 
         super().__init__(backbone, rpn, roi_heads, transform)
 
