@@ -188,7 +188,6 @@ def main(args):
             num_classes = 6
          else:
             num_classes = 2
-         print(num_classes)
          in_features = tasknet.roi_heads.box_predictor.cls_score.in_features
          tasknet.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
       tasknet.to(args.device)
