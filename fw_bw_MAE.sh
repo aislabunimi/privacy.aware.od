@@ -39,10 +39,10 @@ for i in "0.5" "0.6" "0.7" "0.8" "0.9"; do
    mv $RESULTS_DIR "${EXPERIMENT_DIR}/${WEIGHT}_MAE/forward/${RESULTS_DIR}_fw"
    echo "Completed ${WEIGHT}_MAE forward experiment and copied results to ${EXPERIMENT_DIR} folder"
    
-   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --save_disturbed_dataset --unet_weights_load $UNET_WEIGHTS_LOAD_FW
+   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --save_disturbed_dataset --unet_fw_weights_load $UNET_WEIGHTS_LOAD_FW
 
    python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --num_epochs_unet_backward $NUM_EPOCHS_UNET_BACKWARD --unet_save_path $UNET_SAVE_PATH --results_dir $RESULTS_DIR --train_model_backward
-   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet 1 --results_dir $RESULTS_DIR --compute_similarity_metrics --unet_weights_load $UNET_WEIGHTS_LOAD_BW
+   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet 1 --results_dir $RESULTS_DIR --compute_similarity_metrics --unet_bw_weights_load $UNET_WEIGHTS_LOAD_BW
    mkdir -p "${EXPERIMENT_DIR}/${WEIGHT}_MAE/backward"
    mv $UNET_WEIGHTS_BW_TO_SAVE1 "${EXPERIMENT_DIR}/${WEIGHT}_MAE/backward"
    mv $UNET_WEIGHTS_BW_TO_SAVE2 "${EXPERIMENT_DIR}/${WEIGHT}_MAE/backward"
@@ -60,10 +60,10 @@ for i in "0.6" "0.8"; do
    mv $RESULTS_DIR "${EXPERIMENT_DIR}/${WEIGHT}_2pos2neg_MAE/forward/${RESULTS_DIR}_fw"
    echo "Completed ${WEIGHT}_2pos2neg_MAE forward experiment and copied results to ${EXPERIMENT_DIR} folder"
    
-   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --save_disturbed_dataset --unet_weights_load $UNET_WEIGHTS_LOAD_FW
+   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --save_disturbed_dataset --unet_fw_weights_load $UNET_WEIGHTS_LOAD_FW
 
    python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --num_epochs_unet_backward $NUM_EPOCHS_UNET_BACKWARD --unet_save_path $UNET_SAVE_PATH --results_dir $RESULTS_DIR --train_model_backward
-   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet 1 --results_dir $RESULTS_DIR --compute_similarity_metrics --unet_weights_load $UNET_WEIGHTS_LOAD_BW
+   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet 1 --results_dir $RESULTS_DIR --compute_similarity_metrics --unet_bw_weights_load $UNET_WEIGHTS_LOAD_BW
    mkdir -p "${EXPERIMENT_DIR}/${WEIGHT}_2pos2neg_MAE/backward"
    mv $UNET_WEIGHTS_BW_TO_SAVE1 "${EXPERIMENT_DIR}/${WEIGHT}_2pos2neg_MAE/backward"
    mv $UNET_WEIGHTS_BW_TO_SAVE2 "${EXPERIMENT_DIR}/${WEIGHT}_2pos2neg_MAE/backward"
@@ -81,10 +81,10 @@ for i in "0.6" "0.8"; do
    mv $RESULTS_DIR "${EXPERIMENT_DIR}/${WEIGHT}_4pos4neg_MAE/forward/${RESULTS_DIR}_fw"
    echo "Completed ${WEIGHT}_4pos4neg_MAE forward experiment and copied results to ${EXPERIMENT_DIR} folder"
    
-   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --save_disturbed_dataset --unet_weights_load $UNET_WEIGHTS_LOAD_FW
+   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --save_disturbed_dataset --unet_fw_weights_load $UNET_WEIGHTS_LOAD_FW
 
    python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --num_epochs_unet_backward $NUM_EPOCHS_UNET_BACKWARD --unet_save_path $UNET_SAVE_PATH --results_dir $RESULTS_DIR --train_model_backward
-   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet 1 --results_dir $RESULTS_DIR --compute_similarity_metrics --unet_weights_load $UNET_WEIGHTS_LOAD_BW
+   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet 1 --results_dir $RESULTS_DIR --compute_similarity_metrics --unet_bw_weights_load $UNET_WEIGHTS_LOAD_BW
    mkdir -p "${EXPERIMENT_DIR}/${WEIGHT}_4pos4neg_MAE/backward"
    mv $UNET_WEIGHTS_BW_TO_SAVE1 "${EXPERIMENT_DIR}/${WEIGHT}_4pos4neg_MAE/backward"
    mv $UNET_WEIGHTS_BW_TO_SAVE2 "${EXPERIMENT_DIR}/${WEIGHT}_4pos4neg_MAE/backward"
@@ -102,10 +102,10 @@ for i in "0.5" "0.7" "0.9"; do
    mv $RESULTS_DIR "${EXPERIMENT_DIR}/${WEIGHT}_2pos2neg_MAE/forward/${RESULTS_DIR}_fw"
    echo "Completed ${WEIGHT}_2pos2neg_MAE forward experiment and copied results to ${EXPERIMENT_DIR} folder"
    
-   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --save_disturbed_dataset --unet_weights_load $UNET_WEIGHTS_LOAD_FW
+   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --save_disturbed_dataset --unet_fw_weights_load $UNET_WEIGHTS_LOAD_FW
 
    python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --num_epochs_unet_backward $NUM_EPOCHS_UNET_BACKWARD --unet_save_path $UNET_SAVE_PATH --results_dir $RESULTS_DIR --train_model_backward
-   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet 1 --results_dir $RESULTS_DIR --compute_similarity_metrics --unet_weights_load $UNET_WEIGHTS_LOAD_BW
+   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet 1 --results_dir $RESULTS_DIR --compute_similarity_metrics --unet_bw_weights_load $UNET_WEIGHTS_LOAD_BW
    mkdir -p "${EXPERIMENT_DIR}/${WEIGHT}_2pos2neg_MAE/backward"
    mv $UNET_WEIGHTS_BW_TO_SAVE1 "${EXPERIMENT_DIR}/${WEIGHT}_2pos2neg_MAE/backward"
    mv $UNET_WEIGHTS_BW_TO_SAVE2 "${EXPERIMENT_DIR}/${WEIGHT}_2pos2neg_MAE/backward"
@@ -123,10 +123,10 @@ for i in "0.5" "0.7" "0.9"; do
    mv $RESULTS_DIR "${EXPERIMENT_DIR}/${WEIGHT}_4pos4neg_MAE/forward/${RESULTS_DIR}_fw"
    echo "Completed ${WEIGHT}_4pos4neg_MAE forward experiment and copied results to ${EXPERIMENT_DIR} folder"
    
-   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --save_disturbed_dataset --unet_weights_load $UNET_WEIGHTS_LOAD_FW
+   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --save_disturbed_dataset --unet_fw_weights_load $UNET_WEIGHTS_LOAD_FW
 
    python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --num_epochs_unet_backward $NUM_EPOCHS_UNET_BACKWARD --unet_save_path $UNET_SAVE_PATH --results_dir $RESULTS_DIR --train_model_backward
-   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet 1 --results_dir $RESULTS_DIR --compute_similarity_metrics --unet_weights_load $UNET_WEIGHTS_LOAD_BW
+   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet 1 --results_dir $RESULTS_DIR --compute_similarity_metrics --unet_bw_weights_load $UNET_WEIGHTS_LOAD_BW
    mkdir -p "${EXPERIMENT_DIR}/${WEIGHT}_4pos4neg_MAE/backward"
    mv $UNET_WEIGHTS_BW_TO_SAVE1 "${EXPERIMENT_DIR}/${WEIGHT}_4pos4neg_MAE/backward"
    mv $UNET_WEIGHTS_BW_TO_SAVE2 "${EXPERIMENT_DIR}/${WEIGHT}_4pos4neg_MAE/backward"

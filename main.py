@@ -22,7 +22,8 @@ def get_args_parser():
    parser.add_argument('--ap_score_thresh', default=0.75, type=float, help='AP score threshold for computing AP in COCO')
    parser.add_argument('--unet_save_path', default='model_weights/model', type=str, help='Directory root and base name for storing the UNet weights. Expected to be in the form "folder_name/weights_base_name" without any file extension. WARNING: this folder and its contents will be deleted before starting next UNet training experiment, remember to backup the weights! Also, be aware of the folder you choose: you may delete your whole system!')
    parser.add_argument('--tasknet_save_path', default='tasknet_weights/tasknet', type=str, help='Directory root and base name for storing the Tasknet weights. Expected to be in the form "folder_name/weights_base_name" without any file extension. WARNING: this folder and its contents will be deleted before starting next Tasknet training experiment (the Tasknet weights for training the UNet could be left in this folder as soon as you don\'t retrain the Tasknet), remember to backup the weights! Also, be aware of the folder you choose: you may delete your whole system!')
-   parser.add_argument('--unet_weights_load', default='model_weights/model_fw_50.pt', type=str, help='Path to UNet weights to load if resuming training')
+   parser.add_argument('--unet_fw_weights_load', default='model_weights/model_fw_50.pt', type=str, help='Path to UNet forward weights to load if resuming training')
+   parser.add_argument('--unet_bw_weights_load', default='model_weights/model_bw_80.pt', type=str, help='Path to UNet backward weights to load if resuming training')
    parser.add_argument('--save_all_weights', action='store_true', default=False, help='If you want to save model weights for each epoch. By default, this script saves weights at final epoch and at tot_epochs/2 (halfway checkpoint)')
    parser.add_argument('--tasknet_weights_load', default='tasknet_weights/tasknet_1norm_myresize.pt', type=str, help='Path to Tasknet weights to load if resuming training or training the UNet')
    parser.add_argument('--my_classifier_weights', default='my_recons_classifier/my_recons_classifier_weights.pt', type=str, help='Path to load pretrained reconstruction classifier (useless)')
@@ -81,6 +82,7 @@ def get_args_parser():
    
    #FLAGS FOR CHANGING TRAINING BEHAVIOR
    parser.add_argument('--train_tasknet', action='store_true', default=False, help='If you want to first train only the Tasknet; if False the code assumes you want to train the UNet (forward or backward) with freezed Tasknet')
+   parser.add_argument('--finetune_tasknet', action='store_true', default=False, help='If you want to finetune the Tasknet on disturbed images. Remember to run first main.py with flags --save_disturbed_dataset and --keep_original_size for generating the disturbed dataset')
    parser.add_argument('--tasknet_get_indoor_AP', action='store_true', default=False, help='Needed for getting the AP for comparison with UNet')
    parser.add_argument('--save_disturbed_dataset', action='store_true', default=False, help='To use for creating the disturbed dataset for Backward training')
    parser.add_argument('--keep_original_size', action='store_true', default=False, help='Must be True if you want to fine tune the Tasknet on the disturbed COCO set; can be false for Backward training. This is done to enforce the disturbed images to have exact same size of original ones')
@@ -88,8 +90,10 @@ def get_args_parser():
    parser.add_argument('--train_model_backward', action='store_true', default=False, help='For executing Backward training on disturbed dataset')
    parser.add_argument('--compute_similarity_metrics', action='store_true', default=False, help='Needed for getting the right similarities metrics')
    parser.add_argument('--resume_training', action='store_true', default=False, help='For resuming training by restoring the specified weights from "unet_weights_load" or "tasknet_weights_load" variable')
-   parser.add_argument('--five_classes', action='store_true', default=False, help='For executing the experiments using "dog cat tv laptop bed" as classes. Default is False, meaning the experiments are made with only the Person class. If set to True, standard Tasknet with pretrained weights is loaded.')
+   parser.add_argument('--five_classes', action='store_true', default=False, help='For executing the experiments using "cat dog horse sheep cow" as classes. Default is False, meaning the experiments are made with only the Person class')
    parser.add_argument('--all_classes', action='store_true', default=False, help='For executing the experiments using all COCO classes. Default is False, meaning the experiments are made with only the Person class. If set to True, standard Tasknet with pretrained weights is loaded.')
+   parser.add_argument('--test_tasknet', action='store_true', default=False, help='If you want to test Tasknet on the Test set')
+   parser.add_argument('--test_model', action='store_true', default=False, help='If you want to test the UNet on the Test set, both forward and backward (uses weights from ')
    
    return parser
 
@@ -107,6 +111,8 @@ def main(args):
    disturbed_train_ann = f'{args.disturbed_dataset_path}/train.json'
    disturbed_val_img_folder = f'{args.disturbed_dataset_path}/val'
    disturbed_val_ann = f'{args.disturbed_dataset_path}/val.json'
+   disturbed_test_img_folder = f'{args.disturbed_dataset_path}/test'
+   disturbed_test_ann = f'{args.disturbed_dataset_path}/test.json'
    if args.train_tasknet or args.tasknet_get_indoor_AP:
       train_batch_size = val_batch_size = args.batch_size_tasknet
       train_img_folder = f'{args.coco_allpeople_path}/train/images' 
@@ -126,6 +132,8 @@ def main(args):
       train_ann_file = f'{args.coco_indoor_path}/train/train.json'
       val_img_folder = f'{args.coco_indoor_path}/val/images'
       val_ann_file = f'{args.coco_indoor_path}/val/val.json'
+      test_img_folder = '/home/math0012/Tesi_magistrale/VOCtrainval_11-May-2012/VOCdevkit/VOC2012/JPEGImages'
+      test_ann_file = f'{args.coco_indoor_path}/val_pascal2012.json'
       resize_scales_transform = [256, 288, 320, 352, 384, 416]
    
    if args.all_classes: #use whole COCO dataset
@@ -138,6 +146,8 @@ def main(args):
       train_ann_file = f'{args.coco_fiveclasses_path}/train.json'
       val_img_folder = f'{args.coco_allclasses_path}/val2017'
       val_ann_file = f'{args.coco_fiveclasses_path}/val.json'
+      test_img_folder = '/home/math0012/Tesi_magistrale/VOCtrainval_11-May-2012/VOCdevkit/VOC2012/JPEGImages'
+      test_ann_file = '/home/math0012/Tesi_magistrale/coco_animals/val_pascal2012.json'
    
    if not args.train_tasknet:
       unet = UNet(n_channels=3, bilinear=False) #UNet modified without skip connection
@@ -157,7 +167,7 @@ def main(args):
          shutil.rmtree(args.disturbed_dataset_path)
       os.makedirs(disturbed_train_img_folder)
       os.makedirs(disturbed_val_img_folder)
-      load_checkpoint(unet, args.unet_weights_load, unet_optimizer, unet_scheduler)
+      load_checkpoint(unet, args.unet_fw_weights_load, unet_optimizer, unet_scheduler)
       generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, args.device, unet,
          disturbed_train_img_folder, disturbed_train_ann, disturbed_val_img_folder, disturbed_val_ann, 
          args.keep_original_size, args.use_openimages_for_disturbed_set)
@@ -167,7 +177,7 @@ def main(args):
    if not args.train_model_backward: #Modified Tasknet with custom proposal method
       from faster_custom.faster_rcnn import fasterrcnn_resnet50_fpn_custom, FasterRCNN_ResNet50_FPN_Weights, FastRCNNPredictor
       weights = FasterRCNN_ResNet50_FPN_Weights.DEFAULT  
-      if args.train_tasknet or args.tasknet_get_indoor_AP or args.not_use_custom_filter_prop:
+      if args.train_tasknet or args.tasknet_get_indoor_AP or args.not_use_custom_filter_prop or args.finetune_tasknet:
          tasknet = fasterrcnn_resnet50_fpn_custom(weights=weights, progress=False, use_resize=args.all_classes) #Default Tasknet. If all classes are used, then resize is done
       else:
          if args.filter_prop_objectness:
@@ -208,7 +218,10 @@ def main(args):
          orig_train_img_folder, val_img_folder, 1, 1, resize_scales_transform, 
          args.use_dataset_subset, val_ann_file)
    else: #Same datasets for training Tasknet and training Unet forward
-      tasknet_setting = args.train_tasknet or args.tasknet_get_indoor_AP
+      tasknet_setting = args.train_tasknet or args.tasknet_get_indoor_AP or args.finetune_tasknet
+      if args.finetune_tasknet: #images are from disturbed folder for finetuning, annotations are the same
+         train_img_folder = f'{args.disturbed_dataset_path}/train'
+         val_img_folder =  f'{args.disturbed_dataset_path}/val'
       train_dataloader, val_dataloader, example_dataloader= load_dataset(
          train_img_folder, train_ann_file, val_img_folder, val_ann_file, train_batch_size, val_batch_size,
          args.save_disturbed_dataset, tasknet_setting, resize_scales_transform, args.use_dataset_subset)
@@ -243,7 +256,7 @@ def main(args):
       if os.path.exists('temp_dir'):
          shutil.rmtree('temp_dir')
       os.makedirs(disturbed_val_img_folder)
-      load_checkpoint(unet, args.unet_weights_load, unet_optimizer, unet_scheduler) #load unet backward weights
+      load_checkpoint(unet, args.unet_bw_weights_load, unet_optimizer, unet_scheduler) #load unet backward weights
       generate_similarity_dataset(similarity_gen_dataloader, args.device, unet, disturbed_val_img_folder, disturbed_val_ann)
       print("Generated similarity dataset")
       similarity_dataloader = load_similarity_dataset(
@@ -253,14 +266,62 @@ def main(args):
       shutil.rmtree('temp_dir')
       sys.exit()
    
+   if args.test_tasknet:
+      test_dataloader = load_test_set(test_img_folder, test_ann_file, resize_scales_transform, args.use_dataset_subset, args.test_tasknet)
+      load_checkpoint(tasknet, args.tasknet_weights_load, tasknet_optimizer, tasknet_scheduler)
+      tasknet.eval() #as testset is Pascal, you can't use COCO with all classes. 
+      test_tasknet(test_dataloader, args.device, tasknet, args.ap_score_thresh, args.results_dir)
+      print("Testing completed")
+      sys.exit()
+   
+   if args.test_model:
+      test_dataloader = load_test_set(test_img_folder, test_ann_file, resize_scales_transform, args.use_dataset_subset, args.test_tasknet)
+      load_checkpoint(tasknet, args.tasknet_weights_load, tasknet_optimizer, tasknet_scheduler)
+      tasknet.eval()
+      load_checkpoint(unet, args.unet_fw_weights_load, unet_optimizer, unet_scheduler)
+      unet.eval()
+      test_model(test_dataloader, args.device, tasknet, unet, args.ap_score_thresh, args.results_dir, my_recons_classifier, my_regressor, lpips_model, ms_ssim_module)
+      print("Testing forward completed")
+      test_dataloader_gen_disturbed = load_dataset_for_generating_disturbed_test_set(test_img_folder, test_ann_file, args.use_dataset_subset, resize_scales_transform)
+      if os.path.exists(args.disturbed_dataset_path):
+         shutil.rmtree(args.disturbed_dataset_path)
+      os.makedirs(disturbed_test_img_folder)
+      generate_disturbed_testset(test_dataloader_gen_disturbed, args.device, unet, disturbed_test_img_folder, disturbed_test_ann, args.keep_original_size)
+      load_checkpoint(unet, args.unet_bw_weights_load, unet_optimizer, unet_scheduler)
+      unet.eval()
+      test_disturbed_dataloader = load_disturbed_test_set(disturbed_test_img_folder, disturbed_test_ann, test_img_folder, resize_scales_transform, args.use_dataset_subset)
+      test_model_bw(test_disturbed_dataloader, args.device, unet, args.results_dir, lpips_model, ms_ssim_module)
+      print("Testing backward completed")
+      test_similarity_gen_dataloader = load_similarity_dataset(
+         disturbed_test_img_folder, disturbed_test_ann, None, resize_scales_transform, args.use_dataset_subset, generate_similarity_dataset=True)
+      disturbed_test_img_folder = f'temp_dir/val'
+      disturbed_test_ann = f'temp_dir/val.json' 
+      if os.path.exists('temp_dir'):
+         shutil.rmtree('temp_dir')
+      os.makedirs(disturbed_test_img_folder)
+      load_checkpoint(unet, args.unet_bw_weights_load, unet_optimizer, unet_scheduler) #load unet backward weights
+      unet.eval()
+      generate_similarity_dataset(test_similarity_gen_dataloader, args.device, unet, disturbed_test_img_folder, disturbed_test_ann)
+      print("Generated similarity test set")
+      test_similarity_dataloader = load_similarity_dataset(
+         disturbed_test_img_folder, disturbed_test_ann, test_img_folder, resize_scales_transform, args.use_dataset_subset, generate_similarity_dataset=False)     
+      val_similarity_disturbed_images(test_similarity_dataloader, args.device, args.results_dir, lpips_model, ms_ssim_module) #same function but with test set, works the same
+      print("Computed similarity metrics on test set")
+      shutil.rmtree('temp_dir')
+      shutil.rmtree(args.disturbed_dataset_path)
+      sys.exit()
+   
    starting_epoch=1 #Used for counting epoch from 1
    if args.resume_training:
       if args.train_tasknet: #+1 to start at next epoch
          starting_epoch = load_checkpoint(tasknet, args.tasknet_weights_load, tasknet_optimizer, tasknet_scheduler) + 1
       else:
-         starting_epoch = load_checkpoint(unet, args.unet_weights_load, unet_optimizer, unet_scheduler) + 1
-         #load_checkpoint_encoder(unet, args.unet_weights_load, unet_optimizer, unet_scheduler, load_optim_scheduler=False)
-         #load_checkpoint_decoder(unet, args.unet_weights_load, unet_optimizer, unet_scheduler, load_optim_scheduler=False)
+         if args.train_model_backward:
+            starting_epoch = load_checkpoint(unet, args.unet_bw_weights_load, unet_optimizer, unet_scheduler) + 1
+         else:
+            starting_epoch = load_checkpoint(unet, args.unet_fw_weights_load, unet_optimizer, unet_scheduler) + 1
+         #load_checkpoint_encoder(unet, args.unet_fw_weights_load, unet_optimizer, unet_scheduler, load_optim_scheduler=False)
+         #load_checkpoint_decoder(unet, args.unet_fw_weights_load, unet_optimizer, unet_scheduler, load_optim_scheduler=False)
          #freeze_encoder(unet)
          #freeze_decoder(unet)
    else: #Remove results folder as it's from old experiment
@@ -271,7 +332,6 @@ def main(args):
       if args.train_tasknet and not args.tasknet_get_indoor_AP: #otherwise I might remove tasknet weights stored in this folders used for training the UNet
          shutil.rmtree(tasknet_weights_dir)
          os.makedirs(tasknet_weights_dir)
-   
       
    #TRAINING TASKNET BLOCK
    if((args.train_tasknet or args.tasknet_get_indoor_AP) and not args.train_model_backward):
@@ -281,6 +341,24 @@ def main(args):
             tasknet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_tasknet, args.save_all_weights, skip_saving_weights=True)
          print("Computed AP for comparison with UNet indoor set")
          sys.exit()
+      for epoch in range(starting_epoch, args.num_epochs_tasknet+1):
+         train_temp_loss = train_tasknet(train_dataloader, epoch, args.device, args.tasknet_save_path, tasknet, tasknet_optimizer)
+         val_temp_loss = val_tasknet(val_dataloader, epoch, args.device, args.tasknet_save_path, tasknet, tasknet_optimizer,
+            tasknet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_tasknet, args.save_all_weights, skip_saving_weights=False)
+         tasknet_scheduler.step()
+         #tasknet_scheduler.step(val_temp_loss)
+         print(f'EPOCH {epoch} SUMMARY: Train loss {train_temp_loss}, Val loss {val_temp_loss}')
+         with open(f'{args.results_dir}/loss_log.txt', 'a') as file:
+            loss_log_append = f"{epoch} {train_temp_loss} {val_temp_loss}\n"
+            file.write(loss_log_append)
+   
+      #FINETUNE TASKNET BLOCK
+   elif args.finetune_tasknet:
+      if not args.all_classes: #if not all classes, start with existing finetuned weights on 1 class or 5 classes
+         load_checkpoint(tasknet, args.tasknet_weights_load, tasknet_optimizer, tasknet_scheduler)
+         #reset optimizer and scheduler to new state
+         tasknet_optimizer = torch.optim.SGD(tasknet.parameters(), lr=args.lr_tasknet, momentum=args.momentum_tasknet, weight_decay=args.weight_decay_tasknet, nesterov=args.no_nesterov_tasknet)
+         tasknet_scheduler = torch.optim.lr_scheduler.StepLR(tasknet_optimizer, step_size=args.step_size_tasknet, gamma=args.gamma_tasknet)
       for epoch in range(starting_epoch, args.num_epochs_tasknet+1):
          train_temp_loss = train_tasknet(train_dataloader, epoch, args.device, args.tasknet_save_path, tasknet, tasknet_optimizer)
          val_temp_loss = val_tasknet(val_dataloader, epoch, args.device, args.tasknet_save_path, tasknet, tasknet_optimizer,
@@ -319,12 +397,12 @@ def main(args):
    #TRAINING BACKWARD BLOCK 			
    else:
       for epoch in range(starting_epoch, args.num_epochs_unet_backward+1):
-         train_temp_loss = train_model_on_disturbed_images(disturbed_train_dataloader, epoch, args.device, unet, unet_optimizer, ms_ssim_module)
-         val_temp_loss = val_model_on_disturbed_images(disturbed_val_dataloader, epoch, args.device, unet, args.unet_save_path,
+         train_temp_loss = train_model_bw(disturbed_train_dataloader, epoch, args.device, unet, unet_optimizer, ms_ssim_module)
+         val_temp_loss = val_model_bw(disturbed_val_dataloader, epoch, args.device, unet, args.unet_save_path,
             unet_optimizer, unet_scheduler, args.results_dir, args.num_epochs_unet_backward, args.save_all_weights, lpips_model, ms_ssim_module, example_dataloader)
          #unet_scheduler.step()
          unet_scheduler.step(val_temp_loss)
-         _ = val_model_on_disturbed_images(disturbed_val_batch1, epoch, args.device, unet, args.unet_save_path,
+         _ = val_model_bw(disturbed_val_batch1, epoch, args.device, unet, args.unet_save_path,
             unet_optimizer, unet_scheduler, args.results_dir, args.num_epochs_unet_backward, args.save_all_weights, lpips_model, ms_ssim_module, example_dataloader, compute_right_similarity_metrics=True) #This is done to grab the real similarity metrics without the added padding for batch size > 1: otherwise I get higher similarity score just because of the black padding
          print(f'EPOCH {epoch} SUMMARY: Train loss {train_temp_loss}, Val loss {val_temp_loss}')
          with open(f'{args.results_dir}/loss_log.txt', 'a') as file:

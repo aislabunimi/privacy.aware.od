@@ -355,3 +355,46 @@ def load_similarity_dataset(disturbed_val_img_folder, disturbed_val_ann, orig_va
       shuffle=False, num_workers=4, pin_memory=True, collate_fn=None, worker_init_fn=deterministic_worker, generator=deterministic_generator())	
       
    return similarity_dataloader
+   
+def load_test_set(test_img_folder, test_ann_file, resize_scales_transform, use_dataset_subset, test_tasknet):
+   test_coco_dataset = CocoDetection(test_img_folder, test_ann_file, transforms=make_coco_transforms('val_resize', resize_scales_transform), return_masks=False)
+   
+   test_indices = list(range(0, len(test_coco_dataset), 1))
+   if use_dataset_subset>0:
+      test_coco_dataset = torch.utils.data.Subset(test_coco_dataset, test_indices[:use_dataset_subset])
+ 
+   if test_tasknet:
+      collate = collate_fn_tasknet
+   else:
+      collate = collate_fn_nested_tensors
+   
+   test_dataloader = torch.utils.data.DataLoader(test_coco_dataset, batch_size=1, shuffle=False,
+      num_workers=4, pin_memory=True, collate_fn=collate, worker_init_fn=deterministic_worker, generator=deterministic_generator())
+      
+   return test_dataloader
+   
+def load_dataset_for_generating_disturbed_test_set(test_img_folder, test_ann_file, use_dataset_subset, resize_scales_transform):
+   test_coco_dataset = CocoDetection(test_img_folder, test_ann_file, transforms=make_coco_transforms('val_resize', resize_scales_transform), return_masks=False)
+
+   test_indices = list(range(0, len(test_coco_dataset), 1))
+   
+   if use_dataset_subset>0:
+      test_coco_dataset = torch.utils.data.Subset(test_coco_dataset, test_indices[:use_dataset_subset])
+   
+   test_dataloader_gen_disturbed = torch.utils.data.DataLoader(test_coco_dataset, batch_size=1,
+      shuffle=False, num_workers=4, pin_memory=True, collate_fn=collate_fn_nested_tensors,
+      worker_init_fn=deterministic_worker, generator=deterministic_generator())
+      
+   return test_dataloader_gen_disturbed
+
+def load_disturbed_test_set(disturbed_test_img_folder, disturbed_test_ann, orig_test_folder, resize_scales_transform, use_dataset_subset):
+   disturbed_test_dataset = DisturbedDataset(disturbed_test_ann, disturbed_test_img_folder, orig_test_folder, transform=make_coco_transforms('val'), is_training=False, resize_scales=resize_scales_transform)
+   
+   test_indices = list(range(0, len(disturbed_test_dataset), 1)) 
+   if use_dataset_subset>0:
+      disturbed_test_dataset = torch.utils.data.Subset(disturbed_test_dataset, test_indices[:use_dataset_subset])
+   
+   disturbed_test_dataloader = torch.utils.data.DataLoader(disturbed_test_dataset, batch_size=1, 
+      shuffle=False, num_workers=4, pin_memory=True, collate_fn=collate_fn_disturbed, worker_init_fn=deterministic_worker, generator=deterministic_generator())	
+      
+   return disturbed_test_dataloader

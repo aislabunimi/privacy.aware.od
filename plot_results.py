@@ -52,7 +52,7 @@ def main(args):
    #Tasknet with same behavior of training. No normalize, no resize
    from faster_custom.faster_rcnn import fasterrcnn_resnet50_fpn_custom, FasterRCNN_ResNet50_FPN_Weights, FastRCNNPredictor
    weights = FasterRCNN_ResNet50_FPN_Weights.DEFAULT  
-   tasknet = fasterrcnn_resnet50_fpn_custom(weights=weights, progress=False, resize=args.all_classes) #Default Tasknet
+   tasknet = fasterrcnn_resnet50_fpn_custom(weights=weights, progress=False, use_resize=args.all_classes) #Default Tasknet
    if not args.all_classes:
       num_classes = 2  # 1 class (person) + background
       in_features = tasknet.roi_heads.box_predictor.cls_score.in_features
