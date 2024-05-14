@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 import os
 import re
+"""
 def plot_custom_metric(file_list, file_save_list):
    #list containing all files from custom metric
    for file_path, file_save in zip(file_list, file_save_list):
@@ -42,8 +43,8 @@ def plot_custom_metric(file_list, file_save_list):
       plt.grid(True)
       plt.savefig(file_save, format='png', bbox_inches='tight')
       plt.clf()
-      
-def plot_custom_metric_allclasses(file_list, file_save_list):
+"""
+def plot_custom_metric(file_list, file_save_list, all_classes, five_classes):
    #list containing all files from custom metric
    for file_path, file_save in zip(file_list, file_save_list):
       pattern = r'([0-9]+\.[0-9]+)'
@@ -58,8 +59,15 @@ def plot_custom_metric_allclasses(file_list, file_save_list):
          data = json.load(json_file)
       #getting data, calculating percentage of tp, fp and fpiou over total_detections
       epochs = [entry['epoch'] for entry in data]
-      n_classes = 81
-      valid_labels=['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '27', '28', '31', '32', '33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '46', '47', '48', '49', '50', '51', '52', '53', '54', '55', '56', '57', '58', '59', '60', '61', '62', '63', '64', '65', '67', '70', '72', '73', '74', '75', '76', '77', '78', '79', '80', '81', '82', '84', '85', '86', '87', '88', '89', '90']#need to skip background and N/A, now i have 81 classes
+      if all_classes:
+         n_classes = 80
+         valid_labels=['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '27', '28', '31', '32', '33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '46', '47', '48', '49', '50', '51', '52', '53', '54', '55', '56', '57', '58', '59', '60', '61', '62', '63', '64', '65', '67', '70', '72', '73', '74', '75', '76', '77', '78', '79', '80', '81', '82', '84', '85', '86', '87', '88', '89', '90']#need to skip background and N/A, now i have 80 classes
+      elif five_classes:
+         n_classes = 5
+         valid_labels=['1', '2', '3', '4', '5']
+      else:
+         n_classes = 1
+         valid_labels=['1']
       curve_dict_TP={}
       curve_dict_FP={}
       curve_dict_TPm={}

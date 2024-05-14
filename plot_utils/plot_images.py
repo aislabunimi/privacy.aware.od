@@ -84,8 +84,10 @@ def get_transform():
     transform.append(transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]))
     return transforms.Compose(transform)   
 
-def plot_results(img, labels, prob, boxes, all_classes):
+def plot_results(img, labels, prob, boxes, all_classes, five_classes):
     #plt.figure(figsize=(16,10))
+    #cat, dog, horse, sheep, cow
+    COCO_5_CLASSES=['__background__', 'cat', 'dog', 'horse', 'sheep', 'cow']
     COCO_91_CLASSES=[
     '__background__', 
     'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
@@ -112,12 +114,15 @@ def plot_results(img, labels, prob, boxes, all_classes):
            if all_classes:
               label_name=COCO_91_CLASSES[label]
               text = f'{label_name} {p:0.3f}'
+           elif five_classes:
+              label_name=COCO_5_CLASSES[label]
+              text = f'{label_name} {p:0.3f}'
            else:
               text = f'{p:0.3f}'
            ax.text(xmin, ymin, text, fontsize=15, bbox=dict(facecolor='yellow', alpha=0.5))
 
 
-def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device, img_file_path, name_path_save, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler, all_classes): 
+def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device, img_file_path, name_path_save, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler, all_classes, five_classes): 
    unet.eval()
    tasknet.eval()
    plt.figure(figsize=(15, 10))
@@ -146,7 +151,7 @@ def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device
    img_primo_plot = trans_r(img_primo_plot) #for making first image equal in size to the reconstructed ones
    plt.subplot(1, 3, 1)
    plt.title('Original Image', fontsize=20)	
-   plot_results(img_primo_plot, nms_pred['labels'], nms_pred['scores'], nms_pred['boxes'], all_classes)
+   plot_results(img_primo_plot, nms_pred['labels'], nms_pred['scores'], nms_pred['boxes'], all_classes, five_classes)
    
    plt.subplot(1, 3, 2)
    out_to_plot = unnormalize(out)
@@ -163,7 +168,7 @@ def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device
       name = os.path.splitext(filename)[0]	
    
    plt.title(f'{name}', fontsize=20)
-   plot_results(out_to_plot, nms_pred['labels'], nms_pred_recon['scores'], nms_pred_recon['boxes'], all_classes)
+   plot_results(out_to_plot, nms_pred['labels'], nms_pred_recon['scores'], nms_pred_recon['boxes'], all_classes, five_classes)
    plt.subplot(1, 3, 3)
    load_checkpoint(unet, unet_weights_to_compare, unet_optimizer, unet_scheduler)
 
@@ -189,7 +194,7 @@ def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device
    out_to_plot = unnormalize(out)
    out_to_plot = torch.clamp(out_to_plot, min=0, max=1)
    plt.title(f'{name}', fontsize=20)
-   plot_results(out_to_plot, nms_pred_recon['labels'], nms_pred_recon['scores'], nms_pred_recon['boxes'], all_classes)
+   plot_results(out_to_plot, nms_pred_recon['labels'], nms_pred_recon['scores'], nms_pred_recon['boxes'], all_classes, five_classes)
    plt.subplots_adjust(wspace=0.05)
    plt.savefig(name_path_save, format='png', bbox_inches='tight')
    plt.clf()

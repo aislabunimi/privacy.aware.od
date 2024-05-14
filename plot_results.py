@@ -10,7 +10,7 @@ from model_utils_and_functions import *
 from plot_utils.loss import plot_model_loss
 from plot_utils.ap import plot_ap
 from plot_utils.extract_iou50_values import extract_ap
-from plot_utils.plot_custom_metric import plot_custom_metric, plot_custom_metric_allclasses
+from plot_utils.plot_custom_metric import plot_custom_metric #, plot_custom_metric_allclasses
 from plot_utils.compare_ap import plot_compare_between_two_ap
 from plot_utils.plot_images import *
 from plot_utils.plot_my_recons_classifier_metric import plot_my_recons_classifier_metric, plot_my_recons_classifier_metric_probs
@@ -30,10 +30,11 @@ def get_args_parser():
    #PATHS to weights
    parser.add_argument('--unet_weights_forward', default='model_weights/model_fw_50.pt', type=str, help='Path to forward UNet weights')
    parser.add_argument('--unet_weights_backward', default='model_weights/model_bw_80.pt', type=str, help='Path to backward UNet weights')
-   parser.add_argument('--tasknet_weights_load', default='tasknet_weights/tasknet_1norm_myresize.pt', type=str, help='Path to Tasknet weights to load if resuming training or training the UNet')
+   parser.add_argument('--tasknet_weights_load', default='tasknet_weights/tasknet_10.pt', type=str, help='Path to Tasknet weights to load if resuming training or training the UNet')
    
    #FLAGS FOR CHANGING TRAINING BEHAVIOR
    parser.add_argument('--all_classes', action='store_true', default=False, help='If the experiments were executed with all classes, you need to set to True this flag to compute correct metric values and showing the labels in the plotted images')
+   parser.add_argument('--five_classes', action='store_true', default=False, help='If the experiments were executed with all classes, using "cat dog horse sheep cow" as classes')
    parser.add_argument('--plot_only_bw_img', action='store_true', default=False, help='If you want to plot only the backward images')
    parser.add_argument('--plot_fw_along_bw', action='store_false', default=True, help='If you want to plot forward image (defined by unet_weights_forward, with tasknet prediction) with alongside the backward reconstruction model (defined by unet_weights_backward). If this flag is false, you should provide another weight in \'unet_weights_backward\' that is instead a forward weight')
    
@@ -86,10 +87,11 @@ def main(args):
    plot_sim_metric(f"{args.results_dir}/ms_ssim_score_log.txt", f'{args.save_dir}/ms_ssim_score.png', 'MS_SSIM score', 'MS_SSIM score Over Epochs')
    plot_sim_metric(f"{args.results_dir}/lpips_score_log.txt", f"{args.save_dir}/lpips_score.png", 'LPIPS score', 'LPIPS score Over Epochs')
    
-   if args.all_classes:
-      plot_custom_metric_allclasses(custom_metric_file_list, custom_metric_file_save_list)
-   else:
-      plot_custom_metric(custom_metric_file_list, custom_metric_file_save_list)
+   plot_custom_metric(custom_metric_file_list, custom_metric_file_save_list, args.all_classes, args.five_classes)
+   #if args.all_classes:
+   #   plot_custom_metric_allclasses(custom_metric_file_list, custom_metric_file_save_list)
+   #else:
+   #   plot_custom_metric(custom_metric_file_list, custom_metric_file_save_list)
    #plot_my_recons_classifier_metric(f'{args.results_dir}/my_recons_classifier_log.json', f'{args.save_dir}/my_recons_classifier.png')
    #plot_my_recons_classifier_metric_probs(f'{args.results_dir}/my_recons_classifier_log.json', f'{args.save_dir}/my_recons_classifier_probs.png')
    #plot_reconrate(f'{args.results_dir}/recon_rate_log.txt', f'{args.save_dir}/regressor_recon_rate.png')
@@ -215,7 +217,7 @@ def main(args):
       for img in image_name_list:
          image_path=f'{image_list_folder}/{img}'
          image_save_name=f'{args.save_dir}/{img}'
-         compare_two_results_unet(args.plot_fw_along_bw, unet, tasknet, args.device, image_path, image_save_name, args.unet_weights_forward, args.unet_weights_backward, unet_optimizer, unet_scheduler, args.all_classes)
+         compare_two_results_unet(args.plot_fw_along_bw, unet, tasknet, args.device, image_path, image_save_name, args.unet_weights_forward, args.unet_weights_backward, unet_optimizer, unet_scheduler, args.all_classes, args.five_classes)
          plt.clf()
       
       if not os.path.exists(f'{args.save_dir}/from_val_set'):
@@ -225,7 +227,7 @@ def main(args):
          image_path=''
          image_path=f'{image_val_folder}/{img}'
          image_save_name=f'{args.save_dir}/from_val_set/{img}'
-         compare_two_results_unet(args.plot_fw_along_bw, unet, tasknet, args.device, image_path, image_save_name, args.unet_weights_forward, args.unet_weights_backward, unet_optimizer, unet_scheduler, args.all_classes)
+         compare_two_results_unet(args.plot_fw_along_bw, unet, tasknet, args.device, image_path, image_save_name, args.unet_weights_forward, args.unet_weights_backward, unet_optimizer, unet_scheduler, args.all_classes, args.five_classes)
          plt.clf()
       
    if os.path.exists('temp_for_backward.jpg'):

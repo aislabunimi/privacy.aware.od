@@ -333,28 +333,16 @@ def main(args):
          shutil.rmtree(tasknet_weights_dir)
          os.makedirs(tasknet_weights_dir)
       
-   #TRAINING TASKNET BLOCK
-   if((args.train_tasknet or args.tasknet_get_indoor_AP) and not args.train_model_backward):
+   #TRAINING TASKNET BLOCK OR FINETUNE IT
+   if((args.train_tasknet or args.tasknet_get_indoor_AP or args.finetune_tasknet) and not args.train_model_backward):
       if args.tasknet_get_indoor_AP:
          load_checkpoint(tasknet, args.tasknet_weights_load, tasknet_optimizer, tasknet_scheduler)
          val_temp_loss = val_tasknet(val_dataloader, starting_epoch, args.device, args.tasknet_save_path, tasknet, tasknet_optimizer,
             tasknet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_tasknet, args.save_all_weights, skip_saving_weights=True)
          print("Computed AP for comparison with UNet indoor set")
          sys.exit()
-      for epoch in range(starting_epoch, args.num_epochs_tasknet+1):
-         train_temp_loss = train_tasknet(train_dataloader, epoch, args.device, args.tasknet_save_path, tasknet, tasknet_optimizer)
-         val_temp_loss = val_tasknet(val_dataloader, epoch, args.device, args.tasknet_save_path, tasknet, tasknet_optimizer,
-            tasknet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_tasknet, args.save_all_weights, skip_saving_weights=False)
-         tasknet_scheduler.step()
-         #tasknet_scheduler.step(val_temp_loss)
-         print(f'EPOCH {epoch} SUMMARY: Train loss {train_temp_loss}, Val loss {val_temp_loss}')
-         with open(f'{args.results_dir}/loss_log.txt', 'a') as file:
-            loss_log_append = f"{epoch} {train_temp_loss} {val_temp_loss}\n"
-            file.write(loss_log_append)
-   
-      #FINETUNE TASKNET BLOCK
-   elif args.finetune_tasknet:
-      if not args.all_classes: #if not all classes, start with existing finetuned weights on 1 class or 5 classes
+      if args.finetune_tasknet and not args.all_classes:
+         #if not all classes, start with existing finetuned weights on 1 class or 5 classes
          load_checkpoint(tasknet, args.tasknet_weights_load, tasknet_optimizer, tasknet_scheduler)
          #reset optimizer and scheduler to new state
          tasknet_optimizer = torch.optim.SGD(tasknet.parameters(), lr=args.lr_tasknet, momentum=args.momentum_tasknet, weight_decay=args.weight_decay_tasknet, nesterov=args.no_nesterov_tasknet)
