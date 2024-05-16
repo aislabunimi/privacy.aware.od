@@ -25,6 +25,7 @@ def get_args_parser():
    #FOLDERS for input files and output filesa
    parser.add_argument('--results_dir', default='results', type=str, help='Directory root for storing the results, logs and so on. WARNING: this folder and its contents will be deleted before starting next experiment, remember to backup the results! Also, be aware of the folder you choose: you may delete your whole system!')
    parser.add_argument('--save_dir', default='plotted_results', type=str, help='Directory root for storing the plotted results, logs and so on. WARNING: this folder and its contents will be deleted before starting next plotting! Also, be aware of the folder you choose: you may delete your whole system!')
+   parser.add_argument('--test_data_dir', default='test_data', type=str, help='Directory root for the images to test (including subdirectories)')
    #parser.add_argument('--ap_score_thresh', default=0.75, type=float, help='AP score threshold for computing AP in COCO')
    
    #PATHS to weights
@@ -73,13 +74,11 @@ def main(args):
    
    custom_metric_file_list=[f'{args.results_dir}/iou0.5_score0.5.json', f'{args.results_dir}/iou0.5_score0.75.json', f'{args.results_dir}/iou0.75_score0.5.json', f'{args.results_dir}/iou0.75_score0.75.json']
    custom_metric_file_save_list=[f'{args.save_dir}/iou0.5_score0.5.png', f'{args.save_dir}/iou0.5_score0.75.png', f'{args.save_dir}/iou0.75_score0.5.png', f'{args.save_dir}/iou0.75_score0.75.png']
-   #image_save_prefix='test'
-   extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp']
-   image_list_folder='test_data'
-   image_name_list= [file for file in os.listdir(image_list_folder) if file.lower().endswith(tuple(extensions))]   #['val', 'cat', 'lenna', 'people']
-   image_val_folder='test_data/from_val_set'
-   val_set_list=  [file for file in os.listdir(image_val_folder) if file.lower().endswith(tuple(extensions))] #['000000004395','000000008532','000000019924', '000000020992', '000000070739', '000000117525', '000000131444','000000133343', '000000138115', '000000170099', '000000179112', '000000224337', '000000258541', '000000262895', '000000271997']
-   
+   extensions = ('.jpg', '.jpeg', '.png', '.gif', '.bmp')
+   image_name_list = [os.path.relpath(os.path.join(root, file), args.test_data_dir)
+                   for root, dirs, files in os.walk(args.test_data_dir)
+                   for file in files 
+                   if file.lower().endswith(extensions)]
    
    #LOSS, MS_SSIM, LPIPS, MY RECONS CLASSIFIER, RECON REGRESSOR, CUSTOM METRIC
    from plot_utils.plot_similarity_metric import plot_sim_metric
@@ -88,9 +87,7 @@ def main(args):
    plot_sim_metric(f"{args.results_dir}/lpips_score_log.txt", f"{args.save_dir}/lpips_score.png", 'LPIPS score', 'LPIPS score Over Epochs')
    
    plot_custom_metric(custom_metric_file_list, custom_metric_file_save_list, args.all_classes, args.five_classes)
-   #if args.all_classes:
-   #   plot_custom_metric_allclasses(custom_metric_file_list, custom_metric_file_save_list)
-   #else:
+   #PLOT OLD FOR OLD THESIS FILES
    #   plot_custom_metric(custom_metric_file_list, custom_metric_file_save_list)
    #plot_my_recons_classifier_metric(f'{args.results_dir}/my_recons_classifier_log.json', f'{args.save_dir}/my_recons_classifier.png')
    #plot_my_recons_classifier_metric_probs(f'{args.results_dir}/my_recons_classifier_log.json', f'{args.save_dir}/my_recons_classifier_probs.png')
@@ -105,9 +102,9 @@ def main(args):
    #Contains values for extraction, used to grab the right AP and AR with certain IoU threshold
    coco_iou_modified = [False, 50, 75, False, 50, 75]
    #Contains comparison AP value of Tasknet or any other model (you can compare with another UNet experiment if wanted)
-   ap_compare_values = [0.858, 0.858, 0.638, 0.797, 0.797, 0.610]
+   ap_compare_values = [0.875, 0.875, 0.647, 0.801, 0.801, 0.615]
    #Contains comparison AR value of Tasknet or any other model (you can compare with another UNet experiment if wanted)
-   ar_compare_values = [0.685, 0.952, 0.731, 0.610, 0.824, 0.670]
+   ar_compare_values = [0.682, 0.954, 0.731, 0.610, 0.824, 0.666]
    #Contains name of the model from which we get the above AP and AR values of comparison. Standard are all Tasknet
    compare_name = ['Tasknet', 'Tasknet', 'Tasknet', 'Tasknet', 'Tasknet', 'Tasknet']
    #Contains AP plot title based on the computed AP
@@ -196,42 +193,23 @@ def main(args):
       #load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler)
       load_checkpoint(unet, args.unet_weights_backward, unet_optimizer, unet_scheduler)
       for img in image_name_list:
-         image_path=f'{image_list_folder}/{img}'
+         image_path=f'{args.test_data_dir}/{img}'
          image_save_name=f'{args.save_dir}/{img}'
          save_disturbed_pred(unet, args.device, image_path, image_save_name, args.unet_weights_forward, args.unet_weights_backward, unet_optimizer, unet_scheduler)
          plt.clf()
-         
-      if not os.path.exists(f'{args.save_dir}/from_val_set'):
-         os.makedirs(f'{args.save_dir}/from_val_set')
-      
-      for img in val_set_list:
-         image_path=f'{image_val_folder}/{img}'
-         image_save_name=f'{args.save_dir}/from_val_set/{img}'
-         save_disturbed_pred(unet, args.device, image_path, image_save_name, args.unet_weights_forward, args.unet_weights_backward, unet_optimizer, unet_scheduler)
-         plt.clf()
-         
+
       if os.path.exists('temp_for_backward.jpg'):
          os.remove('temp_for_backward.jpg')
 
    else:
       for img in image_name_list:
-         image_path=f'{image_list_folder}/{img}'
+         image_path=f'{args.test_data_dir}/{img}'
          image_save_name=f'{args.save_dir}/{img}'
          compare_two_results_unet(args.plot_fw_along_bw, unet, tasknet, args.device, image_path, image_save_name, args.unet_weights_forward, args.unet_weights_backward, unet_optimizer, unet_scheduler, args.all_classes, args.five_classes)
          plt.clf()
-      
-      if not os.path.exists(f'{args.save_dir}/from_val_set'):
-         os.makedirs(f'{args.save_dir}/from_val_set')
          
-      for img in val_set_list:
-         image_path=''
-         image_path=f'{image_val_folder}/{img}'
-         image_save_name=f'{args.save_dir}/from_val_set/{img}'
-         compare_two_results_unet(args.plot_fw_along_bw, unet, tasknet, args.device, image_path, image_save_name, args.unet_weights_forward, args.unet_weights_backward, unet_optimizer, unet_scheduler, args.all_classes, args.five_classes)
-         plt.clf()
-      
-   if os.path.exists('temp_for_backward.jpg'):
-      os.remove('temp_for_backward.jpg')
+      if os.path.exists('temp_for_backward.jpg'):
+         os.remove('temp_for_backward.jpg')
       
 if __name__ == '__main__':
    parser = argparse.ArgumentParser('Plotting results script', parents=[get_args_parser()])

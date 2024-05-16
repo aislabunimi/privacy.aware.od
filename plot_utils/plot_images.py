@@ -196,6 +196,9 @@ def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device
    plt.title(f'{name}', fontsize=20)
    plot_results(out_to_plot, nms_pred_recon['labels'], nms_pred_recon['scores'], nms_pred_recon['boxes'], all_classes, five_classes)
    plt.subplots_adjust(wspace=0.05)
+   directory = os.path.dirname(name_path_save)
+   if not os.path.exists(directory):
+      os.makedirs(directory)
    plt.savefig(name_path_save, format='png', bbox_inches='tight')
    plt.clf()
 
@@ -227,4 +230,7 @@ def save_disturbed_pred(unet, device, img_file_path, name_path_save, unet_weight
    recons = torch.clamp(recons, min=0, max=1)
    trans_r = transforms.Resize((img.shape[2], img.shape[3]), antialias=False)
    recons = trans_r(recons)
+   directory = os.path.dirname(name_path_save)
+   if not os.path.exists(directory):
+      os.makedirs(directory)
    save_image(recons, name_path_save)
