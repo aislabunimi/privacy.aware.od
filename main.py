@@ -34,9 +34,10 @@ def get_args_parser():
    parser.add_argument('--coco_allclasses_path', default='/home/math0012/Tesi_magistrale/coco2017', type=str, help='Path of the folder containing the whole COCO dataset. The folder is expected to contain three subfolders, "train2017", "val2017" and annotations. train2017 and val2017 contains the images, while annotations folder contains the annotations called "instances_train2017.json" and "instances_val2017.json".')
    parser.add_argument('--coco_allpeople_path', default='/home/alberti/coco_person', type=str, help='Path of the folder containing all the people of the COCO dataset. The folder is expected to contain two subfolders, "train" and "val". Each one of these folders contains an "images" folder (with the images) and an annotation file called "train.json" and "val.json" respectively.')
    parser.add_argument('--coco_indoor_path', default='/home/alberti/coco_people_indoor', type=str, help='Path of the folder containing the COCO indoor dataset. The folder is expected to contain two subfolders, "train" and "val". Each one of these folders contains an "images" folder (with the images) and an annotation file called "train.json" and "val.json" respectively.')
-   parser.add_argument('--coco_fiveclasses_path', default='/home/math0012/Tesi_magistrale/coco_5class', type=str, help='Path of the folder containing the COCO 5class dataset. The folder is expected to contain the annotation file called "train.json" and "val.json" respectively. The images are loaded from coco_allclasses_path folders.')
+   parser.add_argument('--coco_fiveclasses_path', default='/home/alberti/coco_vehicles', type=str, help='Path of the folder containing the COCO 5class dataset. The folder is expected to contain the annotation file called "train.json" and "val.json" respectively. The images are loaded from coco_allclasses_path folders.')
    parser.add_argument('--disturbed_dataset_path', default='disturbed_dataset', type=str, help='Path of the folder used for containing the generated disturbed dataset. WARNING: this folder and its contents will be deleted before starting next backward training experiment, be aware of the folder you choose: you may delete your whole system!')
-   parser.add_argument('--openimages_dataset_path', default='/home/alberti/open_images', type=str, help='Path of the folder containing the Open Images training dataset. This folder is expected to contain an "images" folder with the images, and an annotation filed named "open_images_id_list.json"')
+   parser.add_argument('--pascal_img_path', default='/home/alberti/pascal/images', type=str, help='Path of the folder containing the PascalVal2012 images')
+   parser.add_argument('--openimages_dataset_path', default='/home/math0012/Tesi_magistrale/open_images_v7', type=str, help='Path of the folder containing the Open Images training dataset. This folder is expected to contain an "images" folder with the images, and an annotation filed named "open_images_id_list.json"')
    parser.add_argument('--use_dataset_subset', default=0, type=int, help='If you want to use a subset of data (0 is the default, whole dataset; n!=0 means you use n images)')
    
    #HYPERPARAMETERS
@@ -122,7 +123,6 @@ def main(args):
       resize_scales_transform = [256, 288, 320, 352, 384, 416]
       #For having comparable results with UNet, it's best if you execute a validation epoch with Indoor dataset
       if args.tasknet_get_indoor_AP:
-         resize_scales_transform = [256] #same resize used for UNet AP 
          val_img_folder = f'{args.coco_indoor_path}/val/images'
          val_ann_file = f'{args.coco_indoor_path}/val/val.json'
    else:
@@ -132,7 +132,6 @@ def main(args):
       train_ann_file = f'{args.coco_indoor_path}/train/train.json'
       val_img_folder = f'{args.coco_indoor_path}/val/images'
       val_ann_file = f'{args.coco_indoor_path}/val/val.json'
-      test_img_folder = '/home/math0012/Tesi_magistrale/VOCtrainval_11-May-2012/VOCdevkit/VOC2012/JPEGImages'
       test_ann_file = f'{args.coco_indoor_path}/val_pascal2012.json'
       resize_scales_transform = [256, 288, 320, 352, 384, 416]
    
@@ -146,8 +145,8 @@ def main(args):
       train_ann_file = f'{args.coco_fiveclasses_path}/train.json'
       val_img_folder = f'{args.coco_allclasses_path}/val2017'
       val_ann_file = f'{args.coco_fiveclasses_path}/val.json'
-      test_img_folder = '/home/math0012/Tesi_magistrale/VOCtrainval_11-May-2012/VOCdevkit/VOC2012/JPEGImages'
-      test_ann_file = '/home/math0012/Tesi_magistrale/coco_animals/val_pascal2012.json'
+      test_ann_file = f'{args.coco_fiveclasses_path}/val_pascal2012_vehicles.json'
+   test_img_folder = f'{args.pascal_img_path}'
    
    if not args.train_tasknet:
       unet = UNet(n_channels=3, bilinear=False) #UNet modified without skip connection
