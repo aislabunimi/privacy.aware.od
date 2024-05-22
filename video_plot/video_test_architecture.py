@@ -68,6 +68,7 @@ height = 256 #192
 #width = 320	#width = 384	#width = 512	#width = 640
 #height = 240	#height = 288	#height = 384	#height = 480
 
+color = (255, 0, 0) 
 out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height)) 
 while True:
    ret, frame = cap.read()
@@ -101,9 +102,9 @@ while True:
          box = detections["boxes"][i].detach().cpu().numpy() # bbox
          (startX, startY, endX, endY) = box.astype("int")
          label = "person: {:.2f}%".format(confidence * 100)
-         cv2.rectangle(reconstructed_frame, (startX, startY), (endX, endY), 0, 2) #0 black color
+         cv2.rectangle(reconstructed_frame, (startX, startY), (endX, endY), color, 2) #0 black color
          y = startY - 15 if startY - 15 > 15 else startY + 15
-         cv2.putText(reconstructed_frame, label, (startX, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, 0, 2)
+         cv2.putText(reconstructed_frame, label, (startX, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
    
     #convert in bgr for cv2
    cv2.imshow("Frame", reconstructed_frame)

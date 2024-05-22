@@ -15,7 +15,11 @@ conf_threshold = 0.75
 device = 'cuda'
 unet_weights_load= "model_weights/model_50.pt"
 video_path='parasite380x256.mp4'
-output_video_path = 'unet.avi'
+output_video_path = 'unet_fw.avi'
+#FOR BACKWARD
+#unet_weights_load= "model_weights/model_100.pt"
+#video_path='unet.avi'
+#output_video_path = 'unet_bw.avi'
 #unet
 unet = UNet(3, False)
 unet_optimizer = torch.optim.SGD(unet.parameters(), lr=5e-4, momentum=0.9, weight_decay=5e-4, nesterov=True)

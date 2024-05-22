@@ -15,7 +15,7 @@ from torchvision import transforms
 conf_threshold = 0.75
 device = 'cuda'
 tasknet_weights_load= "tasknet_weights/tasknet_10.pt"
-video_path='unet.avi'
+video_path='parasite380x256.mp4'
 output_video_path = 'tasknet.avi'
 #Importing tasknet
 weights = FasterRCNN_ResNet50_FPN_Weights.DEFAULT
@@ -41,6 +41,7 @@ fps = cap.get(cv2.CAP_PROP_FPS) #fps, width and from video
 width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
+color = (255, 0, 0) 
 out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height)) #file output
 while True:
    ret, frame = cap.read() #grab frame
@@ -62,9 +63,9 @@ while True:
          box = detections["boxes"][i].detach().cpu().numpy() # bbox
          (startX, startY, endX, endY) = box.astype("int")
          label = "person: {:.2f}%".format(confidence * 100)
-         cv2.rectangle(orig, (startX, startY), (endX, endY), 0, 2) #0 black color
+         cv2.rectangle(orig, (startX, startY), (endX, endY), color, 2) #0 black color
          y = startY - 15 if startY - 15 > 15 else startY + 15
-         cv2.putText(orig, label, (startX, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, 0, 2)				
+         cv2.putText(orig, label, (startX, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)				
    # show tasknet output
    cv2.imshow("Frame", orig)
    out.write(orig)
