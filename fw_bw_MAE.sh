@@ -2,12 +2,16 @@
 set -u -e #safety net to avoid using not setted variables
 RESULTS_DIR='results'
 UNET_SAVE_PATH='model_weights/model'
+UNET_NAME='model' #must be only the last part of the variable above
 TASKNET_WEIGHTS_LOAD='tasknet_weights/tasknet_1norm_myresize.pt'
 
 NUM_EPOCHS_UNET_FORWARD=50
 UNET_WEIGHTS_LOAD_FW="${UNET_SAVE_PATH}_fw_${NUM_EPOCHS_UNET_FORWARD}.pt"
 NUM_EPOCHS_UNET_BACKWARD=80
 UNET_WEIGHTS_LOAD_BW="${UNET_SAVE_PATH}_bw_${NUM_EPOCHS_UNET_BACKWARD}.pt"
+
+UNET_FW="${UNET_NAME}_fw_${NUM_EPOCHS_UNET_FORWARD}.pt"
+UNET_BW="${UNET_NAME}_bw_${NUM_EPOCHS_UNET_BACKWARD}.pt"
 
 EXPERIMENT_DIR='experiments' #used to store the backup results
 mkdir -p $EXPERIMENT_DIR
@@ -29,6 +33,8 @@ if [ "$HALF_WAY" -eq 0 ]; then
 fi
 UNET_WEIGHTS_BW_TO_SAVE2="${UNET_SAVE_PATH}_bw_${HALF_WAY}.pt"
 
+#If you want to use five classes, add flag --five_classes to all commands
+
 for i in "0.5" "0.6" "0.7" "0.8" "0.9"; do
    a=( $i )
    WEIGHT=${a[0]}
@@ -48,6 +54,10 @@ for i in "0.5" "0.6" "0.7" "0.8" "0.9"; do
    mv $UNET_WEIGHTS_BW_TO_SAVE2 "${EXPERIMENT_DIR}/${WEIGHT}_MAE/backward"
    mv $RESULTS_DIR "${EXPERIMENT_DIR}/${WEIGHT}_MAE/backward/${RESULTS_DIR}_bw"
    echo "Completed ${WEIGHT}_MAE backward experiment and copied results to ${EXPERIMENT_DIR} folder"
+   
+   python3 main.py --test_model --tasknet_weights_load $TASKNET_WEIGHTS_LOAD --unet_fw_weights_load "${EXPERIMENT_DIR}/${WEIGHT}_MAE/forward/${UNET_FW}" --unet_bw_weights_load "${EXPERIMENT_DIR}/${WEIGHT}_MAE/backward/${UNET_BW}" --results_dir $RESULTS_DIR
+   mv $RESULTS_DIR "${EXPERIMENT_DIR}/${WEIGHT}_MAE/test_results"
+   echo "Completed ${WEIGHT}_MAE test"
 done
 
 for i in "0.6" "0.8"; do
@@ -69,6 +79,10 @@ for i in "0.6" "0.8"; do
    mv $UNET_WEIGHTS_BW_TO_SAVE2 "${EXPERIMENT_DIR}/${WEIGHT}_2pos2neg_MAE/backward"
    mv $RESULTS_DIR "${EXPERIMENT_DIR}/${WEIGHT}_2pos2neg_MAE/backward/${RESULTS_DIR}_bw"
    echo "Completed ${WEIGHT}_2pos2neg_MAE backward experiment and copied results to ${EXPERIMENT_DIR} folder"
+   
+   python3 main.py --test_model --tasknet_weights_load $TASKNET_WEIGHTS_LOAD --unet_fw_weights_load "${EXPERIMENT_DIR}/${WEIGHT}_2pos2neg_MAE/forward/${UNET_FW}" --unet_bw_weights_load "${EXPERIMENT_DIR}/${WEIGHT}_2pos2neg_MAE/backward/${UNET_BW}" --results_dir $RESULTS_DIR
+   mv $RESULTS_DIR "${EXPERIMENT_DIR}/${WEIGHT}_2pos2neg_MAE/test_results"
+   echo "Completed ${WEIGHT}_2pos2neg_MAE test"
 done
 
 for i in "0.6" "0.8"; do
@@ -90,6 +104,10 @@ for i in "0.6" "0.8"; do
    mv $UNET_WEIGHTS_BW_TO_SAVE2 "${EXPERIMENT_DIR}/${WEIGHT}_4pos4neg_MAE/backward"
    mv $RESULTS_DIR "${EXPERIMENT_DIR}/${WEIGHT}_4pos4neg_MAE/backward/${RESULTS_DIR}_bw"
    echo "Completed ${WEIGHT}_4pos4neg_MAE backward experiment and copied results to ${EXPERIMENT_DIR} folder"
+   
+   python3 main.py --test_model --tasknet_weights_load $TASKNET_WEIGHTS_LOAD --unet_fw_weights_load "${EXPERIMENT_DIR}/${WEIGHT}_4pos4neg_MAE/forward/${UNET_FW}" --unet_bw_weights_load "${EXPERIMENT_DIR}/${WEIGHT}_4pos4neg_MAE/backward/${UNET_BW}" --results_dir $RESULTS_DIR
+   mv $RESULTS_DIR "${EXPERIMENT_DIR}/${WEIGHT}_4pos4neg_MAE/test_results"
+   echo "Completed ${WEIGHT}_4pos4neg_MAE test"
 done
 
 for i in "0.5" "0.7" "0.9"; do
@@ -111,6 +129,10 @@ for i in "0.5" "0.7" "0.9"; do
    mv $UNET_WEIGHTS_BW_TO_SAVE2 "${EXPERIMENT_DIR}/${WEIGHT}_2pos2neg_MAE/backward"
    mv $RESULTS_DIR "${EXPERIMENT_DIR}/${WEIGHT}_2pos2neg_MAE/backward/${RESULTS_DIR}_bw"
    echo "Completed ${WEIGHT}_2pos2neg_MAE backward experiment and copied results to ${EXPERIMENT_DIR} folder"
+   
+   python3 main.py --test_model --tasknet_weights_load $TASKNET_WEIGHTS_LOAD --unet_fw_weights_load "${EXPERIMENT_DIR}/${WEIGHT}_2pos2neg_MAE/forward/${UNET_FW}" --unet_bw_weights_load "${EXPERIMENT_DIR}/${WEIGHT}_2pos2neg_MAE/backward/${UNET_BW}" --results_dir $RESULTS_DIR
+   mv $RESULTS_DIR "${EXPERIMENT_DIR}/${WEIGHT}_2pos2neg_MAE/test_results"
+   echo "Completed ${WEIGHT}_2pos2neg_MAE test"
 done
 
 for i in "0.5" "0.7" "0.9"; do
@@ -132,4 +154,8 @@ for i in "0.5" "0.7" "0.9"; do
    mv $UNET_WEIGHTS_BW_TO_SAVE2 "${EXPERIMENT_DIR}/${WEIGHT}_4pos4neg_MAE/backward"
    mv $RESULTS_DIR "${EXPERIMENT_DIR}/${WEIGHT}_4pos4neg_MAE/backward/${RESULTS_DIR}_bw"
    echo "Completed ${WEIGHT}_4pos4neg_MAE backward experiment and copied results to ${EXPERIMENT_DIR} folder"
+   
+   python3 main.py --test_model --tasknet_weights_load $TASKNET_WEIGHTS_LOAD --unet_fw_weights_load "${EXPERIMENT_DIR}/${WEIGHT}_4pos4neg_MAE/forward/${UNET_FW}" --unet_bw_weights_load "${EXPERIMENT_DIR}/${WEIGHT}_4pos4neg_MAE/backward/${UNET_BW}" --results_dir $RESULTS_DIR
+   mv $RESULTS_DIR "${EXPERIMENT_DIR}/${WEIGHT}_4pos4neg_MAE/test_results"
+   echo "Completed ${WEIGHT}_4pos4neg_MAE test"
 done
