@@ -43,17 +43,17 @@ python3 main.py --five_classes --test_model --tasknet_weights_load $TASKNET --un
 mv $RESULTS_DIR "${EXPERIMENT_DIR}/allprop_5classes/test_results"
 echo "Completed allprop_5classes test"
 
-python3 main.py --five_classes --batch_size_unet 2 --lr_unet 3e-4 --prop_pos 3 --prop_neg 3
+python3 main.py --five_classes --batch_size_unet 2 --lr_unet 3e-4 --prop_pos 3 --prop_neg 3 --coco_allclasses_path $COCO_ALLCLASSES_PATH --coco_fiveclasses_path $COCO_FIVECLASSES_PATH --pascal_img_path $PASCAL_IMG_PATH
 mkdir -p "${EXPERIMENT_DIR}/3pos3neg_5classes/forward"
 cp "model_weights/model_fw_50.pt" "${EXPERIMENT_DIR}/3pos3neg_5classes/forward"
 mv "model_weights/model_fw_25.pt" "${EXPERIMENT_DIR}/3pos3neg_5classes/forward"
 mv $RESULTS_DIR "${EXPERIMENT_DIR}/3pos3neg_5classes/forward/${RESULTS_DIR}_fw"
 echo "Completed 3pos3neg forward and copied folder"
 
-python3 main.py --five_classes --batch_size_unet 2 --save_disturbed_dataset --unet_fw_weights_load $MODEL_FW
+python3 main.py --five_classes --batch_size_unet 2 --save_disturbed_dataset --unet_fw_weights_load $MODEL_FW --coco_allclasses_path $COCO_ALLCLASSES_PATH --coco_fiveclasses_path $COCO_FIVECLASSES_PATH --pascal_img_path $PASCAL_IMG_PATH
 
-python3 main.py --five_classes --batch_size_unet 2 --lr_unet 3e-4 --train_model_backward
-python3 main.py --five_classes --batch_size_unet 1 --compute_similarity_metrics --unet_bw_weights_load $MODEL_BW
+python3 main.py --five_classes --batch_size_unet 2 --lr_unet 3e-4 --train_model_backward --coco_allclasses_path $COCO_ALLCLASSES_PATH --coco_fiveclasses_path $COCO_FIVECLASSES_PATH --pascal_img_path $PASCAL_IMG_PATH
+python3 main.py --five_classes --batch_size_unet 1 --compute_similarity_metrics --unet_bw_weights_load $MODEL_BW --coco_allclasses_path $COCO_ALLCLASSES_PATH --coco_fiveclasses_path $COCO_FIVECLASSES_PATH --pascal_img_path $PASCAL_IMG_PATH
 mkdir -p "${EXPERIMENT_DIR}/3pos3neg_5classes/backward"
 mv "model_weights/model_bw_80.pt" "${EXPERIMENT_DIR}/3pos3neg_5classes/backward"
 mv "model_weights/model_bw_40.pt" "${EXPERIMENT_DIR}/3pos3neg_5classes/backward"
@@ -64,17 +64,17 @@ python3 main.py --five_classes --test_model --tasknet_weights_load $TASKNET --un
 mv $RESULTS_DIR "${EXPERIMENT_DIR}/3pos3neg_5classes/test_results"
 echo "Completed 3pos3negp_5classes test"
 
-python3 main.py --five_classes --batch_size_unet 2 --lr_unet 3e-4 --not_use_custom_filter_prop --weight 0.6
+python3 main.py --five_classes --batch_size_unet 2 --lr_unet 3e-4 --not_use_custom_filter_prop --weight 0.6 --coco_allclasses_path $COCO_ALLCLASSES_PATH --coco_fiveclasses_path $COCO_FIVECLASSES_PATH --pascal_img_path $PASCAL_IMG_PATH
 mkdir -p "${EXPERIMENT_DIR}/0.6_MAE_5classes/forward"
 cp "model_weights/model_fw_50.pt" "${EXPERIMENT_DIR}/0.6_MAE_5classes/forward"
 mv "model_weights/model_fw_25.pt" "${EXPERIMENT_DIR}/0.6_MAE_5classes/forward"
 mv $RESULTS_DIR "${EXPERIMENT_DIR}/0.6_MAE_5classes/forward/${RESULTS_DIR}_fw"
 echo "Completed 0.6_MAE_5classes forward and copied folder"
 
-python3 main.py --five_classes --batch_size_unet 2 --save_disturbed_dataset --unet_fw_weights_load $MODEL_FW
+python3 main.py --five_classes --batch_size_unet 2 --save_disturbed_dataset --unet_fw_weights_load $MODEL_FW --coco_allclasses_path $COCO_ALLCLASSES_PATH --coco_fiveclasses_path $COCO_FIVECLASSES_PATH --pascal_img_path $PASCAL_IMG_PATH
 
-python3 main.py --five_classes --batch_size_unet 2 --lr_unet 3e-4 --train_model_backward
-python3 main.py --five_classes --batch_size_unet 1 --compute_similarity_metrics --unet_bw_weights_load $MODEL_BW
+python3 main.py --five_classes --batch_size_unet 2 --lr_unet 3e-4 --train_model_backward --coco_allclasses_path $COCO_ALLCLASSES_PATH --coco_fiveclasses_path $COCO_FIVECLASSES_PATH --pascal_img_path $PASCAL_IMG_PATH
+python3 main.py --five_classes --batch_size_unet 1 --compute_similarity_metrics --unet_bw_weights_load $MODEL_BW --coco_allclasses_path $COCO_ALLCLASSES_PATH --coco_fiveclasses_path $COCO_FIVECLASSES_PATH --pascal_img_path $PASCAL_IMG_PATH
 mkdir -p "${EXPERIMENT_DIR}/0.6_MAE_5classes/backward"
 mv "model_weights/model_bw_80.pt" "${EXPERIMENT_DIR}/0.6_MAE_5classes/backward"
 mv "model_weights/model_bw_40.pt" "${EXPERIMENT_DIR}/0.6_MAE_5classes/backward"
@@ -85,17 +85,17 @@ python3 main.py --five_classes --test_model --tasknet_weights_load $TASKNET --un
 mv $RESULTS_DIR "${EXPERIMENT_DIR}/0.6_MAE_5classes/test_results"
 echo "Completed 0.6_MAE_5classes test"
 
-python3 main.py --five_classes --batch_size_unet 2 --lr_unet 3e-4 --prop_pos 2 --prop_neg 2
+python3 main.py --five_classes --batch_size_unet 2 --lr_unet 3e-4 --prop_pos 2 --prop_neg 2 --coco_allclasses_path $COCO_ALLCLASSES_PATH --coco_fiveclasses_path $COCO_FIVECLASSES_PATH --pascal_img_path $PASCAL_IMG_PATH
 mkdir -p "${EXPERIMENT_DIR}/2pos2neg_5classes/forward"
 cp "model_weights/model_fw_50.pt" "${EXPERIMENT_DIR}/2pos2neg_5classes/forward"
 mv "model_weights/model_fw_25.pt" "${EXPERIMENT_DIR}/2pos2neg_5classes/forward"
 mv $RESULTS_DIR "${EXPERIMENT_DIR}/2pos2neg_5classes/forward/${RESULTS_DIR}_fw"
 echo "Completed 2pos2neg forward and copied folder"
 
-python3 main.py --five_classes --batch_size_unet 2 --save_disturbed_dataset --unet_fw_weights_load $MODEL_FW
+python3 main.py --five_classes --batch_size_unet 2 --save_disturbed_dataset --unet_fw_weights_load $MODEL_FW --coco_allclasses_path $COCO_ALLCLASSES_PATH --coco_fiveclasses_path $COCO_FIVECLASSES_PATH --pascal_img_path $PASCAL_IMG_PATH
 
-python3 main.py --five_classes --batch_size_unet 2 --lr_unet 3e-4 --train_model_backward
-python3 main.py --five_classes --batch_size_unet 1 --compute_similarity_metrics --unet_bw_weights_load $MODEL_BW
+python3 main.py --five_classes --batch_size_unet 2 --lr_unet 3e-4 --train_model_backward --coco_allclasses_path $COCO_ALLCLASSES_PATH --coco_fiveclasses_path $COCO_FIVECLASSES_PATH --pascal_img_path $PASCAL_IMG_PATH
+python3 main.py --five_classes --batch_size_unet 1 --compute_similarity_metrics --unet_bw_weights_load $MODEL_BW --coco_allclasses_path $COCO_ALLCLASSES_PATH --coco_fiveclasses_path $COCO_FIVECLASSES_PATH --pascal_img_path $PASCAL_IMG_PATH
 mkdir -p "${EXPERIMENT_DIR}/2pos2neg_5classes/backward"
 mv "model_weights/model_bw_80.pt" "${EXPERIMENT_DIR}/2pos2neg_5classes/backward"
 mv "model_weights/model_bw_40.pt" "${EXPERIMENT_DIR}/2pos2neg_5classes/backward"
@@ -106,17 +106,17 @@ python3 main.py --five_classes --test_model --tasknet_weights_load $TASKNET --un
 mv $RESULTS_DIR "${EXPERIMENT_DIR}/2pos2neg_5classes/test_results"
 echo "Completed 2pos2neg_5classes test"
 
-python3 main.py --five_classes --batch_size_unet 2 --lr_unet 3e-4 --not_use_custom_filter_prop --weight 0.7
+python3 main.py --five_classes --batch_size_unet 2 --lr_unet 3e-4 --not_use_custom_filter_prop --weight 0.7 --coco_allclasses_path $COCO_ALLCLASSES_PATH --coco_fiveclasses_path $COCO_FIVECLASSES_PATH --pascal_img_path $PASCAL_IMG_PATH
 mkdir -p "${EXPERIMENT_DIR}/0.7_MAE_5classes/forward"
 cp "model_weights/model_fw_50.pt" "${EXPERIMENT_DIR}/0.7_MAE_5classes/forward"
 mv "model_weights/model_fw_25.pt" "${EXPERIMENT_DIR}/0.7_MAE_5classes/forward"
 mv $RESULTS_DIR "${EXPERIMENT_DIR}/0.7_MAE_5classes/forward/${RESULTS_DIR}_fw"
 echo "Completed 0.7_MAE_5classes forward and copied folder"
 
-python3 main.py --five_classes --batch_size_unet 2 --save_disturbed_dataset --unet_fw_weights_load $MODEL_FW
+python3 main.py --five_classes --batch_size_unet 2 --save_disturbed_dataset --unet_fw_weights_load $MODEL_FW --coco_allclasses_path $COCO_ALLCLASSES_PATH --coco_fiveclasses_path $COCO_FIVECLASSES_PATH --pascal_img_path $PASCAL_IMG_PATH
 
-python3 main.py --five_classes --batch_size_unet 2 --lr_unet 3e-4 --train_model_backward
-python3 main.py --five_classes --batch_size_unet 1 --compute_similarity_metrics --unet_bw_weights_load $MODEL_BW
+python3 main.py --five_classes --batch_size_unet 2 --lr_unet 3e-4 --train_model_backward --coco_allclasses_path $COCO_ALLCLASSES_PATH --coco_fiveclasses_path $COCO_FIVECLASSES_PATH --pascal_img_path $PASCAL_IMG_PATH
+python3 main.py --five_classes --batch_size_unet 1 --compute_similarity_metrics --unet_bw_weights_load $MODEL_BW --coco_allclasses_path $COCO_ALLCLASSES_PATH --coco_fiveclasses_path $COCO_FIVECLASSES_PATH --pascal_img_path $PASCAL_IMG_PATH
 mkdir -p "${EXPERIMENT_DIR}/0.7_MAE_5classes/backward"
 mv "model_weights/model_bw_80.pt" "${EXPERIMENT_DIR}/0.7_MAE_5classes/backward"
 mv "model_weights/model_bw_40.pt" "${EXPERIMENT_DIR}/0.7_MAE_5classes/backward"
