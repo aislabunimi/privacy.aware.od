@@ -189,7 +189,7 @@ def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, mo
    if save_all_weights:
       model_save_path = f'{model_save_path}_fw_{epoch}.pt' 
       create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
-   if epoch==tot_epochs or epoch==int(tot_epochs/2):
+   elif epoch==tot_epochs or epoch==int(tot_epochs/2):
       model_save_path = f'{model_save_path}_fw_{epoch}.pt'
       create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
    save_image_examples(example_dataloader, results_dir, model, epoch, device)
@@ -371,7 +371,7 @@ def val_model_dissim(val_dataloader, epoch, device, model, model_save_path, task
    if save_all_weights:
       model_save_path = f'{model_save_path}_fw_{epoch}.pt' 
       create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
-   if epoch==tot_epochs or epoch==int(tot_epochs/2):
+   elif epoch==tot_epochs or epoch==int(tot_epochs/2):
       model_save_path = f'{model_save_path}_fw_{epoch}.pt'
       create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
    save_image_examples(example_dataloader, results_dir, model, epoch, device)
@@ -768,11 +768,20 @@ def test_tasknet(test_dataloader, device, tasknet, ap_score_threshold, results_d
    with torch.no_grad():
       for imgs, targets in tqdm(test_dataloader, desc=f'Testing Tasknet'):
          imgs = list(img.to(device) for img in imgs)
+         #n_imgs = []
+         #for img in imgs:
+         #   sampl_size = [16, 16]
+         #   trans_sampl = transforms.Resize(sampl_size, antialias=False)
+         #   img_t = trans_sampl(img)
+         #   orig_size = [img.shape[1], img.shape[2]]
+         #   trans_orig = transforms.Resize(orig_size, antialias=False)
+         #   img_n = trans_orig(img_t)
+         #   n_imgs.append(img_n)
          targets = [{k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in t.items()} for t in targets]
+         #outputs = tasknet(n_imgs)
          outputs = tasknet(imgs)
          outputs = [{k: v.to(device) for k, v in t.items()} for t in outputs]
-         outputs_evaluator = [{k: v.clone().to(device) for k, v in t.items()} for t in outputs] #clone needed
-         
+         outputs_evaluator = [{k: v.clone().to(device) for k, v in t.items()} for t in outputs] #clone needed   
          adj_outputs = adjust_outputs_to_cocoeval_api(targets, outputs)
          
          res.update({target["image_id"].item(): output for target, output in zip(targets, adj_outputs)})
@@ -782,3 +791,102 @@ def test_tasknet(test_dataloader, device, tasknet, ap_score_threshold, results_d
    compute_ap(test_dataloader, tasknet, epoch, device, ap_score_threshold, results_dir, res)	
    compute_custom_metric(evaluator_complete_metric, results_dir, epoch)  
    return
+   
+def finetune_tasknet_train(train_dataloader, epoch, device, model, tasknet, tasknet_optimizer): #Train model
+   model.eval()
+   tasknet.train()
+   for param in tasknet.parameters():
+      param.requires_grad = True
+   batch_size = len(train_dataloader)
+   running_loss = 0
+   for imgs, targets in tqdm(train_dataloader, desc=f'Epoch {epoch} - Train model'):
+      imgs, _ = imgs.decompose()
+      imgs = imgs.to(device)
+      targets = [{k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in t.items()} for t in targets]		
+      reconstructed = model(imgs)
+      targets = adjust_orig_target_to_reconstructed_imgs(targets, imgs, reconstructed) #needed as explained before
+      reconstructed_loss_dict = tasknet(reconstructed, targets) #grab tasknet losses
+      reconstructed_losses = sum(loss for loss in reconstructed_loss_dict.values()) 
+      true_loss = reconstructed_losses
+      tasknet_optimizer.zero_grad(set_to_none=True) #backpropagation
+      true_loss.backward()
+      tasknet_optimizer.step()		
+      running_loss += true_loss.item() #storing value   
+   running_loss /= batch_size #average loss
+   return running_loss
+   
+def finetune_tasknet_val(val_dataloader, epoch, device, model, tasknet_save_path, tasknet, tasknet_optimizer, tasknet_scheduler, ap_score_threshold, results_dir, tot_epochs, save_all_weights):
+   tasknet.eval()
+   for param in tasknet.parameters():
+      param.requires_grad = False
+   model.eval()
+   batch_size = len(val_dataloader)
+   res={} #dictionary to store all prediction for AP
+   evaluator_complete_metric = MyEvaluatorCompleteMetric() #for custom metric
+   running_loss = 0
+   with torch.no_grad(): #not computing gradient
+      for imgs, targets in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):
+         imgs, _ = imgs.decompose()
+         imgs = imgs.to(device)
+         targets = [{k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in t.items()} for t in targets]
+         reconstructed = model(imgs)
+         tasknet.train()
+         
+         targets = adjust_orig_target_to_reconstructed_imgs(targets, imgs, reconstructed)
+         
+         reconstructed_loss_dict = tasknet(reconstructed, targets)
+         reconstructed_losses = sum(loss for loss in reconstructed_loss_dict.values())		
+         tasknet.eval()
+         outputs = tasknet(reconstructed)
+         outputs = [{k: v.to(device) for k, v in t.items()} for t in outputs]
+         outputs_evaluator = [{k: v.clone().to(device) for k, v in t.items()} for t in outputs] #need to clone them as they will be modified after
+         
+         # in validation targets need to be converted to original size, otherwise coco ap is wrong
+         adj_outputs = adjust_outputs_to_cocoeval_api(targets, outputs, reconstructed)
+         
+         res.update({target["image_id"].item(): output for target, output in zip(targets, adj_outputs)})
+         preds = [apply_nms(pred, iou_thresh=0.5, score_thresh=0.01) for pred in outputs_evaluator]
+         evaluator_complete_metric.add_predictions_faster_rcnn(targets=targets, predictions=preds, img_size=imgs.size()[2:][::-1])
+
+         true_loss = reconstructed_losses
+         running_loss += true_loss.item()	
+   running_loss /= batch_size
+   compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, results_dir, res)
+   compute_custom_metric(evaluator_complete_metric, results_dir, epoch)
+   
+   if save_all_weights:
+      tasknet_save_path = f'{tasknet_save_path}_finetuned_{epoch}.pt' 
+      create_checkpoint(tasknet, tasknet_optimizer, epoch, running_loss, tasknet_scheduler, tasknet_save_path)
+   elif epoch==tot_epochs or epoch==int(tot_epochs/2):
+      tasknet_save_path = f'{tasknet_save_path}_finetuned_{epoch}.pt'
+      create_checkpoint(tasknet, tasknet_optimizer, epoch, running_loss, tasknet_scheduler, tasknet_save_path)
+   return running_loss
+   
+def test_finetuned_tasknet(test_dataloader, device, tasknet, model, ap_score_threshold, results_dir):
+   model.eval()
+   tasknet.eval()
+   batch_size = len(test_dataloader)
+   res={} #dictionary to store all prediction for AP
+   evaluator_complete_metric = MyEvaluatorCompleteMetric() #for custom metric
+   epoch = 0
+   with torch.no_grad(): #not computing gradient
+      for imgs, targets in tqdm(test_dataloader, desc=f'Testing finetuned tasknet'):
+         imgs, _ = imgs.decompose()
+         imgs = imgs.to(device)
+         targets = [{k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in t.items()} for t in targets]
+         reconstructed = model(imgs)
+         targets = adjust_orig_target_to_reconstructed_imgs(targets, imgs, reconstructed)	
+         outputs = tasknet(reconstructed)
+         outputs = [{k: v.to(device) for k, v in t.items()} for t in outputs]
+         outputs_evaluator = [{k: v.clone().to(device) for k, v in t.items()} for t in outputs] #need to clone them as they will be modified after
+         
+         # in validation targets need to be converted to original size, otherwise coco ap is wrong
+         adj_outputs = adjust_outputs_to_cocoeval_api(targets, outputs, reconstructed)
+         
+         res.update({target["image_id"].item(): output for target, output in zip(targets, adj_outputs)})
+         preds = [apply_nms(pred, iou_thresh=0.5, score_thresh=0.01) for pred in outputs_evaluator]
+         evaluator_complete_metric.add_predictions_faster_rcnn(targets=targets, predictions=preds, img_size=imgs.size()[2:][::-1])
+         
+   compute_ap(test_dataloader, tasknet, epoch, device, ap_score_threshold, results_dir, res)
+   compute_custom_metric(evaluator_complete_metric, results_dir, epoch)
+   return 

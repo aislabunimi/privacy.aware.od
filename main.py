@@ -148,6 +148,9 @@ def main(args):
       test_ann_file = f'{args.coco_fiveclasses_path}/val_pascal2012_vehicles.json'
    test_img_folder = f'{args.pascal_img_path}'
    
+   #test_img_folder = '/home/math0012/Tesi_magistrale/coco_people_indoor/questionario/images'
+   #test_ann_file = f'/home/math0012/Tesi_magistrale/coco_people_indoor/questionario/quest_anno.json'
+   
    if not args.train_tasknet:
       unet = UNet(n_channels=3, bilinear=False) #UNet modified without skip connection
       unet.to(args.device)
@@ -217,10 +220,10 @@ def main(args):
          orig_train_img_folder, val_img_folder, 1, 1, resize_scales_transform, 
          args.use_dataset_subset, val_ann_file)
    else: #Same datasets for training Tasknet and training Unet forward
-      tasknet_setting = args.train_tasknet or args.tasknet_get_indoor_AP or args.finetune_tasknet
-      if args.finetune_tasknet: #images are from disturbed folder for finetuning, annotations are the same
-         train_img_folder = f'{args.disturbed_dataset_path}/train'
-         val_img_folder =  f'{args.disturbed_dataset_path}/val'
+      tasknet_setting = args.train_tasknet or args.tasknet_get_indoor_AP # or args.finetune_tasknet
+      #if args.finetune_tasknet: #images are from disturbed folder for finetuning, annotations are the same
+      #   train_img_folder = f'{args.disturbed_dataset_path}/train'
+      #   val_img_folder =  f'{args.disturbed_dataset_path}/val'
       train_dataloader, val_dataloader, example_dataloader= load_dataset(
          train_img_folder, train_ann_file, val_img_folder, val_ann_file, train_batch_size, val_batch_size,
          args.save_disturbed_dataset, tasknet_setting, resize_scales_transform, args.use_dataset_subset)
@@ -266,14 +269,27 @@ def main(args):
       sys.exit()
    
    if args.test_tasknet:
-      test_dataloader = load_test_set(test_img_folder, test_ann_file, resize_scales_transform, args.use_dataset_subset, args.test_tasknet)
+      if os.path.exists(args.results_dir):
+         shutil.rmtree(args.results_dir)
+      os.makedirs(args.results_dir)
+      test_tasknet_setting = args.test_tasknet
+      if args.finetune_tasknet: #only for creating right batch with finetuning
+         test_tasknet_setting = False
+      test_dataloader = load_test_set(test_img_folder, test_ann_file, resize_scales_transform, args.use_dataset_subset, test_tasknet_setting)
       load_checkpoint(tasknet, args.tasknet_weights_load, tasknet_optimizer, tasknet_scheduler)
       tasknet.eval() #as testset is Pascal, you can't use COCO with all classes. 
-      test_tasknet(test_dataloader, args.device, tasknet, args.ap_score_thresh, args.results_dir)
+      if args.finetune_tasknet:
+         load_checkpoint(unet, args.unet_fw_weights_load, unet_optimizer, unet_scheduler)
+         test_finetuned_tasknet(test_dataloader, args.device, tasknet, unet, args.ap_score_thresh, args.results_dir)
+      else:
+         test_tasknet(test_dataloader, args.device, tasknet, args.ap_score_thresh, args.results_dir)
       print("Testing completed")
       sys.exit()
    
    if args.test_model:
+      if os.path.exists(args.results_dir):
+         shutil.rmtree(args.results_dir)
+      os.makedirs(args.results_dir)
       test_dataloader = load_test_set(test_img_folder, test_ann_file, resize_scales_transform, args.use_dataset_subset, args.test_tasknet)
       load_checkpoint(tasknet, args.tasknet_weights_load, tasknet_optimizer, tasknet_scheduler)
       tasknet.eval()
@@ -312,7 +328,7 @@ def main(args):
    
    starting_epoch=1 #Used for counting epoch from 1
    if args.resume_training:
-      if args.train_tasknet: #+1 to start at next epoch
+      if args.train_tasknet or args.finetune_tasknet: #+1 to start at next epoch
          starting_epoch = load_checkpoint(tasknet, args.tasknet_weights_load, tasknet_optimizer, tasknet_scheduler) + 1
       else:
          if args.train_model_backward:
@@ -326,32 +342,48 @@ def main(args):
    else: #Remove results folder as it's from old experiment
       shutil.rmtree(args.results_dir)
       os.makedirs(args.results_dir)
-      shutil.rmtree(unet_weights_dir)
-      os.makedirs(unet_weights_dir)
-      if args.train_tasknet and not args.tasknet_get_indoor_AP: #otherwise I might remove tasknet weights stored in this folders used for training the UNet
-         shutil.rmtree(tasknet_weights_dir)
-         os.makedirs(tasknet_weights_dir)
+      if not args.finetune_tasknet:
+         shutil.rmtree(unet_weights_dir)
+         os.makedirs(unet_weights_dir)
+         if args.train_tasknet and not args.tasknet_get_indoor_AP: #otherwise I might remove tasknet weights stored in this folders used for training the UNet
+            shutil.rmtree(tasknet_weights_dir)
+            os.makedirs(tasknet_weights_dir)
       
-   #TRAINING TASKNET BLOCK OR FINETUNE IT
-   if((args.train_tasknet or args.tasknet_get_indoor_AP or args.finetune_tasknet) and not args.train_model_backward):
+   #TRAINING TASKNET BLOCK
+   if((args.train_tasknet or args.tasknet_get_indoor_AP) and not args.train_model_backward):
       if args.tasknet_get_indoor_AP:
          load_checkpoint(tasknet, args.tasknet_weights_load, tasknet_optimizer, tasknet_scheduler)
          val_temp_loss = val_tasknet(val_dataloader, starting_epoch, args.device, args.tasknet_save_path, tasknet, tasknet_optimizer,
             tasknet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_tasknet, args.save_all_weights, skip_saving_weights=True)
          print("Computed AP for comparison with UNet indoor set")
          sys.exit()
-      if args.finetune_tasknet and not args.all_classes:
-         #if not all classes, start with existing finetuned weights on 1 class or 5 classes
-         load_checkpoint(tasknet, args.tasknet_weights_load, tasknet_optimizer, tasknet_scheduler)
-         #reset optimizer and scheduler to new state
-         tasknet_optimizer = torch.optim.SGD(tasknet.parameters(), lr=args.lr_tasknet, momentum=args.momentum_tasknet, weight_decay=args.weight_decay_tasknet, nesterov=args.no_nesterov_tasknet)
-         tasknet_scheduler = torch.optim.lr_scheduler.StepLR(tasknet_optimizer, step_size=args.step_size_tasknet, gamma=args.gamma_tasknet)
       for epoch in range(starting_epoch, args.num_epochs_tasknet+1):
          train_temp_loss = train_tasknet(train_dataloader, epoch, args.device, args.tasknet_save_path, tasknet, tasknet_optimizer)
          val_temp_loss = val_tasknet(val_dataloader, epoch, args.device, args.tasknet_save_path, tasknet, tasknet_optimizer,
             tasknet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_tasknet, args.save_all_weights, skip_saving_weights=False)
          tasknet_scheduler.step()
          #tasknet_scheduler.step(val_temp_loss)
+         print(f'EPOCH {epoch} SUMMARY: Train loss {train_temp_loss}, Val loss {val_temp_loss}')
+         with open(f'{args.results_dir}/loss_log.txt', 'a') as file:
+            loss_log_append = f"{epoch} {train_temp_loss} {val_temp_loss}\n"
+            file.write(loss_log_append)
+
+   #FINETUNE TASKNET ON UNET RECONSTRUCED IMAGES BLOCK
+   elif (args.finetune_tasknet):
+      if not args.all_classes:
+         #if not all classes, load finetuned weights on 1 class or 5 classes
+         load_checkpoint(tasknet, args.tasknet_weights_load, tasknet_optimizer, tasknet_scheduler)
+         #reset optimizer and scheduler to new state
+         tasknet_optimizer = torch.optim.SGD(tasknet.parameters(), lr=args.lr_tasknet, momentum=args.momentum_tasknet, weight_decay=args.weight_decay_tasknet, nesterov=args.no_nesterov_tasknet)
+         tasknet_scheduler = torch.optim.lr_scheduler.StepLR(tasknet_optimizer, step_size=args.step_size_tasknet, gamma=args.gamma_tasknet)
+      load_checkpoint(unet, args.unet_fw_weights_load, unet_optimizer, unet_scheduler)
+      for param in unet.parameters(): #Freeze UNet layers
+         param.requires_grad = False
+      for epoch in range(starting_epoch, args.num_epochs_tasknet+1):
+         train_temp_loss = finetune_tasknet_train(train_dataloader, epoch, args.device, unet, tasknet, tasknet_optimizer)
+         val_temp_loss = finetune_tasknet_val(val_dataloader, epoch, args.device, unet, args.tasknet_save_path, tasknet, tasknet_optimizer,
+               tasknet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_tasknet, args.save_all_weights)
+         tasknet_scheduler.step()
          print(f'EPOCH {epoch} SUMMARY: Train loss {train_temp_loss}, Val loss {val_temp_loss}')
          with open(f'{args.results_dir}/loss_log.txt', 'a') as file:
             loss_log_append = f"{epoch} {train_temp_loss} {val_temp_loss}\n"
