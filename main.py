@@ -140,12 +140,16 @@ def main(args):
       train_ann_file = f'{args.coco_allclasses_path}/annotations/instances_train2017.json'
       val_img_folder = f'{args.coco_allclasses_path}/val2017'
       val_ann_file = f'{args.coco_allclasses_path}/annotations/instances_val2017.json'
+      disturbed_train_img_gen = train_img_folder
+      disturbed_train_ann_gen = train_ann_file
    if args.five_classes:
       train_img_folder = f'{args.coco_allclasses_path}/train2017'
       train_ann_file = f'{args.coco_fiveclasses_path}/train.json'
       val_img_folder = f'{args.coco_allclasses_path}/val2017'
       val_ann_file = f'{args.coco_fiveclasses_path}/val.json'
       test_ann_file = f'{args.coco_fiveclasses_path}/val_pascal2012_vehicles.json'
+      disturbed_train_img_gen = train_img_folder
+      disturbed_train_ann_gen = train_ann_file
    test_img_folder = f'{args.pascal_img_path}'
    
    #test_img_folder = '/home/math0012/Tesi_magistrale/coco_people_indoor/questionario/images'
