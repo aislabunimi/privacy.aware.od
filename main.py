@@ -90,6 +90,7 @@ def get_args_parser():
    parser.add_argument('--weight', default=0.0, type=float, help='Weight for affecting the MAE loss as dissimilarity during forward. A value above 0.5 means that you weight more the MAE loss than the Faster one; viceversa, a value below 0.5 means you weight more the Faster loss than the MAE one. Default is 0, meaning that MAE loss is not used. Valid values should be between (0.0, 1.0)')
    parser.add_argument('--train_model_backward', action='store_true', default=False, help='For executing Backward training on disturbed dataset')
    parser.add_argument('--compute_similarity_metrics', action='store_true', default=False, help='Needed for getting the right similarities metrics')
+   parser.add_argument('--val_forward_batch1', action='store_true', default=False, help='Needed for getting the performance metrics with batch 1')
    parser.add_argument('--resume_training', action='store_true', default=False, help='For resuming training by restoring the specified weights from "unet_weights_load" or "tasknet_weights_load" variable')
    parser.add_argument('--five_classes', action='store_true', default=False, help='For executing the experiments using "cat dog horse sheep cow" as classes. Default is False, meaning the experiments are made with only the Person class')
    parser.add_argument('--all_classes', action='store_true', default=False, help='For executing the experiments using all COCO classes. Default is False, meaning the experiments are made with only the Person class. If set to True, standard Tasknet with pretrained weights is loaded.')
@@ -270,6 +271,24 @@ def main(args):
       val_similarity_disturbed_images(similarity_dataloader, args.device, args.results_dir, lpips_model, ms_ssim_module)
       print("Computed similarity metrics")
       shutil.rmtree('temp_dir')
+      sys.exit()
+
+   if args.val_forward_batch1:
+      if os.path.exists(args.results_dir):
+         shutil.rmtree(args.results_dir)
+      os.makedirs(args.results_dir)
+      epoch = 0
+      load_checkpoint(tasknet, args.tasknet_weights_load, tasknet_optimizer, tasknet_scheduler)
+      if args.train_tasknet or args.tasknet_get_indoor_AP:
+         _ = val_tasknet(val_dataloader, epoch, args.device, args.tasknet_save_path, tasknet, tasknet_optimizer, tasknet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_tasknet, args.save_all_weights, skip_saving_weights=True)
+      else:
+         for param in tasknet.parameters(): #Freeze layers as Faster R-CNN is not modifiable
+            param.requires_grad = False
+         load_checkpoint(unet, args.unet_fw_weights_load, unet_optimizer, unet_scheduler)
+         _ = val_model(val_dataloader, epoch, args.device, unet, args.unet_save_path, tasknet, unet_optimizer,
+               unet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_unet_forward, args.save_all_weights, my_recons_classifier, my_regressor, 
+               lpips_model, ms_ssim_module, example_dataloader)
+      print("Val with batch size 1 completed")
       sys.exit()
    
    if args.test_tasknet:
