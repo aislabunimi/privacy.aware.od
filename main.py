@@ -286,7 +286,7 @@ def main(args):
       tasknet.eval()
       load_checkpoint(unet, args.unet_fw_weights_load, unet_optimizer, unet_scheduler)
       unet.eval()
-      test_model(test_dataloader, args.device, tasknet, unet, args.ap_score_thresh, args.results_dir, lpips_model, ms_ssim_module)
+      test_model(test_dataloader, args.device, tasknet, unet, args.ap_score_thresh, args.results_dir)
       print("Testing forward completed")
       test_dataloader_gen_disturbed = load_dataset_for_generating_disturbed_test_set(test_img_folder, test_ann_file, args.use_dataset_subset, resize_scales_transform)
       if os.path.exists(args.disturbed_dataset_path):
@@ -296,7 +296,7 @@ def main(args):
       load_checkpoint(unet, args.unet_bw_weights_load, unet_optimizer, unet_scheduler)
       unet.eval()
       test_disturbed_dataloader = load_disturbed_test_set(disturbed_test_img_folder, disturbed_test_ann, test_img_folder, resize_scales_transform, args.use_dataset_subset)
-      test_model_bw(test_disturbed_dataloader, args.device, unet, args.results_dir, lpips_model, ms_ssim_module)
+      test_model_bw(test_disturbed_dataloader, args.device, unet, args.results_dir)
       print("Testing backward completed")
       test_similarity_gen_dataloader = load_similarity_dataset(
          disturbed_test_img_folder, disturbed_test_ann, None, resize_scales_transform, args.use_dataset_subset, generate_similarity_dataset=True)
@@ -390,11 +390,11 @@ def main(args):
          if args.weight == 0.0: #loops without weights
             train_temp_loss = train_model(train_dataloader, epoch, args.device, unet, tasknet, unet_optimizer)
             val_temp_loss = val_model(val_dataloader, epoch, args.device, unet, args.unet_save_path, tasknet, unet_optimizer,
-               unet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_unet_forward, args.save_all_weights, lpips_model, ms_ssim_module, example_dataloader)
+               unet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_unet_forward, args.save_all_weights, example_dataloader)
          else:
             train_temp_loss = train_model_dissim(train_dataloader, epoch, args.device, unet, tasknet, unet_optimizer, args.weight)
             val_temp_loss = val_model_dissim(val_dataloader, epoch, args.device, unet, args.unet_save_path, tasknet, unet_optimizer,
-               unet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_unet_forward, args.save_all_weights, lpips_model, ms_ssim_module, example_dataloader, args.weight)
+               unet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_unet_forward, args.save_all_weights, example_dataloader, args.weight)
          #unet_scheduler.step()
          unet_scheduler.step(val_temp_loss)
          print(f'EPOCH {epoch} SUMMARY: Train loss {train_temp_loss}, Val loss {val_temp_loss}')
@@ -405,7 +405,7 @@ def main(args):
    #TRAINING BACKWARD BLOCK 			
    else:
       for epoch in range(starting_epoch, args.num_epochs_unet_backward+1):
-         train_temp_loss = train_model_bw(disturbed_train_dataloader, epoch, args.device, unet, unet_optimizer, ms_ssim_module)
+         train_temp_loss = train_model_bw(disturbed_train_dataloader, epoch, args.device, unet, unet_optimizer)
          val_temp_loss = val_model_bw(disturbed_val_dataloader, epoch, args.device, unet, args.unet_save_path,
             unet_optimizer, unet_scheduler, args.results_dir, args.num_epochs_unet_backward, args.save_all_weights, lpips_model, ms_ssim_module, example_dataloader)
          #unet_scheduler.step()

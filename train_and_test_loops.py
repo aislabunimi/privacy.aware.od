@@ -93,15 +93,12 @@ def train_model(train_dataloader, epoch, device, model, tasknet, model_optimizer
    return running_loss
 
 
-def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_score_threshold, results_dir, tot_epochs, save_all_weights, lpips_model, ms_ssim_module, example_dataloader):
+def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_score_threshold, results_dir, tot_epochs, save_all_weights, example_dataloader):
    model.eval()
    batch_size = len(val_dataloader)
    res={} #dictionary to store all prediction for AP
    evaluator_complete_metric = MyEvaluatorCompleteMetric() #for custom metric
-   mean = torch.tensor([0.485, 0.456, 0.406]).to(device) #for ms ssim
-   std = torch.tensor([0.229, 0.224, 0.225]).to(device)
-   unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
-   lpips_score = ms_ssim_score = running_loss = 0
+   running_loss = 0
    with torch.no_grad(): #not computing gradient
       for imgs, targets in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):
          imgs, _ = imgs.decompose()
@@ -139,40 +136,12 @@ def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, mo
          plt.clf()
          """
          
-         trans = transforms.Resize((reconstructed.shape[2], reconstructed.shape[3]), antialias=False)
-         orig_imgs = trans(imgs)
-         #clamping to avoid small negative values related to not perfect unnormalize
-         reconstructed = torch.clamp(unnormalize(reconstructed), min=0, max=1)
-         orig_imgs = torch.clamp(unnormalize(orig_imgs), min=0, max=1)
-         ms_ssim_score += ms_ssim_module(reconstructed, orig_imgs).item()
-         
          true_loss=reconstructed_losses
-         
-         #LPIPS expects input to be [-1,1]. As they normalize input multiple times, it's best to just give input between [0,1] and let LPIPS code handle the normalization
-         lpips_temp = lpips_model(reconstructed, orig_imgs, normalize=True)
-         lpips_score += (torch.mean(lpips_temp)).item()
-         
-         #Before passing reconstructed, input needs to be normalized as ImageNet and resized to 64x64
-         trans_te = transforms.Resize((64, 64), antialias=False)
-         reconstructed = trans_te(reconstructed)
-         nor = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-         reconstructed = nor(reconstructed)
-         
-         #true_loss=reconstructed_losses
          running_loss += true_loss.item()	
    running_loss /= batch_size #the val loss if custom proposal is active is computed w.r.t. the custom method, 
    #to remain consistent and show meaningful loss for understanding if training is going in the right way
    compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, results_dir, res)
    compute_custom_metric(evaluator_complete_metric, results_dir, epoch)
-   ms_ssim_score /= batch_size
-   ms_ssim_path= f"{results_dir}/ms_ssim_score_log.txt"
-   with open(ms_ssim_path, 'a') as file:
-      file.write(f"{epoch} {ms_ssim_score}\n")
-   lpips_score /= batch_size
-   lpips_path = f"{results_dir}/lpips_score_log.txt"
-   with open(lpips_path, 'a') as file:
-      file.write(f"{epoch} {lpips_score}\n")
-
    if save_all_weights:
       model_save_path = f'{model_save_path}_fw_{epoch}.pt' 
       create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
@@ -183,16 +152,13 @@ def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, mo
    return running_loss
 
 #same code for dissim version, as weight for MAE doesn't influence metrics, is used only for computing loss  
-def test_model(test_dataloader, device, tasknet, model, ap_score_threshold, results_dir, lpips_model, ms_ssim_module):
+def test_model(test_dataloader, device, tasknet, model, ap_score_threshold, results_dir):
    model.eval()
    tasknet.eval()
    batch_size = len(test_dataloader)
    res={} #dictionary to store all prediction for AP
    evaluator_complete_metric = MyEvaluatorCompleteMetric() #for custom metric
-   mean = torch.tensor([0.485, 0.456, 0.406]).to(device) #for ms ssim
-   std = torch.tensor([0.229, 0.224, 0.225]).to(device)
-   unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
-   lpips_score = ms_ssim_score = epoch = 0
+   epoch = 0
    with torch.no_grad(): #not computing gradient
       for imgs, targets in tqdm(test_dataloader, desc=f'Testing forward model'):
          imgs, _ = imgs.decompose()
@@ -210,32 +176,8 @@ def test_model(test_dataloader, device, tasknet, model, ap_score_threshold, resu
          res.update({target["image_id"].item(): output for target, output in zip(targets, adj_outputs)})
          preds = [apply_nms(pred, iou_thresh=0.5, score_thresh=0.01) for pred in outputs_evaluator]
          evaluator_complete_metric.add_predictions_faster_rcnn(targets=targets, predictions=preds, img_size=imgs.size()[2:][::-1])
-         
-         trans = transforms.Resize((reconstructed.shape[2], reconstructed.shape[3]), antialias=False)
-         orig_imgs = trans(imgs)
-         #clamping to avoid small negative values related to not perfect unnormalize
-         reconstructed = torch.clamp(unnormalize(reconstructed), min=0, max=1)
-         orig_imgs = torch.clamp(unnormalize(orig_imgs), min=0, max=1)
-         ms_ssim_score += ms_ssim_module(reconstructed, orig_imgs).item()
-         #LPIPS expects input to be [-1,1]. As they normalize input multiple times, it's best to just give input between [0,1] and let LPIPS code handle the normalization
-         lpips_temp = lpips_model(reconstructed, orig_imgs, normalize=True)
-         lpips_score += (torch.mean(lpips_temp)).item()
-         
-         #Before passing reconstructed, input needs to be normalized as ImageNet and resized to 64x64
-         trans_te = transforms.Resize((64, 64), antialias=False)
-         reconstructed = trans_te(reconstructed)
-         nor = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-         reconstructed = nor(reconstructed)
    compute_ap(test_dataloader, tasknet, epoch, device, ap_score_threshold, results_dir, res)
    compute_custom_metric(evaluator_complete_metric, results_dir, epoch)
-   ms_ssim_score /= batch_size
-   ms_ssim_path= f"{results_dir}/ms_ssim_score_log.txt"
-   with open(ms_ssim_path, 'a') as file:
-      file.write(f"{epoch} {ms_ssim_score}\n")
-   lpips_score /= batch_size
-   lpips_path = f"{results_dir}/lpips_score_log.txt"
-   with open(lpips_path, 'a') as file:
-      file.write(f"{epoch} {lpips_score}\n")
    return 
 
 
@@ -263,15 +205,12 @@ def train_model_dissim(train_dataloader, epoch, device, model, tasknet, model_op
    running_loss /= batch_size #average loss
    return running_loss
 
-def val_model_dissim(val_dataloader, epoch, device, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_score_threshold, results_dir, tot_epochs, save_all_weights, lpips_model, ms_ssim_module, example_dataloader, weight):
+def val_model_dissim(val_dataloader, epoch, device, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_score_threshold, results_dir, tot_epochs, save_all_weights, example_dataloader, weight):
    model.eval()
    batch_size = len(val_dataloader)
    res={} #dictionary to store all prediction for AP
    evaluator_complete_metric = MyEvaluatorCompleteMetric() #for custom metric
-   mean = torch.tensor([0.485, 0.456, 0.406]).to(device) #for ms ssim
-   std = torch.tensor([0.229, 0.224, 0.225]).to(device)
-   unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
-   lpips_score = ms_ssim_score = running_loss = 0
+   running_loss = 0
    mae_loss = torch.nn.L1Loss()
    with torch.no_grad(): #not computing gradient
       for imgs, targets in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):
@@ -297,40 +236,13 @@ def val_model_dissim(val_dataloader, epoch, device, model, model_save_path, task
          preds = [apply_nms(pred, iou_thresh=0.5, score_thresh=0.01) for pred in outputs_evaluator]
          evaluator_complete_metric.add_predictions_faster_rcnn(targets=targets, predictions=preds, img_size=imgs.size()[2:][::-1])
          
-         trans = transforms.Resize((reconstructed.shape[2], reconstructed.shape[3]), antialias=False)
-         orig_imgs = trans(imgs)
-         #clamping to avoid small negative values related to not perfect unnormalize
-         reconstructed = torch.clamp(unnormalize(reconstructed), min=0, max=1)
-         orig_imgs = torch.clamp(unnormalize(orig_imgs), min=0, max=1)
-         ms_ssim_score += ms_ssim_module(reconstructed, orig_imgs).item()
-         
          noise = torch.zeros(reconstructed.size(), dtype=torch.float32, device=device)
          true_loss = (1-weight)*reconstructed_losses + weight*mae_loss(reconstructed, noise)
-         
-         #LPIPS expects input to be [-1,1]. As they normalize input multiple times, it's best to just give input between [0,1] and let LPIPS code handle the normalization
-         lpips_temp = lpips_model(reconstructed, orig_imgs, normalize=True)
-         lpips_score += (torch.mean(lpips_temp)).item()
-         
-         #Before passing reconstructed, input needs to be normalized as ImageNet and resized to 64x64
-         trans_te = transforms.Resize((64, 64), antialias=False)
-         reconstructed = trans_te(reconstructed)
-         nor = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-         reconstructed = nor(reconstructed)
-         
-         #true_loss=reconstructed_losses
          running_loss += true_loss.item()	
    running_loss /= batch_size #the val loss if custom proposal is active is computed w.r.t. the custom method, 
    #to remain consistent and show meaningful loss for understanding if training is going in the right way
    compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, results_dir, res)
    compute_custom_metric(evaluator_complete_metric, results_dir, epoch)
-   ms_ssim_score /= batch_size
-   ms_ssim_path= f"{results_dir}/ms_ssim_score_log.txt"
-   with open(ms_ssim_path, 'a') as file:
-      file.write(f"{epoch} {ms_ssim_score}\n")
-   lpips_score /= batch_size
-   lpips_path = f"{results_dir}/lpips_score_log.txt"
-   with open(lpips_path, 'a') as file:
-      file.write(f"{epoch} {lpips_score}\n")
    if save_all_weights:
       model_save_path = f'{model_save_path}_fw_{epoch}.pt' 
       create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
@@ -413,7 +325,7 @@ def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_ge
       json.dump(disturbed_list, json_file, indent=2)
    return
 
-def train_model_bw(train_dataloader, epoch, device, model, model_optimizer, ms_ssim_module): #train model backward
+def train_model_bw(train_dataloader, epoch, device, model, model_optimizer): #train model backward
    model.train()
    batch_size = len(train_dataloader)
    running_loss = 0
@@ -445,7 +357,6 @@ def train_model_bw(train_dataloader, epoch, device, model, model_optimizer, ms_s
       reconstructed = model(disturbed_imgs) #from disturbed img, create back original
       trans = transforms.Resize((reconstructed.shape[2], reconstructed.shape[3]), antialias=False)
       orig_imgs = trans(orig_imgs) #resize original to reconstructed one as it will have slighlty less pixels
-      
       true_loss = loss(reconstructed, orig_imgs)
       
       model_optimizer.zero_grad(set_to_none=True)
@@ -523,14 +434,10 @@ def val_model_bw(val_dataloader, epoch, device, model, model_save_path, model_op
    save_image_examples(example_dataloader, results_dir, model, epoch, device)
    return running_loss
 
-def test_model_bw(test_dataloader, device, model, results_dir, lpips_model, ms_ssim_module):
+def test_model_bw(test_dataloader, device, model, results_dir):
    model.eval()
    batch_size = len(test_dataloader)
-   mean = torch.tensor([0.485, 0.456, 0.406]).to(device)
-   std = torch.tensor([0.229, 0.224, 0.225]).to(device)
-   unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
-   ms_ssim_score = lpips_score = running_loss = mse_score = epoch = 0
-   mse_as_metric = torch.nn.MSELoss()
+   running_loss = epoch = 0
    loss = torch.nn.L1Loss()
    with torch.no_grad():
       for disturbed_imgs, orig_imgs in tqdm(test_dataloader, desc=f'Testing backward model'):
@@ -542,39 +449,12 @@ def test_model_bw(test_dataloader, device, model, results_dir, lpips_model, ms_s
          reconstructed = model(disturbed_imgs)
          trans = transforms.Resize((reconstructed.shape[2], reconstructed.shape[3]), antialias=False)
          orig_imgs = trans(orig_imgs)
-         
          true_loss = loss(reconstructed, orig_imgs)
-         
-         mse_score += mse_as_metric(reconstructed, orig_imgs).item()
-         
-         reconstructed=unnormalize(reconstructed)
-         orig_imgs=unnormalize(orig_imgs)
-         reconstructed = torch.clamp(reconstructed, min=0, max=1)
-         orig_imgs = torch.clamp(orig_imgs, min=0, max=1)
-         
-         ms_ssim_score += ms_ssim_module(reconstructed, orig_imgs).item() #compute msssim
-         
-         #LPIPS expects input to be [-1,1]. As they normalize input multiple times, it's best to just give input between [0,1] and let LPIPS code handle the normalization
-         lpips_temp = lpips_model(reconstructed, orig_imgs, normalize=True)
-         lpips_score += (torch.mean(lpips_temp)).item()
-         
          running_loss += true_loss.item() #used for appending in test loss file	
    running_loss /= batch_size
-   lpips_score /= batch_size
-   ms_ssim_score /= batch_size
-   mse_score /= batch_size
-   lpips_path = f"{results_dir}/lpips_score_test_bw.txt"
-   ms_ssim_path = f"{results_dir}/ms_ssim_score_test_bw.txt"
-   mse_path = f"{results_dir}/mse_score_test_bw.txt"
    test_loss_path = f"{results_dir}/only_test_loss_bw.txt"
    with open(test_loss_path, 'a') as file:
       file.write(f"{epoch} {running_loss}\n")
-   with open(lpips_path, 'a') as file:
-      file.write(f"{epoch} {lpips_score}\n")
-   with open(ms_ssim_path, 'a') as file:
-      file.write(f"{epoch} {ms_ssim_score}\n")
-   with open(mse_path, 'a') as file:
-      file.write(f"{epoch} {mse_score}\n")
    return
 
 def generate_similarity_dataset(similarity_dataloader, device, model, val_img_folder, val_ann):
