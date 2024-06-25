@@ -1,1 +1,7 @@
 This repo contains my master thesis code.
+
+In scripts folder you can find an example of how to do various experiments with different settings.
+
+The main is found in main.py file. Run 'python3 main.py -h' to see all possible options.
+
+The plot_results.py file contains the code for plotting the results. Running with 'python3 plot_results.py' shows the possible options.
