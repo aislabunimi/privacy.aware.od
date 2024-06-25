@@ -26,18 +26,14 @@ def get_args_parser():
    parser.add_argument('--unet_bw_weights_load', default='model_weights/model_bw_80.pt', type=str, help='Path to UNet backward weights to load if resuming training')
    parser.add_argument('--save_all_weights', action='store_true', default=False, help='If you want to save model weights for each epoch. By default, this script saves weights at final epoch and at tot_epochs/2 (halfway checkpoint)')
    parser.add_argument('--tasknet_weights_load', default='tasknet_weights/tasknet_1norm_myresize.pt', type=str, help='Path to Tasknet weights to load if resuming training or training the UNet')
-   parser.add_argument('--my_classifier_weights', default='my_recons_classifier/my_recons_classifier_weights.pt', type=str, help='Path to load pretrained reconstruction classifier (useless)')
-   parser.add_argument('--my_regressor_weights', default='my_recons_classifier/my_regressor_weights.pt', type=str, help='Path to load pretrained reconstruction regressor (useless)')
    
    #Config Dataset. Paths to image folders and annotations. Paths to disturbed dataset and annotations.
-   parser.add_argument('--use_openimages_for_disturbed_set', action='store_true', default=False, help='If you want to use openimages train dataset for generating disturbed training dataset instead of default COCO one')
-   parser.add_argument('--coco_allclasses_path', default='/home/math0012/Tesi_magistrale/coco2017', type=str, help='Path of the folder containing the whole COCO dataset. The folder is expected to contain three subfolders, "train2017", "val2017" and annotations. train2017 and val2017 contains the images, while annotations folder contains the annotations called "instances_train2017.json" and "instances_val2017.json".')
-   parser.add_argument('--coco_allpeople_path', default='/home/alberti/coco_person', type=str, help='Path of the folder containing all the people of the COCO dataset. The folder is expected to contain two subfolders, "train" and "val". Each one of these folders contains an "images" folder (with the images) and an annotation file called "train.json" and "val.json" respectively.')
-   parser.add_argument('--coco_indoor_path', default='/home/alberti/coco_people_indoor', type=str, help='Path of the folder containing the COCO indoor dataset. The folder is expected to contain two subfolders, "train" and "val". Each one of these folders contains an "images" folder (with the images) and an annotation file called "train.json" and "val.json" respectively.')
-   parser.add_argument('--coco_fiveclasses_path', default='/home/alberti/coco_vehicles', type=str, help='Path of the folder containing the COCO 5class dataset. The folder is expected to contain the annotation file called "train.json" and "val.json" respectively. The images are loaded from coco_allclasses_path folders.')
+   parser.add_argument('--coco_allclasses_path', default='dataset/coco2017', type=str, help='Path of the folder containing the whole COCO dataset. The folder is expected to contain three subfolders, "train2017", "val2017" and annotations. train2017 and val2017 contains the images, while annotations folder contains the annotations called "instances_train2017.json" and "instances_val2017.json".')
+   parser.add_argument('--coco_allpeople_path', default='dataset/annotations/coco_allpeople', type=str, help='Path of the annotation files containing "train.json" and "val.json" for experiments with all people.')
+   parser.add_argument('--coco_indoor_path', default='dataset/annotations/coco_people_indoor', type=str, help='Path of the annotations files containing "train.json" and "val.json" for experiments with only people indoor. It is expected to also have the file "val_pascal2012.json" for testing.')
+   parser.add_argument('--coco_fiveclasses_path', default='dataset/annotations/coco_vehicles_5classes', type=str, help='Path of the annotations files containing "train.json" and "val.json" for experiments with the coco vehicles. It is expected to also have the file "val_pascal2012_vehicles.json" for testing.')
    parser.add_argument('--disturbed_dataset_path', default='disturbed_dataset', type=str, help='Path of the folder used for containing the generated disturbed dataset. WARNING: this folder and its contents will be deleted before starting next backward training experiment, be aware of the folder you choose: you may delete your whole system!')
-   parser.add_argument('--pascal_img_path', default='/home/alberti/pascal/images', type=str, help='Path of the folder containing the PascalVal2012 images')
-   parser.add_argument('--openimages_dataset_path', default='/home/math0012/Tesi_magistrale/open_images_v7', type=str, help='Path of the folder containing the Open Images training dataset. This folder is expected to contain an "images" folder with the images, and an annotation filed named "open_images_id_list.json"')
+   parser.add_argument('--pascal_img_path', default='dataset/pascalVOC2012/images', type=str, help='Path of the folder containing the PascalVal2012 images')
    parser.add_argument('--use_dataset_subset', default=0, type=int, help='If you want to use a subset of data (0 is the default, whole dataset; n!=0 means you use n images)')
    
    #HYPERPARAMETERS
@@ -103,58 +99,35 @@ def main(args):
    seed_everything(args.seed) #Deterministic experiments
    torch.use_deterministic_algorithms(mode=True, warn_only=True) #To force CUDA deterministic algorithms if possible
    
-   if args.use_openimages_for_disturbed_set:
-      disturbed_train_img_gen = f'{args.openimages_dataset_path}/images'
-      disturbed_train_ann_gen = f'{args.openimages_dataset_path}/open_images_id_list.json'
-   else:
-      disturbed_train_img_gen = f'{args.coco_indoor_path}/train/images'
-      disturbed_train_ann_gen = f'{args.coco_indoor_path}/train/train.json'
+   resize_scales_transform = [256, 288, 320, 352, 384, 416]
    disturbed_train_img_folder = f'{args.disturbed_dataset_path}/train'
    disturbed_train_ann = f'{args.disturbed_dataset_path}/train.json'
    disturbed_val_img_folder = f'{args.disturbed_dataset_path}/val'
    disturbed_val_ann = f'{args.disturbed_dataset_path}/val.json'
    disturbed_test_img_folder = f'{args.disturbed_dataset_path}/test'
    disturbed_test_ann = f'{args.disturbed_dataset_path}/test.json'
+   train_img_folder = f'{args.coco_allclasses_path}/train2017'
+   val_img_folder = f'{args.coco_allclasses_path}/val2017'
    if args.train_tasknet or args.tasknet_get_indoor_AP:
       train_batch_size = val_batch_size = args.batch_size_tasknet
-      train_img_folder = f'{args.coco_allpeople_path}/train/images' 
-      train_ann_file = f'{args.coco_allpeople_path}/train/train.json'
-      val_img_folder = f'{args.coco_allpeople_path}/val/images'
-      val_ann_file = f'{args.coco_allpeople_path}/val/val.json'
-      resize_scales_transform = [256, 288, 320, 352, 384, 416]
+      train_ann_file = f'{args.coco_allpeople_path}/train.json'
+      val_ann_file = f'{args.coco_allpeople_path}/val.json'
       #For having comparable results with UNet, it's best if you execute a validation epoch with Indoor dataset
       if args.tasknet_get_indoor_AP:
-         val_img_folder = f'{args.coco_indoor_path}/val/images'
-         val_ann_file = f'{args.coco_indoor_path}/val/val.json'
+         val_ann_file = f'{args.coco_indoor_path}/val.json'
    else:
       train_batch_size = val_batch_size = args.batch_size_unet
-      train_img_folder = f'{args.coco_indoor_path}/train/images'
-      open_train_img_folder = f'{args.openimages_dataset_path}/images'
-      train_ann_file = f'{args.coco_indoor_path}/train/train.json'
-      val_img_folder = f'{args.coco_indoor_path}/val/images'
-      val_ann_file = f'{args.coco_indoor_path}/val/val.json'
+      train_ann_file = f'{args.coco_indoor_path}/train.json'
+      val_ann_file = f'{args.coco_indoor_path}/val.json'
       test_ann_file = f'{args.coco_indoor_path}/val_pascal2012.json'
-      resize_scales_transform = [256, 288, 320, 352, 384, 416]
-   
    if args.all_classes: #use whole COCO dataset
-      train_img_folder = f'{args.coco_allclasses_path}/train2017'
       train_ann_file = f'{args.coco_allclasses_path}/annotations/instances_train2017.json'
-      val_img_folder = f'{args.coco_allclasses_path}/val2017'
       val_ann_file = f'{args.coco_allclasses_path}/annotations/instances_val2017.json'
-      disturbed_train_img_gen = train_img_folder
-      disturbed_train_ann_gen = train_ann_file
    if args.five_classes:
-      train_img_folder = f'{args.coco_allclasses_path}/train2017'
       train_ann_file = f'{args.coco_fiveclasses_path}/train.json'
-      val_img_folder = f'{args.coco_allclasses_path}/val2017'
       val_ann_file = f'{args.coco_fiveclasses_path}/val.json'
       test_ann_file = f'{args.coco_fiveclasses_path}/val_pascal2012_vehicles.json'
-      disturbed_train_img_gen = train_img_folder
-      disturbed_train_ann_gen = train_ann_file
    test_img_folder = f'{args.pascal_img_path}'
-   
-   #test_img_folder = '/home/math0012/Tesi_magistrale/coco_people_indoor/questionario/images'
-   #test_ann_file = f'/home/math0012/Tesi_magistrale/coco_people_indoor/questionario/quest_anno.json'
    
    if not args.train_tasknet:
       unet = UNet(n_channels=3, bilinear=False) #UNet modified without skip connection
@@ -168,8 +141,8 @@ def main(args):
    
    if args.save_disturbed_dataset: #If it's True, we save the dataset and exit the script.
       train_dataloader_gen_disturbed, val_dataloader_gen_disturbed = load_dataset_for_generating_disturbed_set(
-         disturbed_train_img_gen, disturbed_train_ann_gen, val_img_folder, val_ann_file,
-         args.use_dataset_subset, args.use_openimages_for_disturbed_set, resize_scales_transform)
+         train_img_folder, train_ann_file, val_img_folder, val_ann_file,
+         args.use_dataset_subset, resize_scales_transform)
       if os.path.exists(args.disturbed_dataset_path):
          shutil.rmtree(args.disturbed_dataset_path)
       os.makedirs(disturbed_train_img_folder)
@@ -177,7 +150,7 @@ def main(args):
       load_checkpoint(unet, args.unet_fw_weights_load, unet_optimizer, unet_scheduler)
       generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, args.device, unet,
          disturbed_train_img_folder, disturbed_train_ann, disturbed_val_img_folder, disturbed_val_ann, 
-         args.keep_original_size, args.use_openimages_for_disturbed_set)
+         args.keep_original_size)
       print("Generated disturbed dataset")
       sys.exit()
          
@@ -212,10 +185,7 @@ def main(args):
       tasknet_scheduler = torch.optim.lr_scheduler.StepLR(tasknet_optimizer, step_size=args.step_size_tasknet, gamma=args.gamma_tasknet)
    
    if args.train_model_backward: #Disturbed dataset are different
-      if args.use_openimages_for_disturbed_set:
-         orig_train_img_folder = open_train_img_folder
-      else:
-         orig_train_img_folder = train_img_folder
+      orig_train_img_folder = train_img_folder
       disturbed_train_dataloader, disturbed_val_dataloader, example_dataloader = load_disturbed_dataset(
          disturbed_train_img_folder, disturbed_train_ann, disturbed_val_img_folder, disturbed_val_ann, 
          orig_train_img_folder, val_img_folder, train_batch_size, val_batch_size, resize_scales_transform, 
@@ -244,8 +214,6 @@ def main(args):
       
    #Models used for measuring reconstruction
    if not args.train_tasknet:
-      my_recons_classifier = load_my_recons_classifier(args.my_classifier_weights, args.device)
-      my_regressor = load_my_regressor(args.my_regressor_weights, args.device)
       from lpips.lpips import LPIPS
       lpips_model = LPIPS().to(args.device) #LPIPS(net='vgg').to(device) #vgg best if i backpropagate with LPIPS loss; I want to use it only as metric, so Alex is faster and perform better
       lpips_model.eval()
@@ -286,7 +254,7 @@ def main(args):
             param.requires_grad = False
          load_checkpoint(unet, args.unet_fw_weights_load, unet_optimizer, unet_scheduler)
          _ = val_model(val_dataloader, epoch, args.device, unet, args.unet_save_path, tasknet, unet_optimizer,
-               unet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_unet_forward, args.save_all_weights, my_recons_classifier, my_regressor, 
+               unet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_unet_forward, args.save_all_weights, 
                lpips_model, ms_ssim_module, example_dataloader)
       print("Val with batch size 1 completed")
       sys.exit()
@@ -318,7 +286,7 @@ def main(args):
       tasknet.eval()
       load_checkpoint(unet, args.unet_fw_weights_load, unet_optimizer, unet_scheduler)
       unet.eval()
-      test_model(test_dataloader, args.device, tasknet, unet, args.ap_score_thresh, args.results_dir, my_recons_classifier, my_regressor, lpips_model, ms_ssim_module)
+      test_model(test_dataloader, args.device, tasknet, unet, args.ap_score_thresh, args.results_dir, lpips_model, ms_ssim_module)
       print("Testing forward completed")
       test_dataloader_gen_disturbed = load_dataset_for_generating_disturbed_test_set(test_img_folder, test_ann_file, args.use_dataset_subset, resize_scales_transform)
       if os.path.exists(args.disturbed_dataset_path):
@@ -422,13 +390,11 @@ def main(args):
          if args.weight == 0.0: #loops without weights
             train_temp_loss = train_model(train_dataloader, epoch, args.device, unet, tasknet, unet_optimizer)
             val_temp_loss = val_model(val_dataloader, epoch, args.device, unet, args.unet_save_path, tasknet, unet_optimizer,
-               unet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_unet_forward, args.save_all_weights, my_recons_classifier, my_regressor, 
-               lpips_model, ms_ssim_module, example_dataloader)
+               unet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_unet_forward, args.save_all_weights, lpips_model, ms_ssim_module, example_dataloader)
          else:
             train_temp_loss = train_model_dissim(train_dataloader, epoch, args.device, unet, tasknet, unet_optimizer, args.weight)
             val_temp_loss = val_model_dissim(val_dataloader, epoch, args.device, unet, args.unet_save_path, tasknet, unet_optimizer,
-               unet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_unet_forward, args.save_all_weights, my_recons_classifier, my_regressor, 
-               lpips_model, ms_ssim_module, example_dataloader, args.weight)
+               unet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_unet_forward, args.save_all_weights, lpips_model, ms_ssim_module, example_dataloader, args.weight)
          #unet_scheduler.step()
          unet_scheduler.step(val_temp_loss)
          print(f'EPOCH {epoch} SUMMARY: Train loss {train_temp_loss}, Val loss {val_temp_loss}')

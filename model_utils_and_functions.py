@@ -35,47 +35,25 @@ def compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, resul
    iou_types = _get_iou_types(tasknet)
    #4 objects for coco evaluator with different settings
    coco_evaluator = CocoEvaluator(coco, iou_types) #std APs, std interpolation, all preds
-   my_ap_evaluator = CocoEvaluator(coco, iou_types) #std APs, my interpolation, all preds
    my_ap_nointerp_thresh = CocoEvaluator(coco, iou_types) #std APs, std interpolation, preds above score thresh
-   my_ap_interp_thresh = CocoEvaluator(coco, iou_types) #std APs, my interpolation, preds above score thresh
    #Like above, but only for IoU thresh = 0.50
    coco_evaluator_iou50 = CocoEvaluator(coco, iou_types)
-   my_ap_evaluator_iou50 = CocoEvaluator(coco, iou_types)
    my_ap_nointerp_thresh_iou50 = CocoEvaluator(coco, iou_types)
-   my_ap_interp_thresh_iou50 = CocoEvaluator(coco, iou_types)
    #Like above, but only for IoU thresh = 0.75
    coco_evaluator_iou75 = CocoEvaluator(coco, iou_types)
-   my_ap_evaluator_iou75 = CocoEvaluator(coco, iou_types)
    my_ap_nointerp_thresh_iou75 = CocoEvaluator(coco, iou_types)
-   my_ap_interp_thresh_iou75 = CocoEvaluator(coco, iou_types)
-   #IoU and interpolation parameters
-   new_interpolation = np.linspace(.0, (1-ap_score_threshold), int(np.round(((1-ap_score_threshold) - .0) / (1-ap_score_threshold)/.01)) + 1, endpoint=True) #my 101 point interpolation on interval above score threshold 
+   #IoU parameters
    iou50_thresh=[0.5]
    iou75_thresh=[0.75]
-   #Setting evaluator parameters
-   my_ap_evaluator.coco_eval['bbox'].params.recThrs = new_interpolation 
-   my_ap_interp_thresh.coco_eval['bbox'].params.recThrs = new_interpolation
-   
+   #Setting evaluator parameters 
    coco_evaluator_iou50.coco_eval['bbox'].params.iouThrs= iou50_thresh
-   my_ap_evaluator_iou50.coco_eval['bbox'].params.iouThrs= iou50_thresh
    my_ap_nointerp_thresh_iou50.coco_eval['bbox'].params.iouThrs= iou50_thresh
-   my_ap_interp_thresh_iou50.coco_eval['bbox'].params.iouThrs= iou50_thresh
-   my_ap_evaluator_iou50.coco_eval['bbox'].params.recThrs = new_interpolation
-   my_ap_interp_thresh_iou50.coco_eval['bbox'].params.recThrs = new_interpolation
-   
    coco_evaluator_iou75.coco_eval['bbox'].params.iouThrs= iou75_thresh
-   my_ap_evaluator_iou75.coco_eval['bbox'].params.iouThrs= iou75_thresh
    my_ap_nointerp_thresh_iou75.coco_eval['bbox'].params.iouThrs= iou75_thresh
-   my_ap_interp_thresh_iou75.coco_eval['bbox'].params.iouThrs= iou75_thresh
-   my_ap_evaluator_iou75.coco_eval['bbox'].params.recThrs = new_interpolation
-   my_ap_interp_thresh_iou75.coco_eval['bbox'].params.recThrs = new_interpolation
    
    execute_coco_eval(f'{results_dir}/standard_ap.txt', f'AP for Epoch {epoch}', coco_evaluator, res)
-   execute_coco_eval(f'{results_dir}/myinterp_ap.txt', f'AP for Epoch {epoch} with all predictions (not filtered by score thresh) but with my curve interpolation, score thresh: {ap_score_threshold}', my_ap_evaluator, res)
    execute_coco_eval(f'{results_dir}/standard_ap_iou50.txt', f'AP for Epoch {epoch}', coco_evaluator_iou50, res)
-   execute_coco_eval(f'{results_dir}/myinterp_ap_iou50.txt', f'AP for Epoch {epoch} with all predictions (not filtered by score thresh) but with my curve interpolation, score thresh: {ap_score_threshold}', my_ap_evaluator_iou50, res)
    execute_coco_eval(f'{results_dir}/standard_ap_iou75.txt', f'AP for Epoch {epoch}', coco_evaluator_iou75, res)
-   execute_coco_eval(f'{results_dir}/myinterp_ap_iou75.txt', f'AP for Epoch {epoch} with all predictions (not filtered by score thresh) but with my curve interpolation, score thresh: {ap_score_threshold}', my_ap_evaluator_iou75, res)
    
    #Filtering pred above ap_score_threshold for computing AP
    for image_id, pred in res.items():
@@ -97,11 +75,8 @@ def compute_ap(val_dataloader, tasknet, epoch, device, ap_score_threshold, resul
             'labels': torch.empty((0,)).to(device),
             'scores': torch.empty((0,)).to(device)}
    execute_coco_eval(f'{results_dir}/standard_ap_scoreabovethresh.txt', f'AP for Epoch {epoch} with only pred above score thresh: {ap_score_threshold}', my_ap_nointerp_thresh, res)
-   execute_coco_eval(f'{results_dir}/myinterp_ap_scoreabovethresh.txt', f'AP for Epoch {epoch} with only pred above score thresh and my curve interpolation, score thresh: {ap_score_threshold}', my_ap_interp_thresh, res)
    execute_coco_eval(f'{results_dir}/standard_ap_scoreabovethresh_iou50.txt', f'AP for Epoch {epoch} with only pred above score thresh: {ap_score_threshold}', my_ap_nointerp_thresh_iou50, res)
-   execute_coco_eval(f'{results_dir}/myinterp_ap_scoreabovethresh_iou50.txt', f'AP for Epoch {epoch} with only pred above score thresh and my curve interpolation, score thresh: {ap_score_threshold}', my_ap_interp_thresh_iou50, res)
    execute_coco_eval(f'{results_dir}/standard_ap_scoreabovethresh_iou75.txt', f'AP for Epoch {epoch} with only pred above score thresh: {ap_score_threshold}', my_ap_nointerp_thresh_iou75, res)
-   execute_coco_eval(f'{results_dir}/myinterp_ap_scoreabovethresh_iou75.txt', f'AP for Epoch {epoch} with only pred above score thresh and my curve interpolation, score thresh: {ap_score_threshold}', my_ap_interp_thresh_iou75, res)
 	
 def execute_coco_eval(ap_log_path, print_msg, coco_evaluator, res):
    coco_evaluator.update(res)
@@ -142,91 +117,6 @@ def compute_custom_metric(evaluator_complete_metric, custom_metric_folder, epoch
          temp_list=[m[1]]
          with open(save_path, 'w') as json_file:
             json.dump(temp_list, json_file, indent=2)
-
-def load_my_recons_classifier(my_recons_classifier_weights, device):
-   vgg16 = torchvision.models.vgg16()
-   num_classes=4
-   vgg16.classifier[-1] = torch.nn.Linear(in_features=4096, out_features=num_classes)
-   vgg16_optimizer = torch.optim.SGD(vgg16.parameters(), lr=0.001, momentum=0.9, weight_decay=0.0005, nesterov=True)
-   vgg16_scheduler = torch.optim.lr_scheduler.StepLR(vgg16_optimizer, step_size=10, gamma=0.5)
-   load_checkpoint(vgg16, my_recons_classifier_weights, vgg16_optimizer, vgg16_scheduler)
-   vgg16.to(device)
-   vgg16.eval()
-   return vgg16
-   
-def save_my_recons_classifier_dict(classifier_path, epoch, my_rec_class_dict):
-   for value in range(0,4):
-      if value not in my_rec_class_dict:
-         my_rec_class_dict[value] = 0
-   if epoch>1:
-      with open(classifier_path, 'r') as json_file:
-         data = json.load(json_file)
-      data.append(my_rec_class_dict)
-      with open(classifier_path, 'w') as json_file:
-         json.dump(data, json_file, indent=2)
-   else:
-      temp_list=[my_rec_class_dict]
-      with open(classifier_path, 'w') as json_file:
-         json.dump(temp_list, json_file, indent=2)
-
-def compute_my_recons_classifier_pred(my_recons_classifier, reconstructed, my_rec_class_dict):
-   with torch.no_grad():
-      outputs = my_recons_classifier(reconstructed)
-      _, predicted = torch.max(outputs.data, 1)
-      values, occurrences = torch.unique(predicted, return_counts=True)
-      my_rec_class_dict['total']+=len(reconstructed)
-      for value, occurrence in zip(values, occurrences):
-         value_item = value.item()
-         occurrence_item = occurrence.item()
-         if value_item in my_rec_class_dict:
-            my_rec_class_dict[value_item] += occurrence_item
-         else:
-            my_rec_class_dict[value_item] = occurrence_item
-      outputs = torch.nn.functional.softmax(outputs) #probs for every class
-      if 'prob0tot' not in my_rec_class_dict:
-         my_rec_class_dict['prob0tot']=0
-      if 'prob1tot' not in my_rec_class_dict:
-         my_rec_class_dict['prob1tot']=0
-      if 'prob2tot' not in my_rec_class_dict:
-         my_rec_class_dict['prob2tot']=0
-      if 'prob3tot' not in my_rec_class_dict:
-         my_rec_class_dict['prob3tot']=0
-      for prob0, prob1, prob2, prob3 in outputs:
-         my_rec_class_dict['prob0tot'] += prob0.item()
-         my_rec_class_dict['prob1tot'] += prob1.item()
-         my_rec_class_dict['prob2tot'] += prob2.item()
-         my_rec_class_dict['prob3tot'] += prob3.item()
-
-import torch.nn as nn
-class CNNRegression(nn.Module):
-    def __init__(self):
-        super(CNNRegression, self).__init__()
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, padding=1)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
-        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
-        self.fc1 = nn.Linear(128 * 8 * 8, 128)
-        self.fc2 = nn.Linear(128, 1)  
-
-    def forward(self, x):
-        x = torch.relu(self.conv1(x))
-        x = nn.functional.max_pool2d(x, 2)
-        x = torch.relu(self.conv2(x))
-        x = nn.functional.max_pool2d(x, 2)
-        x = torch.relu(self.conv3(x))
-        x = nn.functional.max_pool2d(x, 2)
-        x = x.view(-1, 128 * 8 * 8)
-        x = torch.relu(self.fc1(x))
-        x = torch.sigmoid(self.fc2(x)) 
-        return x
-     
-def load_my_regressor(my_regressor_weights, device):
-   model = CNNRegression()  
-   optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-   scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
-   load_checkpoint(model, my_regressor_weights, optimizer, scheduler)
-   model.to(device)
-   model.eval()
-   return model
 
 def create_checkpoint(model, optimizer, current_epoch, current_loss, scheduler, model_save_path):
    torch.save({

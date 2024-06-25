@@ -16,8 +16,8 @@ from torchvision import transforms
 conf_threshold = 0.75
 device = 'cuda'
 unet_weights_load= "model_weights/model_50.pt"
-tasknet_weights_load= "tasknet_weights/tasknet_10.pt"
-video_path='parasite380x256.mp4'
+tasknet_weights_load= "tasknet_weights/tasknet_10_oldresize.pt"
+video_path='video_1.mp4'
 output_video_path = 'architecture.avi'
 #unet
 unet = UNet(3, False)
@@ -63,8 +63,8 @@ fps = cap.get(cv2.CAP_PROP_FPS)
 #192x108 -> 0.48 fps	0.64
 #160x90 -> 0.70 fps	0.95 fps
 #For validation. Other resolution under
-width = 380 #256
-height = 256 #192
+width = 360#256
+height = 560 #192
 #width = 320	#width = 384	#width = 512	#width = 640
 #height = 240	#height = 288	#height = 384	#height = 480
 
@@ -97,7 +97,7 @@ while True:
    detections = tasknet(reconstructed)[0]	#grab every prediction and plot it
    for i in range(0, len(detections["boxes"])):
       confidence = detections["scores"][i] #for every pred grab confidence
-      if confidence > conf_threshold: #if confidence > thresh, plot pred
+      if confidence >= conf_threshold: #if confidence > thresh, plot pred
          #idx = int(detections["labels"][i]) #needed for labels; don't need it as i have only person
          box = detections["boxes"][i].detach().cpu().numpy() # bbox
          (startX, startY, endX, endY) = box.astype("int")

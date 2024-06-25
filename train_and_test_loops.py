@@ -3,7 +3,6 @@ from tqdm import tqdm
 from model_utils_and_functions import create_checkpoint, compute_ap, apply_nms, compute_custom_metric
 import numpy as np
 from custom_metric.my_evaluators_complete_metric import MyEvaluatorCompleteMetric
-from model_utils_and_functions import compute_my_recons_classifier_pred, save_my_recons_classifier_dict
 #import for saving disturbed set
 from torchvision.utils import save_image
 import json
@@ -94,18 +93,15 @@ def train_model(train_dataloader, epoch, device, model, tasknet, model_optimizer
    return running_loss
 
 
-def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_score_threshold, results_dir, tot_epochs, save_all_weights, my_recons_classifier, my_regressor, lpips_model, ms_ssim_module, example_dataloader):
+def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_score_threshold, results_dir, tot_epochs, save_all_weights, lpips_model, ms_ssim_module, example_dataloader):
    model.eval()
    batch_size = len(val_dataloader)
    res={} #dictionary to store all prediction for AP
    evaluator_complete_metric = MyEvaluatorCompleteMetric() #for custom metric
-   my_rec_class_dict = {}
-   my_rec_class_dict['epoch']=epoch
-   my_rec_class_dict['total']=0
    mean = torch.tensor([0.485, 0.456, 0.406]).to(device) #for ms ssim
    std = torch.tensor([0.229, 0.224, 0.225]).to(device)
    unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
-   recon_rate = lpips_score = ms_ssim_score = running_loss = 0
+   lpips_score = ms_ssim_score = running_loss = 0
    with torch.no_grad(): #not computing gradient
       for imgs, targets in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):
          imgs, _ = imgs.decompose()
@@ -161,8 +157,6 @@ def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, mo
          reconstructed = trans_te(reconstructed)
          nor = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
          reconstructed = nor(reconstructed)
-         compute_my_recons_classifier_pred(my_recons_classifier, reconstructed, my_rec_class_dict)			
-         recon_rate += torch.mean(my_regressor(reconstructed)).item()
          
          #true_loss=reconstructed_losses
          running_loss += true_loss.item()	
@@ -178,14 +172,7 @@ def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, mo
    lpips_path = f"{results_dir}/lpips_score_log.txt"
    with open(lpips_path, 'a') as file:
       file.write(f"{epoch} {lpips_score}\n")
-   recon_rate /= batch_size
-   recon_path= f"{results_dir}/recon_rate_log.txt"
-   with open(recon_path, 'a') as file:
-      file.write(f"{epoch} {recon_rate}\n")
-	
-   my_recons_classifier_path = f"{results_dir}/my_recons_classifier_log.json"
-   save_my_recons_classifier_dict(my_recons_classifier_path, epoch, my_rec_class_dict)
-   
+
    if save_all_weights:
       model_save_path = f'{model_save_path}_fw_{epoch}.pt' 
       create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
@@ -196,19 +183,16 @@ def val_model(val_dataloader, epoch, device, model, model_save_path, tasknet, mo
    return running_loss
 
 #same code for dissim version, as weight for MAE doesn't influence metrics, is used only for computing loss  
-def test_model(test_dataloader, device, tasknet, model, ap_score_threshold, results_dir, my_recons_classifier, my_regressor, lpips_model, ms_ssim_module):
+def test_model(test_dataloader, device, tasknet, model, ap_score_threshold, results_dir, lpips_model, ms_ssim_module):
    model.eval()
    tasknet.eval()
    batch_size = len(test_dataloader)
    res={} #dictionary to store all prediction for AP
    evaluator_complete_metric = MyEvaluatorCompleteMetric() #for custom metric
-   my_rec_class_dict = {}
-   my_rec_class_dict['epoch']=0
-   my_rec_class_dict['total']=0
    mean = torch.tensor([0.485, 0.456, 0.406]).to(device) #for ms ssim
    std = torch.tensor([0.229, 0.224, 0.225]).to(device)
    unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
-   recon_rate = lpips_score = ms_ssim_score = epoch = 0
+   lpips_score = ms_ssim_score = epoch = 0
    with torch.no_grad(): #not computing gradient
       for imgs, targets in tqdm(test_dataloader, desc=f'Testing forward model'):
          imgs, _ = imgs.decompose()
@@ -242,8 +226,6 @@ def test_model(test_dataloader, device, tasknet, model, ap_score_threshold, resu
          reconstructed = trans_te(reconstructed)
          nor = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
          reconstructed = nor(reconstructed)
-         compute_my_recons_classifier_pred(my_recons_classifier, reconstructed, my_rec_class_dict)			
-         recon_rate += torch.mean(my_regressor(reconstructed)).item()
    compute_ap(test_dataloader, tasknet, epoch, device, ap_score_threshold, results_dir, res)
    compute_custom_metric(evaluator_complete_metric, results_dir, epoch)
    ms_ssim_score /= batch_size
@@ -254,13 +236,6 @@ def test_model(test_dataloader, device, tasknet, model, ap_score_threshold, resu
    lpips_path = f"{results_dir}/lpips_score_log.txt"
    with open(lpips_path, 'a') as file:
       file.write(f"{epoch} {lpips_score}\n")
-   recon_rate /= batch_size
-   recon_path= f"{results_dir}/recon_rate_log.txt"
-   with open(recon_path, 'a') as file:
-      file.write(f"{epoch} {recon_rate}\n")
-	
-   my_recons_classifier_path = f"{results_dir}/my_recons_classifier_log.json"
-   save_my_recons_classifier_dict(my_recons_classifier_path, epoch, my_rec_class_dict)
    return 
 
 
@@ -288,18 +263,15 @@ def train_model_dissim(train_dataloader, epoch, device, model, tasknet, model_op
    running_loss /= batch_size #average loss
    return running_loss
 
-def val_model_dissim(val_dataloader, epoch, device, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_score_threshold, results_dir, tot_epochs, save_all_weights, my_recons_classifier, my_regressor, lpips_model, ms_ssim_module, example_dataloader, weight):
+def val_model_dissim(val_dataloader, epoch, device, model, model_save_path, tasknet, model_optimizer, model_scheduler, ap_score_threshold, results_dir, tot_epochs, save_all_weights, lpips_model, ms_ssim_module, example_dataloader, weight):
    model.eval()
    batch_size = len(val_dataloader)
    res={} #dictionary to store all prediction for AP
    evaluator_complete_metric = MyEvaluatorCompleteMetric() #for custom metric
-   my_rec_class_dict = {}
-   my_rec_class_dict['epoch']=epoch
-   my_rec_class_dict['total']=0
    mean = torch.tensor([0.485, 0.456, 0.406]).to(device) #for ms ssim
    std = torch.tensor([0.229, 0.224, 0.225]).to(device)
    unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
-   recon_rate = lpips_score = ms_ssim_score = running_loss = 0
+   lpips_score = ms_ssim_score = running_loss = 0
    mae_loss = torch.nn.L1Loss()
    with torch.no_grad(): #not computing gradient
       for imgs, targets in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):
@@ -344,8 +316,6 @@ def val_model_dissim(val_dataloader, epoch, device, model, model_save_path, task
          reconstructed = trans_te(reconstructed)
          nor = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
          reconstructed = nor(reconstructed)
-         compute_my_recons_classifier_pred(my_recons_classifier, reconstructed, my_rec_class_dict)			
-         recon_rate += torch.mean(my_regressor(reconstructed)).item()
          
          #true_loss=reconstructed_losses
          running_loss += true_loss.item()	
@@ -361,13 +331,6 @@ def val_model_dissim(val_dataloader, epoch, device, model, model_save_path, task
    lpips_path = f"{results_dir}/lpips_score_log.txt"
    with open(lpips_path, 'a') as file:
       file.write(f"{epoch} {lpips_score}\n")
-   recon_rate /= batch_size
-   recon_path= f"{results_dir}/recon_rate_log.txt"
-   with open(recon_path, 'a') as file:
-      file.write(f"{epoch} {recon_rate}\n")
-	
-   my_recons_classifier_path = f"{results_dir}/my_recons_classifier_log.json"
-   save_my_recons_classifier_dict(my_recons_classifier_path, epoch, my_rec_class_dict)
    if save_all_weights:
       model_save_path = f'{model_save_path}_fw_{epoch}.pt' 
       create_checkpoint(model, model_optimizer, epoch, running_loss, model_scheduler, model_save_path)
@@ -397,7 +360,7 @@ def save_image_examples(example_dataloader, results_dir, model, epoch, device):
             os.makedirs(save_dir_path)
          save_image(reconstructed, os.path.join(save_dir_path, path))
 
-def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, device, model, train_img_folder, train_ann, val_img_folder, val_ann, keep_original_size, use_openimages_train): #for generating disturbed set
+def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, device, model, train_img_folder, train_ann, val_img_folder, val_ann, keep_original_size): #for generating disturbed set
    model.eval()
    mean = torch.tensor([0.485, 0.456, 0.406]).to(device)
    std = torch.tensor([0.229, 0.224, 0.225]).to(device)
@@ -427,37 +390,25 @@ def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_ge
       json.dump(disturbed_list, json_file, indent=2)
    #Then training set
    batch_size = len(train_dataloader_gen_disturbed)
-   if not use_openimages_train:
-      coco = get_coco_api_from_dataset(train_dataloader_gen_disturbed.dataset)
+   coco = get_coco_api_from_dataset(train_dataloader_gen_disturbed.dataset)
    disturbed_list = []
    with torch.no_grad():
       for imgs, targets in tqdm(train_dataloader_gen_disturbed, desc=f'Generating disturbed train images from dataset'):
          imgs, _ = imgs.decompose()
          imgs = imgs.to(device)
          reconstructed = model(imgs)
-         if use_openimages_train:
-            path = ''.join(targets)
-            if keep_original_size:
-               orig_size = [imgs.shape[2], imgs.shape[3]]
-               trans = transforms.Resize(orig_size, antialias=False)
-               reconstructed = trans(reconstructed)
-            reconstructed = unnormalize(reconstructed)
-            reconstructed = torch.clamp(reconstructed, min=0, max=1)
-            save_image(reconstructed, os.path.join(train_img_folder, path))
-            disturbed_list.append({"image_path": path,})
-         else:
-            coco_image_id = targets[0]["image_id"].item()
-            path = coco.loadImgs(coco_image_id)[0]["file_name"]
-            if keep_original_size: #for fine tune Tasknet on disturbed set; less meaningful for backward
-               orig_h, orig_w = targets[0]['orig_size']
-               #orig_size = [imgs.shape[2], imgs.shape[3]]
-               orig_size = [orig_h, orig_w]
-               trans = transforms.Resize(orig_size, antialias=False)
-               reconstructed = trans(reconstructed)
-            reconstructed = unnormalize(reconstructed) #unnormalized and clamping needed before storing images in [0,1]
-            reconstructed = torch.clamp(reconstructed, min=0, max=1)
-            save_image(reconstructed, os.path.join(train_img_folder, path))
-            disturbed_list.append({"image_path": path,"coco_image_id": coco_image_id})
+         coco_image_id = targets[0]["image_id"].item()
+         path = coco.loadImgs(coco_image_id)[0]["file_name"]
+         if keep_original_size: #for fine tune Tasknet on disturbed set; less meaningful for backward
+            orig_h, orig_w = targets[0]['orig_size']
+            #orig_size = [imgs.shape[2], imgs.shape[3]]
+            orig_size = [orig_h, orig_w]
+            trans = transforms.Resize(orig_size, antialias=False)
+            reconstructed = trans(reconstructed)
+         reconstructed = unnormalize(reconstructed) #unnormalized and clamping needed before storing images in [0,1]
+         reconstructed = torch.clamp(reconstructed, min=0, max=1)
+         save_image(reconstructed, os.path.join(train_img_folder, path))
+         disturbed_list.append({"image_path": path,"coco_image_id": coco_image_id})
    with open(train_ann, 'w') as json_file:
       json.dump(disturbed_list, json_file, indent=2)
    return

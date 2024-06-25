@@ -180,6 +180,8 @@ fps = cap.get(cv2.CAP_PROP_FPS)
 
 fps_start_time = time.time()
 fps_counter = 0
+tot_fps_measurements=0
+fps_sum=0
 while True:
    ret, frame = cap.read()
    if not ret:
@@ -197,7 +199,11 @@ while True:
       fps = fps_counter / (time.time() - fps_start_time)
       fps_start_time = time.time()
       fps_counter = 0
-      print("fps:", round(fps, 4))
+      print("Average frame per second:", round(fps, 4))
+      tot_fps_measurements+=1
+      fps_sum+=fps
+final_fps=fps_sum/tot_fps_measurements
+print("Final average frame per second:", round(fps, 4))
 cap.release()
 out.release()
 cv2.destroyAllWindows()

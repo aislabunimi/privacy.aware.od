@@ -13,13 +13,13 @@ from torchvision import transforms
 #config
 conf_threshold = 0.75
 device = 'cuda'
-unet_weights_load= "model_weights/model_50.pt"
-video_path='parasite380x256.mp4'
-output_video_path = 'unet_fw.avi'
+#unet_weights_load= "model_weights/model_50.pt"
+#video_path='video_1.mp4'
+#output_video_path = 'unet_fw.avi'
 #FOR BACKWARD
-#unet_weights_load= "model_weights/model_100.pt"
-#video_path='unet.avi'
-#output_video_path = 'unet_bw.avi'
+unet_weights_load= "model_weights/model_100.pt"
+video_path='unet_fw.avi'
+output_video_path = 'unet_bw.avi'
 #unet
 unet = UNet(3, False)
 unet_optimizer = torch.optim.SGD(unet.parameters(), lr=5e-4, momentum=0.9, weight_decay=5e-4, nesterov=True)
@@ -53,8 +53,8 @@ fps = cap.get(cv2.CAP_PROP_FPS)
 #192x108 -> 0.48 fps	0.64
 #160x90 -> 0.70 fps	0.95 fps
 #For validation. Other resolution under
-width = 380 #256
-height = 256 #192
+width = 360 #256
+height = 560 #192
 #width = 320	#width = 384	#width = 512	#width = 640
 #height = 240	#height = 288	#height = 384	#height = 480
 

@@ -11,11 +11,16 @@ from model_utils_and_functions import *
 from torchvision.models.detection import fasterrcnn_resnet50_fpn, FasterRCNN_ResNet50_FPN_Weights
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision import transforms
+###
+#
+# REMEMBER TO CHANGE IMPORT TASKNET IN THE CUSTOM ONE THAT DOES NOT DO RESIZE AND DOUBLE NORM!!!
+#
+###
 #Config
 conf_threshold = 0.75
 device = 'cuda'
-tasknet_weights_load= "tasknet_weights/tasknet_10.pt"
-video_path='parasite380x256.mp4'
+tasknet_weights_load= "tasknet_weights/tasknet_10_oldresize.pt"
+video_path='video_1.mp4'
 output_video_path = 'tasknet.avi'
 #Importing tasknet
 weights = FasterRCNN_ResNet50_FPN_Weights.DEFAULT
@@ -38,8 +43,10 @@ if not cap.isOpened():
 #fps = FPS().start() # for webcam
 fourcc = cv2.VideoWriter_fourcc(*'XVID')  #codec
 fps = cap.get(cv2.CAP_PROP_FPS) #fps, width and from video
-width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+#width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+#height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+width = 360 #256
+height = 560 #192
 
 color = (255, 0, 0) 
 out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height)) #file output
@@ -49,7 +56,9 @@ while True:
       break
    #frame = imutils.resize(frame, width=400) #useful for resizing webcame and for resize
    orig = frame.copy()
+   orig = cv2.resize(orig, (width, height))
    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) #from cv2 bgr format to rgb
+   frame = cv2.resize(frame, (width, height))
    frame = frame.transpose((2, 0, 1)) #inverting channels
    frame = torch.from_numpy(frame).float().to(device)
    frame = frame.unsqueeze(0) #added first dimension to simulate batch
