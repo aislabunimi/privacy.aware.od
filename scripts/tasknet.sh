@@ -32,10 +32,10 @@ python3 main.py --tasknet_get_indoor_AP --tasknet_weights_load $TASKNET_WEIGHTS_
 mv $RESULTS_DIR "${EXPERIMENT_DIR}/tasknet/indoor_val_results"
 echo "Completed Tasknet Indoor Validation"
 
-python3 main.py --tasknet_get_indoor_AP --tasknet_weights_load $TASKNET_WEIGHTS_FW_TO_SAVE1 --use_dataset_subset $USE_DATASET_SUBSET --batch_size_tasknet 1 --results_dir $RESULTS_DIR
+python3 main.py --val_forward_batch1 --tasknet_get_indoor_AP --tasknet_weights_load $TASKNET_WEIGHTS_FW_TO_SAVE1 --use_dataset_subset $USE_DATASET_SUBSET --batch_size_tasknet 1 --results_dir $RESULTS_DIR
 mv $RESULTS_DIR "${EXPERIMENT_DIR}/tasknet/indoor_val_results_batch1"
 echo "Completed Tasknet Indoor Validation with Batch Size 1"
 
-python3 main.py --test_tasknet --tasknet_weights_load $TASKNET_WEIGHTS_FW_TO_SAVE1 --results_dir $RESULTS_DIR
+python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --test_tasknet --tasknet_weights_load $TASKNET_WEIGHTS_FW_TO_SAVE1 --results_dir $RESULTS_DIR
 mv $RESULTS_DIR "${EXPERIMENT_DIR}/tasknet/test_results"
 echo "Completed Tasknet test"

@@ -5,7 +5,7 @@ cd ..
 RESULTS_DIR='results'
 UNET_SAVE_PATH='model_weights/model'
 UNET_NAME='model' #must be only the last part of the variable above
-TASKNET_WEIGHTS_LOAD='tasknet_weights/tasknet_1norm_myresize.pt'
+TASKNET_WEIGHTS_LOAD='tasknet_weights/tasknet_1class.pt'
 
 NUM_EPOCHS_UNET_FORWARD=50
 UNET_WEIGHTS_LOAD_FW="${UNET_SAVE_PATH}_fw_${NUM_EPOCHS_UNET_FORWARD}.pt"
@@ -43,6 +43,10 @@ cp $UNET_WEIGHTS_FW_TO_SAVE1 "${EXPERIMENT_DIR}/all_proposals/forward"
 mv $UNET_WEIGHTS_FW_TO_SAVE2 "${EXPERIMENT_DIR}/all_proposals/forward"
 mv $RESULTS_DIR "${EXPERIMENT_DIR}/all_proposals/forward/${RESULTS_DIR}_fw"
 echo "Completed all_proposals forward experiment and copied results to ${EXPERIMENT_DIR} folder"
+
+python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --num_epochs_unet_forward $NUM_EPOCHS_UNET_FORWARD --unet_save_path $UNET_SAVE_PATH --results_dir $RESULTS_DIR --tasknet_weights_load $TASKNET_WEIGHTS_LOAD --not_use_custom_filter_prop --unet_fw_weights_load $UNET_WEIGHTS_LOAD_FW --val_forward_batch1
+mv $RESULTS_DIR "${EXPERIMENT_DIR}/all_proposals/forward/val_results_batch1"
+echo "Completed all_proposals Validation with Batch Size 1"
    
 python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --save_disturbed_dataset --unet_fw_weights_load $UNET_WEIGHTS_LOAD_FW
 
@@ -68,6 +72,10 @@ for i in "4 4" "3 3" "2 2" "1 1" "4 3" "4 2" "4 1" "3 4" "3 2" "3 1" "2 4" "2 3"
    mv $UNET_WEIGHTS_FW_TO_SAVE2 "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg/forward"
    mv $RESULTS_DIR "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg/forward/${RESULTS_DIR}_fw"
    echo "Completed ${PROP_POS}pos${PROP_NEG}neg forward experiment and copied results to ${EXPERIMENT_DIR} folder"
+   
+   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --num_epochs_unet_forward $NUM_EPOCHS_UNET_FORWARD --unet_save_path $UNET_SAVE_PATH --results_dir $RESULTS_DIR --tasknet_weights_load $TASKNET_WEIGHTS_LOAD --not_use_custom_filter_prop --unet_fw_weights_load $UNET_WEIGHTS_LOAD_FW --val_forward_batch1
+   mv $RESULTS_DIR "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg/forward/val_results_batch1"
+   echo "Completed ${PROP_POS}pos${PROP_NEG}neg Validation with Batch Size 1"
    
    python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --save_disturbed_dataset --unet_fw_weights_load $UNET_WEIGHTS_LOAD_FW
 
