@@ -246,16 +246,20 @@ def main(args):
          shutil.rmtree(args.results_dir)
       os.makedirs(args.results_dir)
       epoch = 0
-      load_checkpoint(tasknet, args.tasknet_weights_load, tasknet_optimizer, tasknet_scheduler)
+      if not args.all_classes:
+         load_checkpoint(tasknet, args.tasknet_weights_load, tasknet_optimizer, tasknet_scheduler)
       if args.train_tasknet or args.tasknet_get_indoor_AP:
          _ = val_tasknet(val_dataloader, epoch, args.device, args.tasknet_save_path, tasknet, tasknet_optimizer, tasknet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_tasknet, args.save_all_weights, skip_saving_weights=True)
       else:
          for param in tasknet.parameters(): #Freeze layers as Faster R-CNN is not modifiable
             param.requires_grad = False
          load_checkpoint(unet, args.unet_fw_weights_load, unet_optimizer, unet_scheduler)
-         _ = val_model(val_dataloader, epoch, args.device, unet, args.unet_save_path, tasknet, unet_optimizer,
-               unet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_unet_forward, args.save_all_weights, 
-               lpips_model, ms_ssim_module, example_dataloader)
+         if args.finetune_tasknet:
+            _ = finetune_tasknet_val(val_dataloader, epoch, args.device, unet, args.tasknet_save_path, tasknet, tasknet_optimizer,
+               tasknet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_tasknet, args.save_all_weights)
+         else:
+            _ = val_model(val_dataloader, epoch, args.device, unet, args.unet_save_path, tasknet, unet_optimizer,
+               unet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_unet_forward, args.save_all_weights, example_dataloader)
       print("Val with batch size 1 completed")
       sys.exit()
    
