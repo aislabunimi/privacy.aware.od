@@ -40,7 +40,7 @@ mv $TASKNET_WEIGHTS_FW_TO_SAVE2 "${EXPERIMENT_DIR}/finetuning_tasknet_on_unetall
 mv $RESULTS_DIR "${EXPERIMENT_DIR}/finetuning_tasknet_on_unetallprop/results"
 echo "Completed Finetuning Tasknet On UNet trained with all proposals"
 
-python3 main.py --finetune_tasknet --tasknet_weights_load $TASKNET_WEIGHTS_FW_TO_SAVE1 --use_dataset_subset $USE_DATASET_SUBSET --batch_size_tasknet 1 --batch_size_unet 1 --results_dir $RESULTS_DIR --val_forward_batch1 --train_tasknet --unet_fw_weights_load $UNET
+python3 main.py --finetune_tasknet --tasknet_weights_load $TASKNET_WEIGHTS_FW_TO_SAVE1 --use_dataset_subset $USE_DATASET_SUBSET --batch_size_tasknet 1 --batch_size_unet 1 --results_dir $RESULTS_DIR --val_forward_batch1 --unet_fw_weights_load $UNET
 mv $RESULTS_DIR "${EXPERIMENT_DIR}/finetuning_tasknet_on_unetallprop/val_results_batch1"
 echo "Completed Finetuning Tasknet On UNet trained with all proposals Validation with Batch Size 1"
 
@@ -58,7 +58,7 @@ mv $TASKNET_WEIGHTS_FW_TO_SAVE2 "${EXPERIMENT_DIR}/finetuning_tasknet_on_2pos2ne
 mv $RESULTS_DIR "${EXPERIMENT_DIR}/finetuning_tasknet_on_2pos2neg/results"
 echo "Completed Finetuning Tasknet On UNet trained with 2pos2neg"
 
-python3 main.py --finetune_tasknet --tasknet_weights_load $TASKNET_WEIGHTS_FW_TO_SAVE1 --use_dataset_subset $USE_DATASET_SUBSET --batch_size_tasknet 1 --batch_size_unet 1 --results_dir $RESULTS_DIR --val_forward_batch1 --train_tasknet --unet_fw_weights_load $UNET
+python3 main.py --finetune_tasknet --tasknet_weights_load $TASKNET_WEIGHTS_FW_TO_SAVE1 --use_dataset_subset $USE_DATASET_SUBSET --batch_size_tasknet 1 --batch_size_unet 1 --results_dir $RESULTS_DIR --val_forward_batch1 --unet_fw_weights_load $UNET
 mv $RESULTS_DIR "${EXPERIMENT_DIR}/finetuning_tasknet_on_2pos2neg/val_results_batch1"
 echo "Completed Finetuning Tasknet On UNet trained with 2pos2neg Validation with Batch Size 1"
 
@@ -76,7 +76,7 @@ mv $TASKNET_WEIGHTS_FW_TO_SAVE2 "${EXPERIMENT_DIR}/finetuning_tasknet_on_0.8_MAE
 mv $RESULTS_DIR "${EXPERIMENT_DIR}/finetuning_tasknet_on_0.8_MAE/results"
 echo "Completed Finetuning Tasknet On UNet trained with 0.8_MAE"
 
-python3 main.py --finetune_tasknet --tasknet_weights_load $TASKNET_WEIGHTS_FW_TO_SAVE1 --use_dataset_subset $USE_DATASET_SUBSET --batch_size_tasknet 1 --batch_size_unet 1 --results_dir $RESULTS_DIR --val_forward_batch1 --train_tasknet --unet_fw_weights_load $UNET
+python3 main.py --finetune_tasknet --tasknet_weights_load $TASKNET_WEIGHTS_FW_TO_SAVE1 --use_dataset_subset $USE_DATASET_SUBSET --batch_size_tasknet 1 --batch_size_unet 1 --results_dir $RESULTS_DIR --val_forward_batch1 --unet_fw_weights_load $UNET
 mv $RESULTS_DIR "${EXPERIMENT_DIR}/finetuning_tasknet_on_0.8_MAE/val_results_batch1"
 echo "Completed Finetuning Tasknet On UNet trained with 0.8_MAE Validation with Batch Size 1"
 
@@ -94,7 +94,7 @@ mv $TASKNET_WEIGHTS_FW_TO_SAVE2 "${EXPERIMENT_DIR}/finetuning_tasknet_on_1pos1ne
 mv $RESULTS_DIR "${EXPERIMENT_DIR}/finetuning_tasknet_on_1pos1neg/results"
 echo "Completed Finetuning Tasknet On UNet trained with 1pos1neg"
 
-python3 main.py --finetune_tasknet --tasknet_weights_load $TASKNET_WEIGHTS_FW_TO_SAVE1 --use_dataset_subset $USE_DATASET_SUBSET --batch_size_tasknet 1 --batch_size_unet 1 --results_dir $RESULTS_DIR --val_forward_batch1 --train_tasknet --unet_fw_weights_load $UNET
+python3 main.py --finetune_tasknet --tasknet_weights_load $TASKNET_WEIGHTS_FW_TO_SAVE1 --use_dataset_subset $USE_DATASET_SUBSET --batch_size_tasknet 1 --batch_size_unet 1 --results_dir $RESULTS_DIR --val_forward_batch1 --unet_fw_weights_load $UNET
 mv $RESULTS_DIR "${EXPERIMENT_DIR}/finetuning_tasknet_on_1pos1neg/val_results_batch1"
 echo "Completed Finetuning Tasknet On UNet trained with 1pos1neg Validation with Batch Size 1"
 
@@ -112,7 +112,7 @@ mv $TASKNET_WEIGHTS_FW_TO_SAVE2 "${EXPERIMENT_DIR}/finetuning_tasknet_on_0.9_MAE
 mv $RESULTS_DIR "${EXPERIMENT_DIR}/finetuning_tasknet_on_0.9_MAE/results"
 echo "Completed Finetuning Tasknet On UNet trained with 0.9_MAE"
 
-python3 main.py --finetune_tasknet --tasknet_weights_load $TASKNET_WEIGHTS_FW_TO_SAVE1 --use_dataset_subset $USE_DATASET_SUBSET --batch_size_tasknet 1 --batch_size_unet 1 --results_dir $RESULTS_DIR --val_forward_batch1 --train_tasknet --unet_fw_weights_load $UNET
+python3 main.py --finetune_tasknet --tasknet_weights_load $TASKNET_WEIGHTS_FW_TO_SAVE1 --use_dataset_subset $USE_DATASET_SUBSET --batch_size_tasknet 1 --batch_size_unet 1 --results_dir $RESULTS_DIR --val_forward_batch1 --unet_fw_weights_load $UNET
 mv $RESULTS_DIR "${EXPERIMENT_DIR}/finetuning_tasknet_on_0.9_MAE/val_results_batch1"
 echo "Completed Finetuning Tasknet On UNet trained with 0.9_MAE Validation with Batch Size 1"
 
@@ -130,7 +130,7 @@ mv $TASKNET_WEIGHTS_FW_TO_SAVE2 "${EXPERIMENT_DIR}/finetuning_tasknet_on_0.5_MAE
 mv $RESULTS_DIR "${EXPERIMENT_DIR}/finetuning_tasknet_on_0.5_MAE/results"
 echo "Completed Finetuning Tasknet On UNet trained with 0.5_MAE"
 
-python3 main.py --finetune_tasknet --tasknet_weights_load $TASKNET_WEIGHTS_FW_TO_SAVE1 --use_dataset_subset $USE_DATASET_SUBSET --batch_size_tasknet 1 --batch_size_unet 1 --results_dir $RESULTS_DIR --val_forward_batch1 --train_tasknet --unet_fw_weights_load $UNET
+python3 main.py --finetune_tasknet --tasknet_weights_load $TASKNET_WEIGHTS_FW_TO_SAVE1 --use_dataset_subset $USE_DATASET_SUBSET --batch_size_tasknet 1 --batch_size_unet 1 --results_dir $RESULTS_DIR --val_forward_batch1 --unet_fw_weights_load $UNET
 mv $RESULTS_DIR "${EXPERIMENT_DIR}/finetuning_tasknet_on_0.5_MAE/val_results_batch1"
 echo "Completed Finetuning Tasknet On UNet trained with 0.5_MAE Validation with Batch Size 1"
 
