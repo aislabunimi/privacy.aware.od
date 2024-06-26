@@ -13,8 +13,6 @@ from plot_utils.extract_iou50_values import extract_ap
 from plot_utils.plot_custom_metric import plot_custom_metric #, plot_custom_metric_allclasses
 from plot_utils.compare_ap import plot_compare_between_two_ap
 from plot_utils.plot_images import *
-from plot_utils.plot_my_recons_classifier_metric import plot_my_recons_classifier_metric, plot_my_recons_classifier_metric_probs
-from plot_utils.plot_my_regressor import plot_reconrate
 ###### CONFIG
 
 def get_args_parser():
@@ -50,7 +48,7 @@ def main(args):
    unet = UNet(3, False)
    unet.to(args.device)
    unet_optimizer = torch.optim.SGD(unet.parameters(), lr=5e-4, momentum=0.9, weight_decay=5e-4, nesterov=True)
-   unet_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(unet_optimizer, mode='min', factor=0.5, patience=2, verbose=True)
+   unet_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(unet_optimizer, mode='min', factor=0.5, patience=2)
    #Tasknet with same behavior of training. No normalize, no resize
    from faster_custom.faster_rcnn import fasterrcnn_resnet50_fpn_custom, FasterRCNN_ResNet50_FPN_Weights, FastRCNNPredictor
    weights = FasterRCNN_ResNet50_FPN_Weights.DEFAULT  

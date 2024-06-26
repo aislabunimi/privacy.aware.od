@@ -25,7 +25,7 @@ def get_args_parser():
    parser.add_argument('--unet_fw_weights_load', default='model_weights/model_fw_50.pt', type=str, help='Path to UNet forward weights to load if resuming training')
    parser.add_argument('--unet_bw_weights_load', default='model_weights/model_bw_80.pt', type=str, help='Path to UNet backward weights to load if resuming training')
    parser.add_argument('--save_all_weights', action='store_true', default=False, help='If you want to save model weights for each epoch. By default, this script saves weights at final epoch and at tot_epochs/2 (halfway checkpoint)')
-   parser.add_argument('--tasknet_weights_load', default='tasknet_weights/tasknet_1norm_myresize.pt', type=str, help='Path to Tasknet weights to load if resuming training or training the UNet')
+   parser.add_argument('--tasknet_weights_load', default='tasknet_weights/tasknet_1class.pt', type=str, help='Path to Tasknet weights to load if resuming training or training the UNet')
    
    #Config Dataset. Paths to image folders and annotations. Paths to disturbed dataset and annotations.
    parser.add_argument('--coco_allclasses_path', default='dataset/coco2017', type=str, help='Path of the folder containing the whole COCO dataset. The folder is expected to contain three subfolders, "train2017", "val2017" and annotations. train2017 and val2017 contains the images, while annotations folder contains the annotations called "instances_train2017.json" and "instances_val2017.json".')
