@@ -20,6 +20,7 @@ mkdir -p $EXPERIMENT_DIR
 
 USE_DATASET_SUBSET=0
 BATCH_SIZE_UNET=4
+LR_UNET=5e-4
 
 UNET_WEIGHTS_FW_TO_SAVE1="${UNET_SAVE_PATH}_fw_${NUM_EPOCHS_UNET_FORWARD}.pt"
 HALF_WAY=$((NUM_EPOCHS_UNET_FORWARD/2))
@@ -37,7 +38,7 @@ UNET_WEIGHTS_BW_TO_SAVE2="${UNET_SAVE_PATH}_bw_${HALF_WAY}.pt"
 
 #If you want to use five classes, add flag --five_classes to all commands
 
-python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --num_epochs_unet_forward $NUM_EPOCHS_UNET_FORWARD --unet_save_path $UNET_SAVE_PATH --results_dir $RESULTS_DIR --tasknet_weights_load $TASKNET_WEIGHTS_LOAD --not_use_custom_filter_prop
+python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --lr_unet $LR_UNET --num_epochs_unet_forward $NUM_EPOCHS_UNET_FORWARD --unet_save_path $UNET_SAVE_PATH --results_dir $RESULTS_DIR --tasknet_weights_load $TASKNET_WEIGHTS_LOAD --not_use_custom_filter_prop
 mkdir -p "${EXPERIMENT_DIR}/all_proposals/forward"
 cp $UNET_WEIGHTS_FW_TO_SAVE1 "${EXPERIMENT_DIR}/all_proposals/forward"
 mv $UNET_WEIGHTS_FW_TO_SAVE2 "${EXPERIMENT_DIR}/all_proposals/forward"
@@ -50,7 +51,7 @@ echo "Completed all_proposals Validation with Batch Size 1"
    
 python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --save_disturbed_dataset --unet_fw_weights_load $UNET_WEIGHTS_LOAD_FW
 
-python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --num_epochs_unet_backward $NUM_EPOCHS_UNET_BACKWARD --unet_save_path $UNET_SAVE_PATH --results_dir $RESULTS_DIR --train_model_backward
+python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --lr_unet $LR_UNET --num_epochs_unet_backward $NUM_EPOCHS_UNET_BACKWARD --unet_save_path $UNET_SAVE_PATH --results_dir $RESULTS_DIR --train_model_backward
 python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet 1 --results_dir $RESULTS_DIR --compute_similarity_metrics --unet_bw_weights_load $UNET_WEIGHTS_LOAD_BW
 mkdir -p "${EXPERIMENT_DIR}/all_proposals/backward"
 mv $UNET_WEIGHTS_BW_TO_SAVE1 "${EXPERIMENT_DIR}/all_proposals/backward"
@@ -66,7 +67,7 @@ for i in "4 4" "3 3" "2 2" "1 1" "4 3" "4 2" "4 1" "3 4" "3 2" "3 1" "2 4" "2 3"
    a=( $i )
    PROP_POS=${a[0]}
    PROP_NEG=${a[1]}
-   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --num_epochs_unet_forward $NUM_EPOCHS_UNET_FORWARD --unet_save_path $UNET_SAVE_PATH --results_dir $RESULTS_DIR --tasknet_weights_load $TASKNET_WEIGHTS_LOAD --prop_pos $PROP_POS --prop_neg $PROP_NEG
+   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --lr_unet $LR_UNET --num_epochs_unet_forward $NUM_EPOCHS_UNET_FORWARD --unet_save_path $UNET_SAVE_PATH --results_dir $RESULTS_DIR --tasknet_weights_load $TASKNET_WEIGHTS_LOAD --prop_pos $PROP_POS --prop_neg $PROP_NEG
    mkdir -p "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg/forward"
    cp $UNET_WEIGHTS_FW_TO_SAVE1 "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg/forward"
    mv $UNET_WEIGHTS_FW_TO_SAVE2 "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg/forward"
@@ -79,7 +80,7 @@ for i in "4 4" "3 3" "2 2" "1 1" "4 3" "4 2" "4 1" "3 4" "3 2" "3 1" "2 4" "2 3"
    
    python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --save_disturbed_dataset --unet_fw_weights_load $UNET_WEIGHTS_LOAD_FW
 
-   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --num_epochs_unet_backward $NUM_EPOCHS_UNET_BACKWARD --unet_save_path $UNET_SAVE_PATH --results_dir $RESULTS_DIR --train_model_backward
+   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --lr_unet $LR_UNET --num_epochs_unet_backward $NUM_EPOCHS_UNET_BACKWARD --unet_save_path $UNET_SAVE_PATH --results_dir $RESULTS_DIR --train_model_backward
    python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet 1 --results_dir $RESULTS_DIR --compute_similarity_metrics --unet_bw_weights_load $UNET_WEIGHTS_LOAD_BW
    mkdir -p "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg/backward"
    mv $UNET_WEIGHTS_BW_TO_SAVE1 "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg/backward"
