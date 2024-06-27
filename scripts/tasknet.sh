@@ -11,6 +11,7 @@ USE_DATASET_SUBSET=0
 
 NUM_EPOCHS_TASKNET=10
 BATCH_SIZE_TASKNET=8
+LR_TASKNET=1e-3
 
 TASKNET_WEIGHTS_FW_TO_SAVE1="${TASKNET_SAVE_PATH}_${NUM_EPOCHS_TASKNET}.pt"
 HALF_WAY=$((NUM_EPOCHS_TASKNET/2))
@@ -21,7 +22,7 @@ TASKNET_WEIGHTS_FW_TO_SAVE2="${TASKNET_SAVE_PATH}_${HALF_WAY}.pt"
 
 #If you want to use five classes, add flag --five_classes to all commands
 
-python3 main.py --train_tasknet --tasknet_save_path $TASKNET_SAVE_PATH --use_dataset_subset $USE_DATASET_SUBSET --num_epochs_tasknet $NUM_EPOCHS_TASKNET --batch_size_tasknet $BATCH_SIZE_TASKNET --results_dir $RESULTS_DIR
+python3 main.py --train_tasknet --tasknet_save_path $TASKNET_SAVE_PATH --use_dataset_subset $USE_DATASET_SUBSET --num_epochs_tasknet $NUM_EPOCHS_TASKNET --batch_size_tasknet $BATCH_SIZE_TASKNET --lr_tasknet $LR_TASKNET --results_dir $RESULTS_DIR
 mkdir -p "${EXPERIMENT_DIR}/tasknet"
 cp $TASKNET_WEIGHTS_FW_TO_SAVE1 "${EXPERIMENT_DIR}/tasknet"
 mv $TASKNET_WEIGHTS_FW_TO_SAVE2 "${EXPERIMENT_DIR}/tasknet"
