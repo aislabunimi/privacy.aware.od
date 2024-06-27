@@ -46,7 +46,7 @@ For running one of the scripts reported in next subsections, just use the comman
 ```bash
 scripts/{script_name}.sh
 ```
-where script_name is one of `tasknet.sh`, `tasknet_fiveclasses.sh`, `fw_bw_proposals.sh`, `five_classes.sh`, `finetune_tasknet.sh`.
+where {script_name} is one of `tasknet.sh`, `tasknet_fiveclasses.sh`, `fw_bw_proposals.sh`, `five_classes.sh`, `finetune_tasknet.sh`.
 
 ### Training Tasknet
 The `tasknet.sh` script is needed only if you want to train again the tasknet (the script `tasknet_fiveclasses.sh` is the corresponding one for five classes experiments).
