@@ -42,6 +42,12 @@ All the other options can be seen using `python3 main.py -h`. You may also use t
 
 Running `python3 plot_results.py -h` shows the possible options for the code containing the plot results.
 
+For running one of the scripts reported in next subsections, just use the command:
+```bash
+scripts/{script_name}.sh
+```
+where script_name is one of `tasknet.sh`, `tasknet_fiveclasses.sh`, `fw_bw_proposals.sh`, `five_classes.sh`, `finetune_tasknet.sh`.
+
 ### Training Tasknet
 The `tasknet.sh` script is needed only if you want to train again the tasknet (the script `tasknet_fiveclasses.sh` is the corresponding one for five classes experiments).
 The training loop is training tasknet, validation on batch=1 (needed for comparable results with testing), testing. The Tasknet training is done on a bigger dataset (all people of COCO dataset), while validation on the reduced indoor dataset used with proposals selection method.
