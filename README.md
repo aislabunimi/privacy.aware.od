@@ -32,15 +32,15 @@ It's suggested to use the helper scripts in the scripts folder for this project,
 With TASKNET we refer to a Faster R-CNN model, with UNET to an encoder decoder similar to the UNet in layers, but without the skip connections.
 
 Each scripts contains some variables. The ones that you may be interested in are:
-- USE_DATASET_SUBSET: default is 0, meaning all the samples from dataset will be used. If you want to train on a smaller set, you can specify a number: 1000 means you are training the model with 1000 images.
-- NUM_EPOCHS_{MODEL}: specifies the number of epochs. {MODEL} is either TASKNET or UNET.
-- BATCH_SIZE_{MODEL}: the batch size used. {MODEL} is either TASKNET or UNET.
-- LR_{MODEL}: the learning rate. {MODEL} is either TASKNET or UNET.
+- `USE_DATASET_SUBSET`: default is 0, meaning all the samples from dataset will be used. If you want to train on a smaller set, you can specify a number: 1000 means you are training the model with 1000 images.
+- `NUM_EPOCHS_{MODEL}`: specifies the number of epochs. {MODEL} is either TASKNET or UNET.
+- `BATCH_SIZE_{MODEL}`: the batch size used. {MODEL} is either TASKNET or UNET.
+- `LR_{MODEL}`: the learning rate. {MODEL} is either TASKNET or UNET.
 - The values of these variables in these scripts are the ones used in the results reported in the paper.
 
-All the other options can be seen using 'python3 main.py -h'. You may also use this file alone if you want, but it's highly unrecommended (it's easier to edit the .sh scripts).
+All the other options can be seen using `python3 main.py -h`. You may also use this file alone if you want, but it's highly unrecommended (it's easier to edit the .sh scripts).
 
-The plot_results.py file contains the code for plotting the results. Running with 'python3 plot_results.py -h' shows the possible options.
+Running `python3 plot_results.py -h` shows the possible options for the code containing the plot results.
 
 ### Training Tasknet
 The `tasknet.sh` script is needed only if you want to train again the tasknet (the script `tasknet_fiveclasses.sh` is the corresponding one for five classes experiments).
@@ -60,10 +60,10 @@ If you want to avoid the "all proposals" setting, you can just make a copy of th
 
 ### Training with Five Classes
 The script `five_classes.sh` contains the experiments with the settings used for five classes. This scripts has the same training loop of the script above. You can use it as it is, or modify it if you want to test with different proposals.
-You can also use the script `fw_bw_proposals.sh` with added flag --five_classes to all commands. In that case, it's best if you change the name of the folders where you save the results (change the name of the folder after ${EXPERIMENT_DIR}).
+You can also use the script `fw_bw_proposals.sh` by adding flag `--five_classes` to all commands in the script. In that case, it's best if you change the name of the folders where you save the results (change the name of the folder after `${EXPERIMENT_DIR}`).
 
 ### Finetuning Tasknet on UNet generated images
 The script `finetune_tasknet.sh` contains an example of how you can finetune the tasknet on the UNet generated images. The training loop is finetune tasknet, validation on batch=1, testing. To use this script, you need to have done before the UNet forward experiments with corresponding setting.
 The scripts does the finetuning with the settings: "all proposals, 2pos2neg, 1pos1neg". You can modify it based on your needs if you want to finetune on different settings:
 1. Set the UNET variable to the path of the desired forward weights
-2. Change the name of the folder after ${EXPERIMENT_DIR} for all the corresponding experiments till the next UNET variable appears in the script.
+2. Change the name of the folder after `${EXPERIMENT_DIR}` for all the corresponding experiments till the next UNET variable appears in the script.
