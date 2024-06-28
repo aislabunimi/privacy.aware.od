@@ -74,11 +74,11 @@ The scripts does the finetuning with the settings: "all proposals, 2pos2neg, 1po
 
 ### Plotting the Results
 For faster plotting of all experiments, you can use the scripts `plot.sh` or `plot_fiveclasses.sh` to plot example images from PascalVOC2012ValSet with 1class and 5class respectively.
-The scripts plots the following examples:
+The scripts plots the following files:
 1. For Tasknet: images contained in `examples`, in tasknet folder with the predictions.
 2. For the other experiments (including all proposals):
- 1. For forward weights: images contained in `forward/examples_fw`, reconstructed by the UNet forward with the predictions made by the Tasknet. In `forward/graphs_fw` you will find some graphs obtained from validation epochs.
- 2. For backward weights: images contained in `backward/examples_bw`, reconstructed by the UNet backward. In `backward/graphs_bw` you will find some graphs obtained from validation epochs.
+	1. For forward weights: images contained in `forward/examples_fw`, reconstructed by the UNet forward with the predictions made by the Tasknet. In `forward/graphs_fw` you will find some graphs obtained from validation epochs.
+	2. For backward weights: images contained in `backward/examples_bw`, reconstructed by the UNet backward. In `backward/graphs_bw` you will find some graphs obtained from validation epochs.
 
 Alternatively, you can run `python3 plot_results.py -h`, showing the possible options for the plotting.
 You can modify these bash scripts by adding the flag `--plot_my_test_data` if you want to plot examples with your own data, or trying other plotting methods.
