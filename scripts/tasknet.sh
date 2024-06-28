@@ -25,6 +25,7 @@ TASKNET_WEIGHTS_FW_TO_SAVE2="${TASKNET_SAVE_PATH}_${HALF_WAY}.pt"
 python3 main.py --train_tasknet --tasknet_save_path $TASKNET_SAVE_PATH --use_dataset_subset $USE_DATASET_SUBSET --num_epochs_tasknet $NUM_EPOCHS_TASKNET --batch_size_tasknet $BATCH_SIZE_TASKNET --lr_tasknet $LR_TASKNET --results_dir $RESULTS_DIR
 mkdir -p "${EXPERIMENT_DIR}/tasknet"
 cp $TASKNET_WEIGHTS_FW_TO_SAVE1 "${EXPERIMENT_DIR}/tasknet"
+mv "${EXPERIMENT_DIR}/tasknet/tasknet_${NUM_EPOCHS_TASKNET}.pt" "${EXPERIMENT_DIR}/tasknet/tasknet_1class.pt"
 mv $TASKNET_WEIGHTS_FW_TO_SAVE2 "${EXPERIMENT_DIR}/tasknet"
 mv $RESULTS_DIR "${EXPERIMENT_DIR}/tasknet/allpeople_val_results"
 echo "Completed Tasknet training"
@@ -40,3 +41,5 @@ echo "Completed Tasknet Indoor Validation with Batch Size 1"
 python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --test_tasknet --tasknet_weights_load $TASKNET_WEIGHTS_FW_TO_SAVE1 --results_dir $RESULTS_DIR
 mv $RESULTS_DIR "${EXPERIMENT_DIR}/tasknet/test_results"
 echo "Completed Tasknet test"
+
+mv $TASKNET_WEIGHTS_FW_TO_SAVE1 "${TASKNET_SAVE_PATH}_1class.pt" #rename needed for other scripts

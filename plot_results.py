@@ -21,21 +21,26 @@ def get_args_parser():
    parser.add_argument('--device', default='cuda', type=str, help='Device to use for experiments')
    
    #FOLDERS for input files and output filesa
-   parser.add_argument('--results_dir', default='results', type=str, help='Directory root for storing the results, logs and so on. WARNING: this folder and its contents will be deleted before starting next experiment, remember to backup the results! Also, be aware of the folder you choose: you may delete your whole system!')
+   parser.add_argument('--results_dir', default='results', type=str, help='Directory root containing the results')
    parser.add_argument('--save_dir', default='plotted_results', type=str, help='Directory root for storing the plotted results, logs and so on. WARNING: this folder and its contents will be deleted before starting next plotting! Also, be aware of the folder you choose: you may delete your whole system!')
    parser.add_argument('--test_data_dir', default='test_data', type=str, help='Directory root for the images to test (including subdirectories)')
-   #parser.add_argument('--ap_score_thresh', default=0.75, type=float, help='AP score threshold for computing AP in COCO')
+   parser.add_argument('--plot_my_test_data', action='store_true', default=False, help='If you want to test the model on your own data provided in the folder specified by test_data_dir parameter')
+   parser.add_argument('--pascal_dataset', default='dataset/pascalVOC2012/images', type=str, help='Directory root for the images from pascal dataset to use as test')
    
    #PATHS to weights
-   parser.add_argument('--unet_weights_forward', default='model_weights/model_fw_50.pt', type=str, help='Path to forward UNet weights')
-   parser.add_argument('--unet_weights_backward', default='model_weights/model_bw_80.pt', type=str, help='Path to backward UNet weights')
+   parser.add_argument('--unet_fw_weights_load', default='model_weights/model_fw_50.pt', type=str, help='Path to forward UNet weights')
+   parser.add_argument('--unet_bw_weights_load', default='model_weights/model_bw_80.pt', type=str, help='Path to backward UNet weights')
    parser.add_argument('--tasknet_weights_load', default='tasknet_weights/tasknet_10.pt', type=str, help='Path to Tasknet weights to load if resuming training or training the UNet')
    
    #FLAGS FOR CHANGING TRAINING BEHAVIOR
    parser.add_argument('--all_classes', action='store_true', default=False, help='If the experiments were executed with all classes, you need to set to True this flag to compute correct metric values and showing the labels in the plotted images')
    parser.add_argument('--five_classes', action='store_true', default=False, help='If the experiments were executed with all classes, using "cat dog horse sheep cow" as classes')
-   parser.add_argument('--plot_only_bw_img', action='store_true', default=False, help='If you want to plot only the backward images')
-   parser.add_argument('--plot_fw_along_bw', action='store_false', default=True, help='If you want to plot forward image (defined by unet_weights_forward, with tasknet prediction) with alongside the backward reconstruction model (defined by unet_weights_backward). If this flag is false, you should provide another weight in \'unet_weights_backward\' that is instead a forward weight')
+   parser.add_argument('--plot_only_bw_img', action='store_true', default=False, help='If you want to plot only the backward images reconstructed by an attacker')
+   parser.add_argument('--plot_fw_along_bw', action='store_false', default=True, help='If you want to plot forward image (defined by unet_fw_weights_load, with tasknet prediction) with alongside the backward reconstruction model (defined by unet_fw_weights_load). If this flag is false, you should provide another weight in \'unet_bw_weights_load\' that is instead a forward weight')
+   parser.add_argument('--plot_single_image', action='store_true', default=False, help='If you want to plot only the image alone')
+   parser.add_argument('--plot_tasknet', action='store_true', default=False, help='Parameter used in combinations with plot_single_image. If you want to plot only the image with the prediction of the Tasknet')
+   parser.add_argument('--plot_fw', action='store_true', default=False, help='Parameter used in combinations with plot_single_image. If you want to plot only the forward reconstructed image with the prediction of the Tasknet')
+   parser.add_argument('--plot_bw', action='store_true', default=False, help='Parameter used in combinations with plot_single_image. If you want to plot only the backward reconstructed image')
    
    return parser
 
@@ -54,7 +59,10 @@ def main(args):
    weights = FasterRCNN_ResNet50_FPN_Weights.DEFAULT  
    tasknet = fasterrcnn_resnet50_fpn_custom(weights=weights, progress=False, use_resize=args.all_classes) #Default Tasknet
    if not args.all_classes:
-      num_classes = 2  # 1 class (person) + background
+      if args.five_classes:
+         num_classes = 6
+      else:
+         num_classes = 2
       in_features = tasknet.roi_heads.box_predictor.cls_score.in_features
       tasknet.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
    tasknet.to(args.device)
@@ -63,7 +71,7 @@ def main(args):
    #loading weights
    if not args.all_classes:
       load_checkpoint(tasknet, args.tasknet_weights_load, tasknet_optimizer, tasknet_scheduler)
-   load_checkpoint(unet, args.unet_weights_forward, unet_optimizer, unet_scheduler)
+   load_checkpoint(unet, args.unet_fw_weights_load, unet_optimizer, unet_scheduler)
    
    #Creating some paths and folders used later
    if os.path.exists(args.save_dir):
@@ -72,11 +80,20 @@ def main(args):
    
    custom_metric_file_list=[f'{args.results_dir}/iou0.5_score0.5.json', f'{args.results_dir}/iou0.5_score0.75.json', f'{args.results_dir}/iou0.75_score0.5.json', f'{args.results_dir}/iou0.75_score0.75.json']
    custom_metric_file_save_list=[f'{args.save_dir}/iou0.5_score0.5.png', f'{args.save_dir}/iou0.5_score0.75.png', f'{args.save_dir}/iou0.75_score0.5.png', f'{args.save_dir}/iou0.75_score0.75.png']
+   
    extensions = ('.jpg', '.jpeg', '.png', '.gif', '.bmp')
-   image_name_list = [os.path.relpath(os.path.join(root, file), args.test_data_dir)
-                   for root, dirs, files in os.walk(args.test_data_dir)
+   if args.plot_my_test_data:
+      data_dir = args.test_data_dir
+      image_name_list = [os.path.relpath(os.path.join(root, file), data_dir)
+                   for root, dirs, files in os.walk(data_dir)
                    for file in files 
                    if file.lower().endswith(extensions)]
+   else:
+      data_dir = args.pascal_dataset
+      if args.five_classes:
+         image_name_list = ['2007_000027.jpg', '2007_000272.jpg']
+      else:
+         image_name_list = ['2007_000027.jpg', '2007_000272.jpg', '2007_000323.jpg', '2007_000346.jpg', '2007_000480.jpg', '2007_000733.jpg', '2007_000999.jpg', '2007_001185.jpg', '2007_001284.jpg', '2007_001583.jpg', '2007_001717.jpg', '2007_002142.jpg', '2007_002293.jpg', '2007_002624.jpg', '2007_003091.jpg', '2007_003541.jpg', '2007_003580.jpg', '2007_003581.jpg', '2007_003831.jpg', '2007_004000.jpg', '2007_004289.jpg', '2007_004476.jpg']
    
    #LOSS, MS_SSIM, LPIPS, MY RECONS CLASSIFIER, RECON REGRESSOR, CUSTOM METRIC
    from plot_utils.plot_similarity_metric import plot_sim_metric
@@ -115,26 +132,30 @@ def main(args):
       os.remove('{args.results_dir}/temp.txt')
    
    #Image Samples plotting
-   if args.plot_only_bw_img: #ACTUALLY DOESN'T PLOT BW IMAGES BUT RECONS ONE
-      #show_res_test_unet(unet, tasknet, device, 'plot/val.jpg', True, 'plot/reconstructed_person.png')
-      #load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler)
-      load_checkpoint(unet, args.unet_weights_backward, unet_optimizer, unet_scheduler)
+   if args.plot_only_bw_img: #PLOT RECONS IMAGES FROM FW ONE
       for img in image_name_list:
-         image_path=f'{args.test_data_dir}/{img}'
+         image_path=f'{data_dir}/{img}'
          image_save_name=f'{args.save_dir}/{img}'
-         save_disturbed_pred(unet, args.device, image_path, image_save_name, args.unet_weights_forward, args.unet_weights_backward, unet_optimizer, unet_scheduler)
+         save_disturbed_pred(unet, args.device, image_path, image_save_name, args.unet_fw_weights_load, args.unet_bw_weights_load, unet_optimizer, unet_scheduler)
          plt.clf()
-
       if os.path.exists('temp_for_backward.jpg'):
          os.remove('temp_for_backward.jpg')
-
+   
+   elif args.plot_single_image:
+      for img in image_name_list:
+         image_path=f'{data_dir}/{img}'
+         image_save_name=f'{args.save_dir}/{img}'
+         plot_single_image(args.plot_fw_along_bw, unet, tasknet, args.device, image_path, image_save_name, args.unet_fw_weights_load, args.unet_bw_weights_load, unet_optimizer, unet_scheduler, args.all_classes, args.five_classes, args.plot_tasknet, args.plot_fw, args.plot_bw)
+         plt.clf()   
+      if os.path.exists('temp_for_backward.jpg'):
+         os.remove('temp_for_backward.jpg')
+   
    else:
       for img in image_name_list:
-         image_path=f'{args.test_data_dir}/{img}'
+         image_path=f'{data_dir}/{img}'
          image_save_name=f'{args.save_dir}/{img}'
-         compare_two_results_unet(args.plot_fw_along_bw, unet, tasknet, args.device, image_path, image_save_name, args.unet_weights_forward, args.unet_weights_backward, unet_optimizer, unet_scheduler, args.all_classes, args.five_classes)
-         plt.clf()
-         
+         compare_two_results_unet(args.plot_fw_along_bw, unet, tasknet, args.device, image_path, image_save_name, args.unet_fw_weights_load, args.unet_bw_weights_load, unet_optimizer, unet_scheduler, args.all_classes, args.five_classes)
+         plt.clf() 
       if os.path.exists('temp_for_backward.jpg'):
          os.remove('temp_for_backward.jpg')
       
