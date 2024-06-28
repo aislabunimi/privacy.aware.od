@@ -87,7 +87,7 @@ def get_transform():
 def plot_results(img, labels, prob, boxes, all_classes, five_classes):
     #plt.figure(figsize=(16,10))
     #cat, dog, horse, sheep, cow
-    COCO_5_CLASSES=['__background__', 'cat', 'dog', 'horse', 'sheep', 'cow']
+    COCO_5_CLASSES=['__background__', 'bicycle', 'airplane', 'bus', 'train', 'boat']
     COCO_91_CLASSES=[
     '__background__', 
     'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
@@ -120,6 +120,7 @@ def plot_results(img, labels, prob, boxes, all_classes, five_classes):
            else:
               text = f'{p:0.3f}'
            ax.text(xmin, ymin, text, fontsize=15, bbox=dict(facecolor='yellow', alpha=0.5))
+    return
 
 
 def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device, img_file_path, name_path_save, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler, all_classes, five_classes): 
@@ -168,7 +169,7 @@ def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device
       name = os.path.splitext(filename)[0]	
    
    plt.title(f'{name}', fontsize=20)
-   plot_results(out_to_plot, nms_pred['labels'], nms_pred_recon['scores'], nms_pred_recon['boxes'], all_classes, five_classes)
+   plot_results(out_to_plot, nms_pred_recon['labels'], nms_pred_recon['scores'], nms_pred_recon['boxes'], all_classes, five_classes)
    plt.subplot(1, 3, 3)
    load_checkpoint(unet, unet_weights_to_compare, unet_optimizer, unet_scheduler)
 
@@ -190,7 +191,6 @@ def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device
       nms_pred_recon = apply_nms(pred_recon, iou_thresh=0.5)
       filename = os.path.basename(unet_weights_to_compare)
       name = os.path.splitext(filename)[0]
-   
    out_to_plot = unnormalize(out)
    out_to_plot = torch.clamp(out_to_plot, min=0, max=1)
    plt.title(f'{name}', fontsize=20)
@@ -200,7 +200,76 @@ def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device
    if not os.path.exists(directory):
       os.makedirs(directory)
    plt.savefig(name_path_save, format='png', bbox_inches='tight')
-   plt.clf()
+   plt.close()
+   
+def plot_single_image(print_forward_along_backward, unet, tasknet, device, img_file_path, name_path_save, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler, all_classes, five_classes, plot_tasknet, plot_fw, plot_bw): 
+   unet.eval()
+   tasknet.eval()
+   mean = torch.tensor([0.485, 0.456, 0.406])
+   std = torch.tensor([0.229, 0.224, 0.225])
+   unnormalize = transforms.Normalize((-mean / std).tolist(), (1.0 / std).tolist())   
+   image = Image.open(img_file_path).convert("RGB")
+   eval_transform = get_transform()
+   img = eval_transform(image)
+   img = img.unsqueeze(0)
+   img = img.to(device)
+   img, _ = resize(img, None, 256) #simulating validation first size 
+   plt.figure(figsize=(8, 6))
+   
+   if plot_tasknet:
+      res_tasknet = tasknet(img)
+      img_primo_plot = img.squeeze(0)
+      img_primo_plot = unnormalize(img_primo_plot)
+      nms_pred = apply_nms(res_tasknet[0], iou_thresh=0.5) #saving last bboxes
+      plot_results(img_primo_plot, nms_pred['labels'], nms_pred['scores'], nms_pred['boxes'], all_classes, five_classes)
+      directory = os.path.dirname(name_path_save)
+      if not os.path.exists(directory):
+         os.makedirs(directory)
+      plt.savefig(name_path_save, format='png', bbox_inches='tight')
+      plt.close()
+      return
+   
+   load_checkpoint(unet, unet_weights_load, unet_optimizer, unet_scheduler)
+   out = unet(img)
+   trans_r = transforms.Resize((out.shape[2], out.shape[3]), antialias=False)
+   orig_img_r = trans_r(img)
+   orig_img = unnormalize(orig_img_r)
+   
+   out_to_plot = unnormalize(out)
+   out_to_plot = torch.clamp(out_to_plot, min=0, max=1)
+   if plot_fw:
+      reconstructed = tasknet(out)
+      pred_recon = reconstructed[0]
+      nms_pred_recon = apply_nms(pred_recon, iou_thresh=0.5, score_thresh=0.75) 
+      filename = os.path.basename(unet_weights_load)
+      name = os.path.splitext(filename)[0]
+      plot_results(out_to_plot, nms_pred_recon['labels'], nms_pred_recon['scores'], nms_pred_recon['boxes'], all_classes, five_classes)
+      directory = os.path.dirname(name_path_save)
+      if not os.path.exists(directory):
+         os.makedirs(directory)
+      plt.savefig(name_path_save, format='png', bbox_inches='tight')
+      plt.close()
+      return
+      
+   if plot_bw:
+      load_checkpoint(unet, unet_weights_to_compare, unet_optimizer, unet_scheduler)
+      filename = os.path.basename(unet_weights_load)
+      save_image(out_to_plot, 'temp_for_backward.jpg')
+      image = Image.open('temp_for_backward.jpg').convert("RGB")
+      img = eval_transform(image)
+      img = img.unsqueeze(0)
+      img = img.to(device)
+      img, _ = resize(img, None, 256)
+      out = unet(img)
+      out_to_plot = unnormalize(out)
+      out_to_plot = torch.clamp(out_to_plot, min=0, max=1)
+      plot_results(out_to_plot, None, None, None, all_classes, five_classes)
+      directory = os.path.dirname(name_path_save)
+      if not os.path.exists(directory):
+         os.makedirs(directory)
+      plt.savefig(name_path_save, format='png', bbox_inches='tight')
+      plt.close()
+   return
 
 from torchvision.utils import save_image
 def save_disturbed_pred(unet, device, img_file_path, name_path_save, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler):
