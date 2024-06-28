@@ -36,6 +36,7 @@ def get_args_parser():
    parser.add_argument('--all_classes', action='store_true', default=False, help='If the experiments were executed with all classes, you need to set to True this flag to compute correct metric values and showing the labels in the plotted images')
    parser.add_argument('--five_classes', action='store_true', default=False, help='If the experiments were executed with all classes, using "cat dog horse sheep cow" as classes')
    parser.add_argument('--plot_only_bw_img', action='store_true', default=False, help='If you want to plot only the backward images reconstructed by an attacker')
+   parser.add_argument('--plot_two_unet', action='store_false', default=False, help='If you want to plot original image with tasknet preds, forward image (defined by unet_fw_weights_load, with tasknet prediction) with alongside the backward reconstruction model (defined by unet_fw_weights_load)')
    parser.add_argument('--plot_fw_along_bw', action='store_false', default=True, help='If you want to plot forward image (defined by unet_fw_weights_load, with tasknet prediction) with alongside the backward reconstruction model (defined by unet_fw_weights_load). If this flag is false, you should provide another weight in \'unet_bw_weights_load\' that is instead a forward weight')
    parser.add_argument('--plot_single_image', action='store_true', default=False, help='If you want to plot only the image alone')
    parser.add_argument('--plot_tasknet', action='store_true', default=False, help='Parameter used in combinations with plot_single_image. If you want to plot only the image with the prediction of the Tasknet')
@@ -98,8 +99,9 @@ def main(args):
    #LOSS, MS_SSIM, LPIPS, MY RECONS CLASSIFIER, RECON REGRESSOR, CUSTOM METRIC
    from plot_utils.plot_similarity_metric import plot_sim_metric
    plot_model_loss(f'{args.results_dir}/loss_log.txt', f'{args.save_dir}/loss.png') #loss
-   plot_sim_metric(f"{args.results_dir}/ms_ssim_score_log.txt", f'{args.save_dir}/ms_ssim_score.png', 'MS_SSIM score', 'MS_SSIM score Over Epochs')
-   plot_sim_metric(f"{args.results_dir}/lpips_score_log.txt", f"{args.save_dir}/lpips_score.png", 'LPIPS score', 'LPIPS score Over Epochs')
+   plot_sim_metric(f'{args.results_dir}/only_val_loss_log_batch1.txt', f'{args.save_dir}/loss.png', 'Loss', 'Loss Over Epochs')
+   plot_sim_metric(f"{args.results_dir}/ms_ssim_score_log_batch1.txt", f'{args.save_dir}/ms_ssim_score.png', 'MS_SSIM score', 'MS_SSIM score Over Epochs')
+   plot_sim_metric(f"{args.results_dir}/lpips_score_log_batch1.txt", f"{args.save_dir}/lpips_score.png", 'LPIPS score', 'LPIPS score Over Epochs')
    
    plot_custom_metric(custom_metric_file_list, custom_metric_file_save_list, args.all_classes, args.five_classes)
    
@@ -108,7 +110,7 @@ def main(args):
    #Contains Output AP Files
    ap_output_names = [f'{args.save_dir}/standard_ap.png', f'{args.save_dir}/standard_ap_iou50.png', f'{args.save_dir}/standard_ap_iou75.png', f'{args.save_dir}/standard_ap_scoreabovethresh.png', f'{args.save_dir}/standard_ap_scoreabovethresh_iou50.png', f'{args.save_dir}/standard_ap_scoreabovethresh_iou75.png']
    #Contains Flag for extraction, to True if it is standard AP COCO
-   std_ap = [True, True, True, False, False], False
+   std_ap = [True, True, True, False, False, False]
    #Contains values for extraction, used to grab the right AP and AR with certain IoU threshold
    coco_iou_modified = [False, 50, 75, False, 50, 75]
    #Contains comparison AP value of Tasknet or any other model (you can compare with another UNet experiment if wanted)
@@ -127,9 +129,9 @@ def main(args):
          os.remove('{args.results_dir}/temp.txt')
    
    #COMPARISON BETWEEN APs
-   plot_compare_between_two_ap(f'{args.results_dir}/ext_standard_ap2.txt', f'{args.results_dir}/ext_standard_ap.txt', ap_model_name='Unet2', ap_to_compare_model_name='Unet', plotted_comparison_save_path=f'{args.save_dir}/compare_AP.png', ap_plot_title='(IoU=0.75, area=all, maxDets=100) AP, AR Over Epochs')
-   if os.path.exists('{args.results_dir}/temp.txt'):
-      os.remove('{args.results_dir}/temp.txt')
+   #plot_compare_between_two_ap(f'{args.results_dir}/ext_standard_ap2.txt', f'{args.results_dir}/ext_standard_ap.txt', ap_model_name='Unet2', ap_to_compare_model_name='Unet', plotted_comparison_save_path=f'{args.save_dir}/compare_AP.png', ap_plot_title='(IoU=0.75, area=all, maxDets=100) AP, AR Over Epochs')
+   #if os.path.exists('{args.results_dir}/temp.txt'):
+   #   os.remove('{args.results_dir}/temp.txt')
    
    #Image Samples plotting
    if args.plot_only_bw_img: #PLOT RECONS IMAGES FROM FW ONE
@@ -150,7 +152,7 @@ def main(args):
       if os.path.exists('temp_for_backward.jpg'):
          os.remove('temp_for_backward.jpg')
    
-   else:
+   elif args.plot_two_unet:
       for img in image_name_list:
          image_path=f'{data_dir}/{img}'
          image_save_name=f'{args.save_dir}/{img}'

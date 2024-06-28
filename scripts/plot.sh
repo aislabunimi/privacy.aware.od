@@ -29,9 +29,18 @@ python3 plot_results.py --tasknet_weights_load $TASKNET --unet_fw_weights_load "
 mv $SAVE_DIR "${EXPERIMENT_DIR}/all_proposals/forward/examples_fw"
 echo "Completed all_proposals forward example saving"
 
+python3 plot_results.py --tasknet_weights_load $TASKNET --unet_fw_weights_load "${EXPERIMENT_DIR}/all_proposals/forward/${UNET_FW}" --unet_bw_weights_load "${EXPERIMENT_DIR}/all_proposals/backward/${UNET_BW}" --results_dir "${EXPERIMENT_DIR}/all_proposals/forward/results_fw" --save_dir $SAVE_DIR --pascal_dataset $PASCAL_SET
+mv $SAVE_DIR "${EXPERIMENT_DIR}/all_proposals/forward/graphs_fw"
+echo "Completed all_proposals forward graphs saving"
+
 python3 plot_results.py --tasknet_weights_load $TASKNET --unet_fw_weights_load "${EXPERIMENT_DIR}/all_proposals/forward/${UNET_FW}" --unet_bw_weights_load "${EXPERIMENT_DIR}/all_proposals/backward/${UNET_BW}" --results_dir $RESULTS_DIR --save_dir $SAVE_DIR --plot_single_image --plot_bw --pascal_dataset $PASCAL_SET
 mv $SAVE_DIR "${EXPERIMENT_DIR}/all_proposals/backward/examples_bw"
 echo "Completed all_proposals backward example saving"
+
+python3 plot_results.py --tasknet_weights_load $TASKNET --unet_fw_weights_load "${EXPERIMENT_DIR}/all_proposals/forward/${UNET_FW}" --unet_bw_weights_load "${EXPERIMENT_DIR}/all_proposals/backward/${UNET_BW}" --results_dir "${EXPERIMENT_DIR}/all_proposals/backward/results_bw" --save_dir $SAVE_DIR --pascal_dataset $PASCAL_SET
+mv $SAVE_DIR "${EXPERIMENT_DIR}/all_proposals/backward/graphs_bw"
+echo "Completed all_proposals backward graphs saving"
+
 
 for i in "4 4" "3 3" "2 2" "1 1" "4 3" "4 2" "4 1" "3 4" "3 2" "3 1" "2 4" "2 3" "2 1" "1 4" "1 3" "1 2" "1 0" "2 0" "3 0" "4 0"; do
    a=( $i )
@@ -42,7 +51,15 @@ for i in "4 4" "3 3" "2 2" "1 1" "4 3" "4 2" "4 1" "3 4" "3 2" "3 1" "2 4" "2 3"
    mv $SAVE_DIR "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg/forward/examples_fw"
    echo "Completed ${PROP_POS}pos${PROP_NEG}neg forward example saving"
    
+   python3 plot_results.py --tasknet_weights_load $TASKNET --unet_fw_weights_load "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg/forward/${UNET_FW}" --unet_bw_weights_load "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg/backward/${UNET_BW}" --results_dir "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg/forward/results_fw" --save_dir $SAVE_DIR --pascal_dataset $PASCAL_SET
+   mv $SAVE_DIR "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg/forward/graphs_fw"
+   echo "Completed ${PROP_POS}pos${PROP_NEG}neg forward graphs saving"
+   
    python3 plot_results.py --tasknet_weights_load $TASKNET --unet_fw_weights_load "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg/forward/${UNET_FW}" --unet_bw_weights_load "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg/backward/${UNET_BW}" --results_dir $RESULTS_DIR --save_dir $SAVE_DIR --plot_single_image --plot_bw --pascal_dataset $PASCAL_SET
    mv $SAVE_DIR "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg/backward/examples_bw"
    echo "Completed ${PROP_POS}pos${PROP_NEG}neg backward example saving"
+   
+   python3 plot_results.py --tasknet_weights_load $TASKNET --unet_fw_weights_load "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg/forward/${UNET_FW}" --unet_bw_weights_load "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg/backward/${UNET_BW}" --results_dir "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg/backward/results_bw" --save_dir $SAVE_DIR --pascal_dataset $PASCAL_SET
+   mv $SAVE_DIR "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg/backward/graphs_bw"
+   echo "Completed ${PROP_POS}pos${PROP_NEG}neg backward graphs saving"
 done

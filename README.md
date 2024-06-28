@@ -40,8 +40,6 @@ Each scripts contains some variables. The ones that you may be interested in are
 
 All the other options can be seen using `python3 main.py -h`. You may also use this file alone if you want, but it's highly unrecommended (it's easier to edit the .sh scripts).
 
-Running `python3 plot_results.py -h` shows the possible options for the code containing the plot results.
-
 For running one of the scripts reported in next subsections, just use the command:
 ```bash
 scripts/{script_name}.sh
@@ -73,3 +71,14 @@ The script `finetune_tasknet.sh` contains an example of how you can finetune the
 The scripts does the finetuning with the settings: "all proposals, 2pos2neg, 1pos1neg". You can modify it based on your needs if you want to finetune on different settings:
 1. Set the UNET variable to the path of the desired forward weights
 2. Change the name of the folder after `${EXPERIMENT_DIR}` for all the corresponding experiments till the next UNET variable appears in the script.
+
+### Plotting the Results
+For faster plotting of all experiments, you can use the scripts `plot.sh` or `plot_fiveclasses.sh` to plot example images from PascalVOC2012ValSet with 1class and 5class respectively.
+The scripts plots the following examples:
+1. For Tasknet: images contained in `examples`, in tasknet folder with the predictions.
+2. For the other experiments (including all proposals):
+ 1. For forward weights: images contained in `forward/examples_fw`, reconstructed by the UNet forward with the predictions made by the Tasknet. In `forward/graphs_fw` you will find some graphs obtained from validation epochs.
+ 2. For backward weights: images contained in `backward/examples_bw`, reconstructed by the UNet backward. In `backward/graphs_bw` you will find some graphs obtained from validation epochs.
+
+Alternatively, you can run `python3 plot_results.py -h`, showing the possible options for the plotting.
+You can modify these bash scripts by adding the flag `--plot_my_test_data` if you want to plot examples with your own data, or trying other plotting methods.

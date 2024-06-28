@@ -3,52 +3,12 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 import os
 import re
-"""
-def plot_custom_metric(file_list, file_save_list):
-   #list containing all files from custom metric
-   for file_path, file_save in zip(file_list, file_save_list):
-      pattern = r'([0-9]+\.[0-9]+)'
-      matches = re.findall(pattern, file_path)
-      iou_value = float(matches[0])
-      score_value = float(matches[1])
-      if not os.path.exists(file_path):
-         print(f"The file '{file_path}' was not found. Skipping relative custom metric plotting.")
-         plt.close()
-         return
-      with open(file_path, 'r') as json_file:
-         data = json.load(json_file)
-      #getting data, calculating percentage of tp, fp and fpiou over total_detections
-      epochs = [entry['epoch'] for entry in data]
-      total_detections = [entry['total_detections'] for entry in data]
-      TP_percentage = [(entry['TP'] / entry['total_detections']) if entry['total_detections'] != 0 else 0 for entry in data]
-      #FP_percentage = [(entry['FP'] / entry['total_detections']) for entry in data]
-      #FP doesn't exist as I only have one class
-      TPm_percentage = [(entry['TPm'] / entry['total_detections']) if entry['total_detections'] != 0 else 0 for entry in data]
-      FPiou_percentage = [(entry['FPiou'] / entry['total_detections']) if entry['total_detections'] != 0 else 0 for entry in data]
-      #plotting now the curves
-      plt.figure(figsize=(15, 10))
-      plt.plot(epochs, TP_percentage, label='TP', color='blue', linewidth=3.0)
-      plt.plot(epochs, TPm_percentage, label='TPm', color='green', linewidth=3.0)
-      plt.plot(epochs, FPiou_percentage, label='FPiou', color='red', linewidth=3.0)
-      #label and titles
-      plt.xlabel('Epoch', fontsize=30, fontweight='bold')
-      plt.ylabel('Value', fontsize=30, fontweight='bold')
-      plt.title(f'(IoU={iou_value}, Score={score_value}) TP, TPm, FPiou Over Epochs', fontsize=29, fontweight='bold')
-      #settings epoch axis to have only discrete values
-      ax = plt.gca()
-      ax.tick_params(axis='both', which='major', labelsize=35)
-      ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-      #saving
-      legend = plt.legend(loc='best', framealpha=0.5, fontsize=28)
-      plt.grid(True)
-      plt.savefig(file_save, format='png', bbox_inches='tight')
-      plt.clf()
-"""
+
 def plot_custom_metric(file_list, file_save_list, all_classes, five_classes):
    #list containing all files from custom metric
    for file_path, file_save in zip(file_list, file_save_list):
       pattern = r'([0-9]+\.[0-9]+)'
-      matches = re.findall(pattern, file_path)
+      matches = re.findall(pattern, file_save)
       iou_value = float(matches[0])
       score_value = float(matches[1])
       if not os.path.exists(file_path):
@@ -74,12 +34,12 @@ def plot_custom_metric(file_list, file_save_list, all_classes, five_classes):
       curve_dict_FPm={}
       curve_dict_FPiou={}
       for i in valid_labels:
-         total_detections = [entry[i]['total_detections'] for entry in data]
-         TP_percentage = [(entry[i]['TP'] / entry[i]['total_detections']) if entry[i]['total_detections'] != 0 else 0 for entry in data]
-         FP_percentage = [(entry[i]['FP'] / entry[i]['total_detections']) if entry[i]['total_detections'] != 0 else 0 for entry in data]
-         TPm_percentage = [(entry[i]['TPm'] / entry[i]['total_detections']) if entry[i]['total_detections'] != 0 else 0 for entry in data]
-         FPm_percentage = [(entry[i]['FPm'] / entry[i]['total_detections']) if entry[i]['total_detections'] != 0 else 0 for entry in data]
-         FPiou_percentage = [(entry[i]['FPiou'] / entry[i]['total_detections']) if entry[i]['total_detections'] != 0 else 0 for entry in data]
+         #total_detections = [entry[i]['total_positives'] for entry in data]
+         TP_percentage = [(entry[i]['TP'] / entry[i]['total_positives']) if entry[i]['total_detections'] != 0 else 0 for entry in data]
+         FP_percentage = [(entry[i]['FP'] / entry[i]['total_positives']) if entry[i]['total_detections'] != 0 else 0 for entry in data]
+         TPm_percentage = [(entry[i]['TPm'] / entry[i]['total_positives']) if entry[i]['total_detections'] != 0 else 0 for entry in data]
+         FPm_percentage = [(entry[i]['FPm'] / entry[i]['total_positives']) if entry[i]['total_detections'] != 0 else 0 for entry in data]
+         FPiou_percentage = [(entry[i]['FPiou'] / entry[i]['total_positives']) if entry[i]['total_detections'] != 0 else 0 for entry in data]
          curve_dict_TP[i]=TP_percentage
          curve_dict_TPm[i]=TPm_percentage
          curve_dict_FP[i]=FP_percentage
@@ -117,8 +77,8 @@ def plot_custom_metric(file_list, file_save_list, all_classes, five_classes):
       plt.figure(figsize=(15, 10))
       plt.plot(epochs, TP_curve, label='TP', color='blue', linewidth=3.0)
       plt.plot(epochs, FP_curve, label='FP', color='red', linewidth=3.0)
-      plt.plot(epochs, TPm_curve, label='TPm', color='green', linewidth=3.0)
-      plt.plot(epochs, FPm_curve, label='FPm', color='orange', linewidth=3.0)
+      #plt.plot(epochs, TPm_curve, label='TPm', color='green', linewidth=3.0) #less important
+      #plt.plot(epochs, FPm_curve, label='FPm', color='orange', linewidth=3.0)
       plt.plot(epochs, FPiou_curve, label='FPiou', color='black', linewidth=3.0)
       #label and titles
       plt.xlabel('Epoch', fontsize=30, fontweight='bold')
