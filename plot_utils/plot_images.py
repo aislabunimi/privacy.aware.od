@@ -119,7 +119,8 @@ def plot_results(img, labels, prob, boxes, all_classes, five_classes):
               text = f'{label_name} {p:0.3f}'
            else:
               text = f'{p:0.3f}'
-           ax.text(xmin, ymin, text, fontsize=15, bbox=dict(facecolor='yellow', alpha=0.5))
+           font_kwargs = dict(fontfamily="monospace", fontweight="bold", fontsize=20)
+           ax.text(xmin, ymin, text, **font_kwargs, bbox=dict(facecolor='yellow', alpha=0.5))
     return
 
 
@@ -199,7 +200,10 @@ def compare_two_results_unet(print_forward_along_backward, unet, tasknet, device
    directory = os.path.dirname(name_path_save)
    if not os.path.exists(directory):
       os.makedirs(directory)
-   plt.savefig(name_path_save, format='png', bbox_inches='tight')
+   new_ext="png"
+   root, ext = os.path.splitext(name_path_save)
+   path_save = f"{root}.{new_ext}"
+   plt.savefig(path_save, format=new_ext, bbox_inches='tight')
    plt.close()
    
 def plot_single_image(print_forward_along_backward, unet, tasknet, device, img_file_path, name_path_save, unet_weights_load, unet_weights_to_compare, unet_optimizer, unet_scheduler, all_classes, five_classes, plot_tasknet, plot_fw, plot_bw): 
@@ -225,7 +229,10 @@ def plot_single_image(print_forward_along_backward, unet, tasknet, device, img_f
       directory = os.path.dirname(name_path_save)
       if not os.path.exists(directory):
          os.makedirs(directory)
-      plt.savefig(name_path_save, format='png', bbox_inches='tight')
+      new_ext="png"
+      root, ext = os.path.splitext(name_path_save)
+      path_save = f"{root}.{new_ext}"
+      plt.savefig(path_save, format=new_ext, bbox_inches='tight')
       plt.close()
       return
    
@@ -247,7 +254,10 @@ def plot_single_image(print_forward_along_backward, unet, tasknet, device, img_f
       directory = os.path.dirname(name_path_save)
       if not os.path.exists(directory):
          os.makedirs(directory)
-      plt.savefig(name_path_save, format='png', bbox_inches='tight')
+      new_ext="png"
+      root, ext = os.path.splitext(name_path_save)
+      path_save = f"{root}.{new_ext}"
+      plt.savefig(path_save, format=new_ext, bbox_inches='tight')
       plt.close()
       return
       
@@ -267,7 +277,10 @@ def plot_single_image(print_forward_along_backward, unet, tasknet, device, img_f
       directory = os.path.dirname(name_path_save)
       if not os.path.exists(directory):
          os.makedirs(directory)
-      plt.savefig(name_path_save, format='png', bbox_inches='tight')
+      new_ext="png"
+      root, ext = os.path.splitext(name_path_save)
+      path_save = f"{root}.{new_ext}"
+      plt.savefig(path_save, format=new_ext, bbox_inches='tight')
       plt.close()
    return
 
