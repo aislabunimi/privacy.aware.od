@@ -86,7 +86,7 @@ class FasterRCNN(GeneralizedRCNN):
         rpn_use_custom_filter_anchors=False, #To activate filter anchors custom
         rpn_n_top_pos_to_keep=1, #How many top positive anchors to keep for each gt
         rpn_n_top_neg_to_keep=5, #How many top negative anchors to keep for each gt
-        rpn_n_top_bg_to_keep=1, #How many top background anchors to keep for each gt
+        rpn_n_top_bg_to_keep=0, #How many top background anchors to keep for each gt
         rpn_objectness_bg_thresh=0.0, #Threshold to pick only background anchors with high obj score
 	box_use_custom_filter_proposals_objectness=False, #To activate filter proposal custom based on objectness
 	box_use_custom_filter_proposals_scores=False, #To activate filter proposal custom based on class score

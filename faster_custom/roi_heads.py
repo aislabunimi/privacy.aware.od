@@ -201,13 +201,13 @@ class RoIHeads(nn.Module):
             if gt_boxes_in_image.numel() == 0:
                 # Background image
                 device = proposals_in_image.device
-                #I keep highest scoring self.n_top_neg_to_keep if i have a background image
+                #I keep highest scoring self.n_top_bg_to_keep if i have a background image
                 my_clamped = torch.zeros(
-                    (self.n_top_neg_to_keep), dtype=torch.int64, device=device
+                    (self.n_top_bg_to_keep), dtype=torch.int64, device=device
                 )
-                my_labels = torch.zeros((self.n_top_neg_to_keep), dtype=torch.int64, device=device)
+                my_labels = torch.zeros((self.n_top_bg_to_keep), dtype=torch.int64, device=device)
                 #By default proposals are ordered by objectness score, I can just keep directly first n proposals
-                tensor_taken = torch.arange((self.n_top_neg_to_keep), dtype=torch.int64, device=device)
+                tensor_taken = torch.arange((self.n_top_bg_to_keep), dtype=torch.int64, device=device)
             else:
                 #compute IoU for every proposal w.r.t. GT. Output: matrix M gt x N prop.
                 match_quality_matrix = box_ops.box_iou(gt_boxes_in_image, proposals_in_image)
@@ -278,7 +278,7 @@ class RoIHeads(nn.Module):
                 for val in range(0, n_gt):
                    index = (matches_idx_sort == val)
                    true_idx = torch.where(index)[0]
-                   true_idx = true_idx[:self.n_top_neg_to_keep]        
+                   true_idx = true_idx[:self.n_top_neg_to_keep]     
                    tensor_taken = torch.cat([tensor_taken, my_neg_sort[true_idx]])
                    neg_already_taken = torch.cat([neg_already_taken, my_neg_sort[true_idx]])
                 
@@ -574,11 +574,11 @@ class RoIHeads(nn.Module):
            device = proposals_in_image.device
            
            if match_quality_matrix is None: #means it's an image without gt
-              #I keep highest scored self.n_top_neg_to_keep if i have a background image
+              #I keep highest scored self.n_top_bg_to_keep if i have a background image
               max_neg_noclass, _ = torch.max(class_logits_image[:, 1:], dim=1) #grab the prediction with highest score indipendent from associated class. The 1: is for skipping the background associated score
               class_val, class_idx = torch.sort(max_neg_noclass, descending=True)
               
-              tensor_taken = class_idx[:self.n_top_neg_to_keep]
+              tensor_taken = class_idx[:self.n_top_bg_to_keep]
               tensor_taken_offset = tensor_taken + tot_offset
               indexes.append(tensor_taken)
               indexes_offset.append(tensor_taken_offset)

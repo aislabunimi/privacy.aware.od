@@ -129,7 +129,7 @@ class RegionProposalNetwork(torch.nn.Module):
         # My parameters
         use_custom_filter_anchors: bool=False,
         n_top_pos_to_keep: int=1,
-        n_top_neg_to_keep: int=8,
+        n_top_neg_to_keep: int=5,
         n_top_bg_to_keep: int=0,
         objectness_bg_thresh: float = 0.00,
     ) -> None:
@@ -320,14 +320,14 @@ class RegionProposalNetwork(torch.nn.Module):
             if gt_boxes.numel() == 0:
                 # Background image (negative example)
                 device = anchors_per_image.device
-                #I keep highest scored self.n_top_neg_to_keep if i have a background image
+                #I keep highest scored self.n_top_bg_to_keep if i have a background image
                 #4 is for the feature levels
-                my_matched_gt_boxes = torch.zeros(([self.n_top_neg_to_keep, 4]), dtype=torch.float32, device=device)
-                my_labels = torch.zeros((self.n_top_neg_to_keep), dtype=torch.float32, device=device)
+                my_matched_gt_boxes = torch.zeros(([self.n_top_bg_to_keep, 4]), dtype=torch.float32, device=device)
+                my_labels = torch.zeros((self.n_top_bg_to_keep), dtype=torch.float32, device=device)
                 objectness = objectness.flatten() #extract objectness
                 my_obj = objectness[sort_ma_val_idx+tot_offset]
                 my_obj_sort, my_obj_sort_idx = torch.sort(my_obj, descending=True) #sort by score
-                tensor_taken = my_obj_sort_idx[:self.n_top_neg_to_keep]
+                tensor_taken = my_obj_sort_idx[:self.n_top_bg_to_keep]
                 tensor_taken_offset = tensor_taken + tot_offset
             else:
                 match_quality_matrix = self.box_similarity(gt_boxes, anchors_per_image)
