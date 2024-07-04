@@ -111,14 +111,16 @@ def plot_results(img, labels, prob, boxes, all_classes, five_classes):
        labels = labels.cpu()
        for p, label, (xmin, ymin, xmax, ymax) in zip(prob, labels, boxes.tolist()):
            ax.add_patch(plt.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin, fill=False, color='red', linewidth=3))
+           p = p*100
+           p = round(p.item())
            if all_classes:
               label_name=COCO_91_CLASSES[label]
-              text = f'{label_name} {p:0.3f}'
+              text = f'{label_name} {p}%'
            elif five_classes:
               label_name=COCO_5_CLASSES[label]
-              text = f'{label_name} {p:0.3f}'
+              text = f'{label_name} {p}%'
            else:
-              text = f'{p:0.3f}'
+              text = f'{p}%'
            font_kwargs = dict(fontfamily="monospace", fontweight="bold", fontsize=20)
            ax.text(xmin, ymin, text, **font_kwargs, bbox=dict(facecolor='yellow', alpha=0.5))
     return

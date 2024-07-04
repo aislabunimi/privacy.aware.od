@@ -30,13 +30,13 @@ def get_args_parser():
    #PATHS to weights
    parser.add_argument('--unet_fw_weights_load', default='model_weights/model_fw_50.pt', type=str, help='Path to forward UNet weights')
    parser.add_argument('--unet_bw_weights_load', default='model_weights/model_bw_80.pt', type=str, help='Path to backward UNet weights')
-   parser.add_argument('--tasknet_weights_load', default='tasknet_weights/tasknet_10.pt', type=str, help='Path to Tasknet weights to load if resuming training or training the UNet')
+   parser.add_argument('--tasknet_weights_load', default='tasknet_weights/tasknet_10_myresize.pt', type=str, help='Path to Tasknet weights to load if resuming training or training the UNet')
    
    #FLAGS FOR CHANGING TRAINING BEHAVIOR
    parser.add_argument('--all_classes', action='store_true', default=False, help='If the experiments were executed with all classes, you need to set to True this flag to compute correct metric values and showing the labels in the plotted images')
    parser.add_argument('--five_classes', action='store_true', default=False, help='If the experiments were executed with all classes, using "cat dog horse sheep cow" as classes')
    parser.add_argument('--plot_only_bw_img', action='store_true', default=False, help='If you want to plot only the backward images reconstructed by an attacker')
-   parser.add_argument('--plot_two_unet', action='store_false', default=False, help='If you want to plot original image with tasknet preds, forward image (defined by unet_fw_weights_load, with tasknet prediction) with alongside the backward reconstruction model (defined by unet_fw_weights_load)')
+   parser.add_argument('--plot_two_unet', action='store_true', default=False, help='If you want to plot original image with tasknet preds, forward image (defined by unet_fw_weights_load, with tasknet prediction) with alongside the backward reconstruction model (defined by unet_fw_weights_load)')
    parser.add_argument('--plot_fw_along_bw', action='store_false', default=True, help='If you want to plot forward image (defined by unet_fw_weights_load, with tasknet prediction) with alongside the backward reconstruction model (defined by unet_fw_weights_load). If this flag is false, you should provide another weight in \'unet_bw_weights_load\' that is instead a forward weight')
    parser.add_argument('--plot_single_image', action='store_true', default=False, help='If you want to plot only the image alone')
    parser.add_argument('--plot_tasknet', action='store_true', default=False, help='Parameter used in combinations with plot_single_image. If you want to plot only the image with the prediction of the Tasknet')
@@ -72,7 +72,6 @@ def main(args):
    #loading weights
    if not args.all_classes:
       load_checkpoint(tasknet, args.tasknet_weights_load, tasknet_optimizer, tasknet_scheduler)
-   load_checkpoint(unet, args.unet_fw_weights_load, unet_optimizer, unet_scheduler)
    
    #Creating some paths and folders used later
    if os.path.exists(args.save_dir):
@@ -94,7 +93,7 @@ def main(args):
       if args.five_classes:
          image_name_list = ['2007_000027.jpg', '2007_000272.jpg']
       else:
-         image_name_list = ['2007_000027.jpg', '2007_000272.jpg', '2007_000323.jpg', '2007_000346.jpg', '2007_000480.jpg', '2007_000733.jpg', '2007_000999.jpg', '2007_001185.jpg', '2007_001284.jpg', '2007_001583.jpg', '2007_001717.jpg', '2007_002142.jpg', '2007_002293.jpg', '2007_002624.jpg', '2007_003091.jpg', '2007_003541.jpg', '2007_003580.jpg', '2007_003581.jpg', '2007_003831.jpg', '2007_004000.jpg', '2007_004289.jpg', '2007_004476.jpg']
+         image_name_list = ['2007_000027.jpg', '2007_000272.jpg', '2007_000323.jpg', '2007_000346.jpg', '2007_000480.jpg', '2007_002120.jpg', '2007_000733.jpg', '2007_000999.jpg', '2007_001185.jpg', '2007_001284.jpg', '2007_001583.jpg', '2007_001717.jpg', '2007_002142.jpg', '2007_002293.jpg', '2007_002624.jpg', '2007_003091.jpg', '2007_003541.jpg', '2007_003580.jpg', '2007_003581.jpg', '2007_003831.jpg', '2007_004000.jpg', '2007_004289.jpg', '2007_004476.jpg', '2008_000734.jpg', '2008_001092.jpg']
    
    #LOSS, MS_SSIM, LPIPS, MY RECONS CLASSIFIER, RECON REGRESSOR, CUSTOM METRIC
    from plot_utils.plot_similarity_metric import plot_sim_metric
