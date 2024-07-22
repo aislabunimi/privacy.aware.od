@@ -7,17 +7,17 @@ validation_msssim = pd.read_csv('./results_csv/validation_backward.csv')
 testing_msssim = pd.read_csv('./results_csv/testing_backward.csv')
 
 #print(type(validation_ap.loc[validation_ap["Setting"] == '1pos1neg', 'AP$_{50}$'].iloc[0]))
-print('ciao')
+
 
 table = ''
 for n in range(0, 5):
-    table += f'{n}'
+    table += f'$n={n}$'
 
     ap = validation_ap
     msssim = validation_msssim
     for p in range(1, 5):
         index = str(p) + "pos" + str(n) +"neg"
-        print(index)
+
         table += (f'&{round(ap.loc[ap["Setting"] == index, "AP$_{50}$"].iloc[0])}('
                   f'{round(ap.loc[ap["Setting"] == index, "AP$_{75}$"].iloc[0])}) '
                   f'&{round(msssim.loc[msssim["Setting"]==index, "MS-SSIM"].iloc[0]*100)}')
@@ -25,9 +25,16 @@ for n in range(0, 5):
     msssim = testing_msssim
     for p in range(1, 5):
         index = str(p) + "pos" + str(n) +"neg"
-        print(index)
         table += (f'&{round(ap.loc[ap["Setting"] == index, "AP$_{50}$"].iloc[0])}('
                   f'{round(ap.loc[ap["Setting"] == index, "AP$_{75}$"].iloc[0])}) '
                   f'&{round(msssim.loc[msssim["Setting"]==index, "MS-SSIM"].iloc[0]*100)}')
     table += '\\\\\n'
+
+table += ('\\hline All prop.&\\multicolumn{8}{c||}{ $\\text{TP}=' + str(round(validation_ap[validation_ap["Setting"] == 'all_proposals'].iloc[0].iloc[1])) +
+          '(' + str(round(validation_ap[validation_ap["Setting"] == 'all_proposals'].iloc[0].iloc[3])) + ')' +
+          ' \\quad \\text{MS}= ' + str(round(validation_ap[validation_ap["Setting"] == 'all_proposals'].iloc[0].iloc[2])) + '$}&' )
+table += ('\\multicolumn{8}{c}{ $\\text{TP}=' + str(round(test_ap[test_ap["Setting"] == 'all_proposals'].iloc[0].iloc[1])) +
+          '(' + str(round(test_ap[test_ap["Setting"] == 'all_proposals'].iloc[0].iloc[3])) + ')' +
+          ' \\quad\\text{MS}= ' + str(round(test_ap[test_ap["Setting"] == 'all_proposals'].iloc[0].iloc[2])) + '$}\\\\' )
+
 print(table)
