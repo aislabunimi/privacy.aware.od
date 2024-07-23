@@ -62,8 +62,8 @@ The training loop in the script is:
 
 If you want to avoid the "all proposals" setting, you can just make a copy of the shell script and remove that part. If you want to try only some settings or different ones with custom proposals method, you can delete some settings in the "for i in" loop.
 
-### Training with Five Classes
-The script `five_classes.sh` contains the experiments with the settings used for five classes. This scripts has the same training loop of the script above. You can use it as it is, or modify it if you want to test with different proposals.
+### Training with Four classes (Five Classes)
+The script `five_classes.sh` contains the experiments with the settings used for four classes vehicles (the experiments and variable names are called five classes, but in reality only four classes are used). This scripts has the same training loop of the script above. You can use it as it is, or modify it if you want to test with different proposals.
 You can also use the script `fw_bw_proposals.sh` by adding flag `--five_classes` to all commands in the script. In that case, it's best if you change the name of the folders where you save the results (change the name of the folder after `${EXPERIMENT_DIR}`).
 
 ### Finetuning Tasknet on UNet generated images
