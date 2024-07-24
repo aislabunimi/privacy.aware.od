@@ -30,6 +30,11 @@ for n in range(0, 5):
 table += ('\\hline All prop.&\\multicolumn{8}{c||}{ $\\text{TP}=' + str(round(validation_ap[validation_ap["Setting"] == 'all_proposals'].iloc[0].iloc[1])) +
           ' \\quad \\text{BFD}= ' + str(round(validation_ap[validation_ap["Setting"] == 'all_proposals'].iloc[0].iloc[3])) + '$}&' )
 table += ('\\multicolumn{8}{c}{ $\\text{TP}=' + str(round(test_ap[test_ap["Setting"] == 'all_proposals'].iloc[0].iloc[1])) +
-          ' \\quad\\text{BFD}= ' + str(round(test_ap[test_ap["Setting"] == 'all_proposals'].iloc[0].iloc[3])) + '$}\\\\' )
+          ' \\quad\\text{BFD}= ' + str(round(test_ap[test_ap["Setting"] == 'all_proposals'].iloc[0].iloc[3])) + '$}\\\\\n' )
+
+table += ('TaskNet &\\multicolumn{8}{c||}{ $\\text{TP}=' + str(round(validation_ap[validation_ap["Setting"] == 'tasknet'].iloc[0].iloc[1])) +
+          ' \\quad \\text{BFD}= ' + str(round(validation_ap[validation_ap["Setting"] == 'tasknet'].iloc[0].iloc[3])) + '$}&' )
+table += ('\\multicolumn{8}{c}{ $\\text{TP}=' + str(round(test_ap[test_ap["Setting"] == 'tasknet'].iloc[0].iloc[1])) +
+          ' \\quad\\text{BFD}= ' + str(round(test_ap[test_ap["Setting"] == 'tasknet'].iloc[0].iloc[3])) + '$}\\\\' )
 
 print(table)
