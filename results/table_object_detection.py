@@ -3,8 +3,8 @@ import pandas as pd
 validation_ap = pd.read_csv('./results_csv_5classes/validation_ap.csv')
 
 test_ap = pd.read_csv('./results_csv_5classes/testing_ap.csv')
-validation_msssim = pd.read_csv('./results_csv/validation_backward.csv')
-testing_msssim = pd.read_csv('./results_csv/testing_backward.csv')
+validation_msssim = pd.read_csv('./results_csv_5classes/validation_backward.csv')
+testing_msssim = pd.read_csv('./results_csv_5classes/testing_backward.csv')
 
 validation_extended_50 = pd.read_csv('./results_csv_5classes/validation_iou50_custom_metric.csv')
 validation_extended_75 = pd.read_csv('./results_csv_5classes/validation_iou75_custom_metric.csv')
@@ -16,34 +16,50 @@ testing_extended_75 = pd.read_csv('./results_csv_5classes/testing_iou75_custom_m
 
 
 table = ''
-for n in range(2, 4):
-    table += f'{n}'
+indexes = [i for i in range(2, 4)] + ['allprop', 'tasknet']
+for n in indexes:
+
+
 
     ap = validation_ap
     msssim = validation_msssim
     extended_50 = validation_extended_50
     extended_75 = validation_extended_50
 
-    index = str(n) + "pos" + str(n) +"neg"
-
+    if isinstance(n, int):
+        index = str(n) + "pos" + str(n) +"neg"
+        table += f'{n}'
+    else:
+        index = n
+        table += f'All' if index == 'allprop' else 'TN'
+    print(index)
     table += (f'&{round(ap.loc[ap["Setting"] == index, "AP$_{50}$"].iloc[0])}('
                   f'{round(ap.loc[ap["Setting"] == index, "AP$_{75}$"].iloc[0])}) '
-              f'{round(ap.loc[extended_50["Setting"] == index])}'
-                  f'&{round(msssim.loc[msssim["Setting"]==index, "MS-SSIM"].iloc[0]*100)}')
+              f'&{round(extended_50.loc[extended_50["Setting"] == index, ["TP_1", "TP_2", "TP_3", "TP_4"]].iloc[0].mean())}('
+              f'{round(extended_75.loc[extended_75["Setting"] == index, ["TP_1", "TP_2", "TP_3", "TP_4"]].iloc[0].mean())})'
+              f'&{round(extended_50.loc[extended_50["Setting"] == index, ["FPiou_1", "FPiou_2", "FPiou_3", "FPiou_4"]].iloc[0].mean())}('
+              f'{round(extended_75.loc[extended_75["Setting"] == index, ["FPiou_1", "FPiou_2", "FPiou_3", "FPiou_4"]].iloc[0].mean())})')
+    if index != 'tasknet':
+        table += f'&{round(msssim.loc[msssim["Setting"]==index, "MS-SSIM"].iloc[0]*100)}'
+    else:
+        table += f'&--'
     ap = test_ap
     msssim = testing_msssim
-    for p in range(1, 5):
-        index = str(p) + "pos" + str(n) +"neg"
-        table += (f'&{round(ap.loc[ap["Setting"] == index, "AP$_{50}$"].iloc[0])}('
-                  f'{round(ap.loc[ap["Setting"] == index, "AP$_{75}$"].iloc[0])}) '
-                  f'&{round(msssim.loc[msssim["Setting"]==index, "MS-SSIM"].iloc[0]*100)}')
-    table += '\\\\\n'
-
-table += ('\\hline All prop.&\\multicolumn{8}{c||}{ $\\text{TP}=' + str(round(validation_ap[validation_ap["Setting"] == 'all_proposals'].iloc[0].iloc[1])) +
-          '(' + str(round(validation_ap[validation_ap["Setting"] == 'all_proposals'].iloc[0].iloc[3])) + ')' +
-          ' \\quad \\text{MS}= ' + str(round(validation_ap[validation_ap["Setting"] == 'all_proposals'].iloc[0].iloc[2])) + '$}&' )
-table += ('\\multicolumn{8}{c}{ $\\text{TP}=' + str(round(test_ap[test_ap["Setting"] == 'all_proposals'].iloc[0].iloc[1])) +
-          '(' + str(round(test_ap[test_ap["Setting"] == 'all_proposals'].iloc[0].iloc[3])) + ')' +
-          ' \\quad\\text{MS}= ' + str(round(test_ap[test_ap["Setting"] == 'all_proposals'].iloc[0].iloc[2])) + '$}\\\\' )
+    extended_50= testing_extended_50
+    extended_75 = testing_extended_75
+    table += (f'&{round(ap.loc[ap["Setting"] == index, "AP$_{50}$"].iloc[0])}('
+              f'{round(ap.loc[ap["Setting"] == index, "AP$_{75}$"].iloc[0])}) '
+              f'&{round(extended_50.loc[extended_50["Setting"] == index, ["TP_1", "TP_2", "TP_3", "TP_4"]].iloc[0].mean())}('
+              f'{round(extended_75.loc[extended_75["Setting"] == index, ["TP_1", "TP_2", "TP_3", "TP_4"]].iloc[0].mean())})'
+              f'&{round(extended_50.loc[extended_50["Setting"] == index, ["FPiou_1", "FPiou_2", "FPiou_3", "FPiou_4"]].iloc[0].mean())}('
+              f'{round(extended_75.loc[extended_75["Setting"] == index, ["FPiou_1", "FPiou_2", "FPiou_3", "FPiou_4"]].iloc[0].mean())})')
+    if index != 'tasknet':
+        table += f'&{round(msssim.loc[msssim["Setting"]==index, "MS-SSIM"].iloc[0]*100)}'
+    else:
+        table += f'&--'
+    if n == 3:
+        table += '\\\\\\hline\n'
+    else:
+        table += '\\\\\n'
 
 print(table)
