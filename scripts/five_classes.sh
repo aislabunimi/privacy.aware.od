@@ -65,28 +65,28 @@ for i in "3 3" "2 2"; do
    a=( $i )
    PROP_POS=${a[0]}
    PROP_NEG=${a[1]}
-   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --lr_unet $LR_UNET --num_epochs_unet_forward $NUM_EPOCHS_UNET_FORWARD --unet_save_path $UNET_SAVE_PATH --results_dir $RESULTS_DIR --tasknet_weights_load $TASKNET_WEIGHTS_LOAD --prop_pos $PROP_POS --prop_neg $PROP_NEG
+   python3 main.py --five_classes --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --lr_unet $LR_UNET --num_epochs_unet_forward $NUM_EPOCHS_UNET_FORWARD --unet_save_path $UNET_SAVE_PATH --results_dir $RESULTS_DIR --tasknet_weights_load $TASKNET_WEIGHTS_LOAD --prop_pos $PROP_POS --prop_neg $PROP_NEG
    mkdir -p "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg_5classes/forward"
    cp $UNET_WEIGHTS_FW_TO_SAVE1 "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg_5classes/forward"
    mv $UNET_WEIGHTS_FW_TO_SAVE2 "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg_5classes/forward"
    mv $RESULTS_DIR "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg_5classes/forward/${RESULTS_DIR}_fw"
    echo "Completed ${PROP_POS}pos${PROP_NEG}neg_5classes forward experiment and copied results to ${EXPERIMENT_DIR} folder"
    
-   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --num_epochs_unet_forward $NUM_EPOCHS_UNET_FORWARD --unet_save_path $UNET_SAVE_PATH --results_dir $RESULTS_DIR --tasknet_weights_load $TASKNET_WEIGHTS_LOAD --not_use_custom_filter_prop --unet_fw_weights_load $UNET_WEIGHTS_LOAD_FW --val_forward_batch1
+   python3 main.py --five_classes --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --num_epochs_unet_forward $NUM_EPOCHS_UNET_FORWARD --unet_save_path $UNET_SAVE_PATH --results_dir $RESULTS_DIR --tasknet_weights_load $TASKNET_WEIGHTS_LOAD --not_use_custom_filter_prop --unet_fw_weights_load $UNET_WEIGHTS_LOAD_FW --val_forward_batch1
    mv $RESULTS_DIR "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg_5classes/forward/val_results_batch1"
    echo "Completed ${PROP_POS}pos${PROP_NEG}neg_5classes Validation with Batch Size 1"
    
-   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --save_disturbed_dataset --unet_fw_weights_load $UNET_WEIGHTS_LOAD_FW
+   python3 main.py --five_classes --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --save_disturbed_dataset --unet_fw_weights_load $UNET_WEIGHTS_LOAD_FW
 
-   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --lr_unet $LR_UNET --num_epochs_unet_backward $NUM_EPOCHS_UNET_BACKWARD --unet_save_path $UNET_SAVE_PATH --results_dir $RESULTS_DIR --train_model_backward
-   python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet 1 --results_dir $RESULTS_DIR --compute_similarity_metrics --unet_bw_weights_load $UNET_WEIGHTS_LOAD_BW
+   python3 main.py --five_classes --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --lr_unet $LR_UNET --num_epochs_unet_backward $NUM_EPOCHS_UNET_BACKWARD --unet_save_path $UNET_SAVE_PATH --results_dir $RESULTS_DIR --train_model_backward
+   python3 main.py --five_classes --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet 1 --results_dir $RESULTS_DIR --compute_similarity_metrics --unet_bw_weights_load $UNET_WEIGHTS_LOAD_BW
    mkdir -p "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg_5classes/backward"
    mv $UNET_WEIGHTS_BW_TO_SAVE1 "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg_5classes/backward"
    mv $UNET_WEIGHTS_BW_TO_SAVE2 "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg_5classes/backward"
    mv $RESULTS_DIR "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg_5classes/backward/${RESULTS_DIR}_bw"
    echo "Completed ${PROP_POS}pos${PROP_NEG}neg_5classes backward experiment and copied results to ${EXPERIMENT_DIR} folder"
    
-   python3 main.py --test_model --tasknet_weights_load $TASKNET_WEIGHTS_LOAD --unet_fw_weights_load "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg_5classes/forward/${UNET_FW}" --unet_bw_weights_load "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg_5classes/backward/${UNET_BW}" --results_dir $RESULTS_DIR
+   python3 main.py --five_classes --test_model --tasknet_weights_load $TASKNET_WEIGHTS_LOAD --unet_fw_weights_load "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg_5classes/forward/${UNET_FW}" --unet_bw_weights_load "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg_5classes/backward/${UNET_BW}" --results_dir $RESULTS_DIR
    mv $RESULTS_DIR "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg_5classes/test_results"
    echo "Completed ${PROP_POS}pos${PROP_NEG}neg_5classes test"
 done

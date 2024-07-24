@@ -30,11 +30,16 @@ for n in range(0, 5):
                   f'&{round(msssim.loc[msssim["Setting"]==index, "MS-SSIM"].iloc[0]*100)}')
     table += '\\\\\n'
 
-table += ('\\hline All prop.&\\multicolumn{8}{c||}{ $\\text{TP}=' + str(round(validation_ap[validation_ap["Setting"] == 'all_proposals'].iloc[0].iloc[1])) +
+table += ('\\hline All prop.&\\multicolumn{8}{c||}{ $\\text{AP}=' + str(round(validation_ap[validation_ap["Setting"] == 'all_proposals'].iloc[0].iloc[1])) +
           '(' + str(round(validation_ap[validation_ap["Setting"] == 'all_proposals'].iloc[0].iloc[3])) + ')' +
           ' \\quad \\text{MS}= ' + str(round(validation_ap[validation_ap["Setting"] == 'all_proposals'].iloc[0].iloc[2])) + '$}&' )
-table += ('\\multicolumn{8}{c}{ $\\text{TP}=' + str(round(test_ap[test_ap["Setting"] == 'all_proposals'].iloc[0].iloc[1])) +
+table += ('\\multicolumn{8}{c}{ $\\text{AP}=' + str(round(test_ap[test_ap["Setting"] == 'all_proposals'].iloc[0].iloc[1])) +
           '(' + str(round(test_ap[test_ap["Setting"] == 'all_proposals'].iloc[0].iloc[3])) + ')' +
-          ' \\quad\\text{MS}= ' + str(round(test_ap[test_ap["Setting"] == 'all_proposals'].iloc[0].iloc[2])) + '$}\\\\' )
+          ' \\quad\\text{MS}= ' + str(round(test_ap[test_ap["Setting"] == 'all_proposals'].iloc[0].iloc[2])) + '$}\\\\\n' )
+
+table += (' TaskNet &\\multicolumn{8}{c||}{ $\\text{AP}=' + str(round(validation_ap[validation_ap["Setting"] == 'tasknet'].iloc[0].iloc[1])) +
+          '(' + str(round(validation_ap[validation_ap["Setting"] == 'tasknet'].iloc[0].iloc[3])) + ')$}&' )
+table += ('\\multicolumn{8}{c}{ $\\text{AP}=' + str(round(test_ap[test_ap["Setting"] == 'tasknet'].iloc[0].iloc[1])) +
+          '(' + str(round(test_ap[test_ap["Setting"] == 'tasknet'].iloc[0].iloc[3])) +')$}\\\\' )
 
 print(table)
