@@ -181,5 +181,3 @@ plot(file_path='./results_csv/validation_backward.csv', file_name='validation_ms
 plot(file_path='./results_csv/testing_ap.csv', file_name='ap_test_50', metric='AP$_{50}$',label_x='Positive', label_y='Negative', label_z='AP$_{50}$', key_col='Setting')
 plot(file_path='./results_csv/testing_ap.csv', file_name='ap_test_75', metric='AP$_{75}$', label_x='Positive', label_y='Negative', label_z='AP$_{75}$', key_col='Setting')
 plot(file_path='./results_csv/testing_backward.csv', file_name='testing_msssim', metric='MS-SSIM', label_x='Positive', label_y='Negative', label_z='MS-SSIM', key_col='Setting')
-
-plot(file_path='./results_csv/validation_iou50_custom_metric.csv', file_name='custom_validation_50', metric='AP$_{50}$', label_x='Positive', label_y='Negative', label_z='AP$_{50}$', key_col='Setting')
