@@ -111,7 +111,7 @@ def plot(file_path, label_x, label_y, label_z, key_col, metric, file_name):
     if not tasknet_df.empty:
        ax.set_zlim([0, math.ceil(max_z_tasknet/10)*10])
        if BFD:
-          ax.set_zlim([0, 6])
+          ax.set_zlim([0, max(np.max(z), max_z_tasknet) +0.5])
     else:
         ax.set_zlim([0, math.ceil(max_z_allprop*10)/10])
     ax.set_xlim([0.8, 5])
@@ -123,10 +123,14 @@ def plot(file_path, label_x, label_y, label_z, key_col, metric, file_name):
     ax.set_zlabel(label_z, fontsize=12, rotation=90)
     ax.set_xticks([1.3, 2.3, 3.3, 4.4])
     ax.set_yticks([0.3, 1.3, 2.3, 3.3, 4.3])
-    if metric != 'MS-SSIM':
-        ax.set_zticks([i*20 for i in range(1, math.ceil(max_z_tasknet/10)//2+1)])
+    if metric == 'FPiou_1':
+        print(math.ceil(max(max_z_tasknet, np.max(z))))
+        ax.set_zticks([np.log(np.e**i) for i in range(1, math.ceil(max(max_z_tasknet, np.max(z))))])
+        ax.set_zticklabels([f'$e^{round(np.log(np.e**i))}$' for i in range(1, math.ceil(max(max_z_tasknet, np.max(z))))])
     elif metric == 'MS-SSIM':
         ax.set_zticks([i*0.20 for i in range(1, math.ceil(max_z_allprop*10)//2+1)])
+    else:
+        ax.set_zticks([i*20 for i in range(1, math.ceil(max_z_tasknet/10)//2+1)])
     ax.set_xticklabels([1, 2, 3, 4])
     ax.set_yticklabels([0, 1, 2, 3, 4])
     ax.tick_params(axis='x', labelsize=12)
@@ -140,9 +144,9 @@ def plot(file_path, label_x, label_y, label_z, key_col, metric, file_name):
        # [0.5, 4.5, max_z_tasknet]]]    # top left
 
     # surface for allprop results
-    ax.plot([1, 5, 5],[5, 5, 0], [max_z_allprop, max_z_allprop, max_z_allprop], color='orange')
+    ax.plot([5, 5, 0.7],[4.7, 0, 0], [max_z_allprop, max_z_allprop, max_z_allprop], color='orange')
     if metric != 'MS-SSIM':
-        ax.plot([1, 5, 5],[5, 5, 0], [max_z_tasknet, max_z_tasknet, max_z_tasknet], color='red')
+        ax.plot([5, 5, 0.7],[4.7, 0, 0], [max_z_tasknet, max_z_tasknet, max_z_tasknet], color='red')
 
     """verts = [[[0.75, -0.25, max_z_allprop],  # bottom left
         [5, -0.25, max_z_allprop],  # bottom right
@@ -174,16 +178,14 @@ def plot(file_path, label_x, label_y, label_z, key_col, metric, file_name):
     fig.savefig(f'plots/{file_name}.png', format='png', bbox_inches='tight')
     plt.show()
 
-plot(file_path='./results_csv/validation_ap.csv', file_name='ap_validation', metric='AP', label_x='Positive', label_y='Negative', label_z='AP', key_col='Setting')
 
-plot(file_path='./results_csv/validation_ap.csv', file_name='ap_validation_50', metric='AP$_{50}$', label_x='Positive', label_y='Negative', label_z='AP$_{50}$', key_col='Setting')
-plot(file_path='./results_csv/validation_ap.csv', file_name='ap_validation_75', metric='AP$_{75}$', label_x='Positive', label_y='Negative', label_z='AP$_{75}$', key_col='Setting')
-plot(file_path='./results_csv/validation_backward.csv', file_name='validation_msssim', metric='MS-SSIM', label_x='Positive', label_y='Negative', label_z='MS-SSIM', key_col='Setting')
-
-plot(file_path='./results_csv/testing_ap.csv', file_name='ap_test', metric='AP',label_x='Positive', label_y='Negative', label_z='AP', key_col='Setting')
-
-plot(file_path='./results_csv/testing_ap.csv', file_name='ap_test_50', metric='AP$_{50}$',label_x='Positive', label_y='Negative', label_z='AP$_{50}$', key_col='Setting')
-plot(file_path='./results_csv/testing_ap.csv', file_name='ap_test_75', metric='AP$_{75}$', label_x='Positive', label_y='Negative', label_z='AP$_{75}$', key_col='Setting')
-plot(file_path='./results_csv/testing_backward.csv', file_name='testing_msssim', metric='MS-SSIM', label_x='Positive', label_y='Negative', label_z='MS-SSIM', key_col='Setting')
-
-plot(file_path='./results_csv/validation_iou50_custom_metric.csv', file_name='custom_validation_50', metric='AP$_{50}$', label_x='Positive', label_y='Negative', label_z='AP$_{50}$', key_col='Setting')
+inverted_view = True
+plot(file_path='./results_csv/validation_iou50_custom_metric.csv', file_name='tp_validation_50', metric='TP_1', label_x='Positive', label_y='Negative', label_z='', key_col='Setting')
+plot(file_path='./results_csv/validation_iou75_custom_metric.csv', file_name='tp_validation_75', metric='TP_1', label_x='Positive', label_y='Negative', label_z='', key_col='Setting')
+plot(file_path='./results_csv/testing_iou50_custom_metric.csv', file_name='tp_testing_50', metric='TP_1', label_x='Positive', label_y='Negative', label_z='', key_col='Setting')
+plot(file_path='./results_csv/testing_iou75_custom_metric.csv', file_name='tp_testing_75', metric='TP_1', label_x='Positive', label_y='Negative', label_z='', key_col='Setting')
+BFD=True
+plot(file_path='./results_csv/validation_iou50_custom_metric.csv', file_name='bfd_validation_50', metric='FPiou_1', label_x='Positive', label_y='Negative', label_z='', key_col='Setting')
+plot(file_path='./results_csv/validation_iou75_custom_metric.csv', file_name='bfd_validation_75', metric='FPiou_1', label_x='Positive', label_y='Negative', label_z='', key_col='Setting')
+plot(file_path='./results_csv/testing_iou50_custom_metric.csv', file_name='bfd_testing_50', metric='FPiou_1', label_x='Positive', label_y='Negative', label_z='', key_col='Setting')
+plot(file_path='./results_csv/testing_iou75_custom_metric.csv', file_name='bfd_testing_75', metric='FPiou_1', label_x='Positive', label_y='Negative', label_z='', key_col='Setting')
