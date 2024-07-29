@@ -144,9 +144,9 @@ def plot(file_path, label_x, label_y, label_z, key_col, metric, file_name):
        # [0.5, 4.5, max_z_tasknet]]]    # top left
 
     # surface for allprop results
-    ax.plot([5, 5, 0.7],[4.7, 0, 0], [max_z_allprop, max_z_allprop, max_z_allprop], color='orange')
+    ax.plot([5.3, 5.3, 0.9],[4.7, -0.5, -0.5], [max_z_allprop, max_z_allprop, max_z_allprop], color='orange')
     if metric != 'MS-SSIM':
-        ax.plot([5, 5, 0.7],[4.7, 0, 0], [max_z_tasknet, max_z_tasknet, max_z_tasknet], color='red')
+        ax.plot([5.3, 5.3, 0.9],[4.7, -0.5, -0.5], [max_z_tasknet, max_z_tasknet, max_z_tasknet], color='red')
 
     """verts = [[[0.75, -0.25, max_z_allprop],  # bottom left
         [5, -0.25, max_z_allprop],  # bottom right
