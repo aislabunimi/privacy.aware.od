@@ -165,7 +165,7 @@ def plot(file_path, label_x, label_y, label_z, key_col, metric, file_name):
        ax.add_collection3d(surface)
     """
     if inverted_view:
-       ax.view_init(elev=20, azim=135)  # used for BFD
+       ax.view_init(elev=20, azim=140)  # used for BFD
     else:
        ax.view_init(elev=20, azim=220)  # set elevation and azimuth angles
 

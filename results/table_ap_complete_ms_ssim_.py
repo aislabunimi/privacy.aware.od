@@ -30,16 +30,18 @@ for n in range(0, 5):
                   f'&{round(msssim.loc[msssim["Setting"]==index, "MS-SSIM"].iloc[0]*100)}')
     table += '\\\\\n'
 
-table += ('\\hline \n \\small All prop.&\\multicolumn{12}{c||}{ $\\text{AP}=' + str(round(validation_ap[validation_ap["Setting"] == 'all_proposals'].iloc[0].iloc[1])) +
-          '\\quad\\text{AP}_{50}=' + str(round(validation_ap[validation_ap["Setting"] == 'all_proposals'].iloc[0].iloc[3])) +
-          ' \\quad \\text{MS}= ' + str(round(validation_ap[validation_ap["Setting"] == 'all_proposals'].iloc[0].iloc[2])) + '$}&' )
-table += ('\\multicolumn{12}{c}{ $\\text{AP}=' + str(round(test_ap[test_ap["Setting"] == 'all_proposals'].iloc[0].iloc[1])) +
-          '\\quad\\text{AP}_{50}=' + str(round(test_ap[test_ap["Setting"] == 'all_proposals'].iloc[0].iloc[3]))  +
-          ' \\quad\\text{MS}= ' + str(round(test_ap[test_ap["Setting"] == 'all_proposals'].iloc[0].iloc[2])) + '$}\\\\\n' )
+table += ('\\hline \n \\small All prop.&\\multicolumn{4}{c}{ $\\text{AP}=' + str(round(validation_ap[validation_ap["Setting"] == 'all_proposals'].iloc[0].iloc[1])) + '$}' +
+          '&\\multicolumn{4}{c}{ $\\text{AP}_{50}=' + str(round(validation_ap[validation_ap["Setting"] == 'all_proposals'].iloc[0].iloc[3])) + '$}' +
+          ' &\\multicolumn{4}{c||}{$ \\text{MS}= ' + str(round(validation_ap[validation_ap["Setting"] == 'all_proposals'].iloc[0].iloc[2])) + '$}&' )
+table += ('\\multicolumn{4}{c}{ $\\text{AP}=' + str(round(test_ap[test_ap["Setting"] == 'all_proposals'].iloc[0].iloc[1])) + '$}' +
+          '&\\multicolumn{4}{c}{ $\\text{AP}_{50}=' + str(round(test_ap[test_ap["Setting"] == 'all_proposals'].iloc[0].iloc[3]))  +'$}' +
+          ' &\\multicolumn{4}{c}{ $\\text{MS}= ' + str(round(test_ap[test_ap["Setting"] == 'all_proposals'].iloc[0].iloc[2])) + '$}\\\\\n' )
 
-table += (' \\small TaskNet &\\multicolumn{12}{c||}{ $\\text{AP}=' + str(round(validation_ap[validation_ap["Setting"] == 'tasknet'].iloc[0].iloc[1])) +
-          '\\quad\\text{AP}_{50}=' + str(round(validation_ap[validation_ap["Setting"] == 'tasknet'].iloc[0].iloc[3])) + '$}&' )
-table += ('\\multicolumn{12}{c}{ $\\text{AP}=' + str(round(test_ap[test_ap["Setting"] == 'tasknet'].iloc[0].iloc[1])) +
-          '\\quad\\text{AP}_{50}=' + str(round(test_ap[test_ap["Setting"] == 'tasknet'].iloc[0].iloc[3])) +'$}\\\\' )
+table += (' \\small TaskNet &\\multicolumn{4}{c}{ $\\text{AP}=' + str(round(validation_ap[validation_ap["Setting"] == 'tasknet'].iloc[0].iloc[1])) +'$}' +
+          '&\\multicolumn{4}{c}{$\\text{AP}_{50}=' + str(round(validation_ap[validation_ap["Setting"] == 'tasknet'].iloc[0].iloc[3])) + '$}' +
+          '&\\multicolumn{4}{c||}{$\\text{MS}=100$}&')
+table += ('\\multicolumn{4}{c}{ $\\text{AP}=' + str(round(test_ap[test_ap["Setting"] == 'tasknet'].iloc[0].iloc[1])) +'$}&' +
+          '\\multicolumn{4}{c}{ $\\text{AP}_{50}=' + str(round(test_ap[test_ap["Setting"] == 'tasknet'].iloc[0].iloc[3])) +'$}&' +
+          '\\multicolumn{4}{c}{ $\\text{MS}=100$}\\\\')
 
 print(table)
