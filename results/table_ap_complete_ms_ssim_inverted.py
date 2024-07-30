@@ -11,7 +11,7 @@ testing_msssim = pd.read_csv('./results_csv/testing_backward.csv')
 
 table = ''
 for n in range(0, 5):
-    table += f'$n={n}$'
+    table += f'\\small $n={n}$'
 
     ap = validation_ap
     msssim = validation_msssim
@@ -31,10 +31,10 @@ for n in range(0, 5):
 
 table += ('\\hline \n \\small All prop.&\\multicolumn{4}{c|}{ ' + str(round(validation_ap[validation_ap["Setting"] == 'all_proposals'].iloc[0].iloc[1])) + '}' +
           '&\\multicolumn{4}{c|}{ ' + str(round(validation_ap[validation_ap["Setting"] == 'all_proposals'].iloc[0].iloc[3])) + '}' +
-          ' &\\multicolumn{4}{c||}{ ' + str(round(validation_ap[validation_ap["Setting"] == 'all_proposals'].iloc[0].iloc[2])) + '}&' )
+          ' &\\multicolumn{4}{c||}{ ' + str(round(validation_msssim[validation_msssim["Setting"] == 'all_proposals'].iloc[0].iloc[2]*100)) + '}&' )
 table += ('\\multicolumn{4}{c|}{ ' + str(round(test_ap[test_ap["Setting"] == 'all_proposals'].iloc[0].iloc[1])) + '}' +
           '&\\multicolumn{4}{c|}{ ' + str(round(test_ap[test_ap["Setting"] == 'all_proposals'].iloc[0].iloc[3]))  +'}' +
-          ' &\\multicolumn{4}{c}{  ' + str(round(test_ap[test_ap["Setting"] == 'all_proposals'].iloc[0].iloc[2])) + '}\\\\\n' )
+          ' &\\multicolumn{4}{c}{  ' + str(round(testing_msssim[testing_msssim["Setting"] == 'all_proposals'].iloc[0].iloc[2]*100)) + '}\\\\\n' )
 
 table += (' \\small TaskNet &\\multicolumn{4}{c|}{ ' + str(round(validation_ap[validation_ap["Setting"] == 'tasknet'].iloc[0].iloc[1])) +'}' +
           '&\\multicolumn{4}{c|}{' + str(round(validation_ap[validation_ap["Setting"] == 'tasknet'].iloc[0].iloc[3])) + '}' +

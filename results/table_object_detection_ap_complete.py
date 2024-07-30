@@ -33,8 +33,8 @@ for n in indexes:
         index = n
         table += f'All' if index == 'allprop' else 'TN'
     print(index)
-    table += (f'&{round(ap.loc[ap["Setting"] == index, "AP"].iloc[0])}('
-                  f'{round(ap.loc[ap["Setting"] == index, "AP$_{50}$"].iloc[0])}) '
+    table += (f'&{round(ap.loc[ap["Setting"] == index, "AP"].iloc[0])}&'
+                  f'{round(ap.loc[ap["Setting"] == index, "AP$_{50}$"].iloc[0])} '
               f'&{round(extended_50.loc[extended_50["Setting"] == index, ["TP_1", "TP_2", "TP_3", "TP_4"]].iloc[0].mean())}('
               f'{round(extended_75.loc[extended_75["Setting"] == index, ["TP_1", "TP_2", "TP_3", "TP_4"]].iloc[0].mean())})'
               f'&{round(extended_50.loc[extended_50["Setting"] == index, ["FPiou_1", "FPiou_2", "FPiou_3", "FPiou_4"]].iloc[0].mean())}('
