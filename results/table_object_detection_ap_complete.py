@@ -28,17 +28,15 @@ for n in indexes:
 
     if isinstance(n, int):
         index = str(n) + "pos" + str(n) +"neg"
-        table += f'{n}'
+        table += f'\\small ${n, n}$'
     else:
         index = n
-        table += f'All' if index == 'allprop' else 'TN'
+        table += f'\\small All' if index == 'allprop' else '\\small TN'
     print(index)
     table += (f'&{round(ap.loc[ap["Setting"] == index, "AP"].iloc[0])}&'
                   f'{round(ap.loc[ap["Setting"] == index, "AP$_{50}$"].iloc[0])} '
-              f'&{round(extended_50.loc[extended_50["Setting"] == index, ["TP_1", "TP_2", "TP_3", "TP_4"]].iloc[0].mean())}('
-              f'{round(extended_75.loc[extended_75["Setting"] == index, ["TP_1", "TP_2", "TP_3", "TP_4"]].iloc[0].mean())})'
-              f'&{round(extended_50.loc[extended_50["Setting"] == index, ["FPiou_1", "FPiou_2", "FPiou_3", "FPiou_4"]].iloc[0].mean())}('
-              f'{round(extended_75.loc[extended_75["Setting"] == index, ["FPiou_1", "FPiou_2", "FPiou_3", "FPiou_4"]].iloc[0].mean())})')
+              f'&{round(extended_75.loc[extended_75["Setting"] == index, ["TP_1", "TP_2", "TP_3", "TP_4"]].iloc[0].mean())}'
+              f'&{round(extended_75.loc[extended_75["Setting"] == index, ["FPiou_1", "FPiou_2", "FPiou_3", "FPiou_4"]].iloc[0].mean())}')
     if index != 'tasknet':
         table += f'&{round(msssim.loc[msssim["Setting"]==index, "MS-SSIM"].iloc[0]*100)}'
     else:
@@ -47,12 +45,10 @@ for n in indexes:
     msssim = testing_msssim
     extended_50= testing_extended_50
     extended_75 = testing_extended_75
-    table += (f'&{round(ap.loc[ap["Setting"] == index, "AP"].iloc[0])}('
-              f'{round(ap.loc[ap["Setting"] == index, "AP$_{50}$"].iloc[0])}) '
-              f'&{round(extended_50.loc[extended_50["Setting"] == index, ["TP_1", "TP_2", "TP_3", "TP_4"]].iloc[0].mean())}('
-              f'{round(extended_75.loc[extended_75["Setting"] == index, ["TP_1", "TP_2", "TP_3", "TP_4"]].iloc[0].mean())})'
-              f'&{round(extended_50.loc[extended_50["Setting"] == index, ["FPiou_1", "FPiou_2", "FPiou_3", "FPiou_4"]].iloc[0].mean())}('
-              f'{round(extended_75.loc[extended_75["Setting"] == index, ["FPiou_1", "FPiou_2", "FPiou_3", "FPiou_4"]].iloc[0].mean())})')
+    table += (f'&{round(ap.loc[ap["Setting"] == index, "AP"].iloc[0])}'
+              f'&{round(ap.loc[ap["Setting"] == index, "AP$_{50}$"].iloc[0])} '
+              f'&{round(extended_75.loc[extended_75["Setting"] == index, ["TP_1", "TP_2", "TP_3", "TP_4"]].iloc[0].mean())}'
+              f'&{round(extended_75.loc[extended_75["Setting"] == index, ["FPiou_1", "FPiou_2", "FPiou_3", "FPiou_4"]].iloc[0].mean())}')
     if index != 'tasknet':
         table += f'&{round(msssim.loc[msssim["Setting"]==index, "MS-SSIM"].iloc[0]*100)}'
     else:
