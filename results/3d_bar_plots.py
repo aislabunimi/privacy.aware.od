@@ -119,7 +119,7 @@ def plot(file_path, label_x, label_y, label_z, key_col, metric, file_name):
     # labels, ticks and fontsize
     ax.set_xlabel(label_x, fontsize=12)
     ax.set_ylabel(label_y, fontsize=12)
-    ax.zaxis.set_rotate_label(False) #removing default orientation
+    ax.zaxis.set_rotate_label(True) #removing default orientation
     ax.set_zlabel(label_z, fontsize=12, rotation=90)
     ax.set_xticks([1.3, 2.3, 3.3, 4.4])
     ax.set_yticks([0.3, 1.3, 2.3, 3.3, 4.3])
@@ -127,6 +127,7 @@ def plot(file_path, label_x, label_y, label_z, key_col, metric, file_name):
         ax.set_zticks([i*20 for i in range(1, math.ceil(max_z_tasknet/10)//2+1)])
     elif metric == 'MS-SSIM':
         ax.set_zticks([i*0.20 for i in range(1, math.ceil(max_z_allprop*10)//2+1)])
+        ax.set_zticklabels([i*20 for i in range(1, math.ceil(max_z_allprop*10)//2+1)])
     ax.set_xticklabels([1, 2, 3, 4])
     ax.set_yticklabels([0, 1, 2, 3, 4])
     ax.tick_params(axis='x', labelsize=12)
@@ -140,7 +141,10 @@ def plot(file_path, label_x, label_y, label_z, key_col, metric, file_name):
        # [0.5, 4.5, max_z_tasknet]]]    # top left
 
     # surface for allprop results
-    ax.plot([1, 5, 5],[5, 5, 0], [max_z_allprop, max_z_allprop, max_z_allprop], color='orange')
+    if inverted_view and metric == 'MS-SSIM':
+        ax.plot([5.3, 5.3, 0.9],[4.7, -0.5, -0.5], [max_z_allprop, max_z_allprop, max_z_allprop], color='orange')
+    else:
+        ax.plot([1, 5, 5],[5, 5, 0], [max_z_allprop, max_z_allprop, max_z_allprop], color='orange')
     if metric != 'MS-SSIM':
         ax.plot([1, 5, 5],[5, 5, 0], [max_z_tasknet, max_z_tasknet, max_z_tasknet], color='red')
 
@@ -171,17 +175,19 @@ def plot(file_path, label_x, label_y, label_z, key_col, metric, file_name):
        fig.subplots_adjust(left=-0.11)
     fig.tight_layout()
     #format for paper:pdf
-    fig.savefig(f'plots/{file_name}.png', format='png', bbox_inches='tight')
+    fig.savefig(f'plots/{file_name}.png', format='png',)
     plt.show()
 
 plot(file_path='./results_csv/validation_ap.csv', file_name='ap_validation', metric='AP', label_x='Positive', label_y='Negative', label_z='AP', key_col='Setting')
 
 plot(file_path='./results_csv/validation_ap.csv', file_name='ap_validation_50', metric='AP$_{50}$', label_x='Positive', label_y='Negative', label_z='AP$_{50}$', key_col='Setting')
 plot(file_path='./results_csv/validation_ap.csv', file_name='ap_validation_75', metric='AP$_{75}$', label_x='Positive', label_y='Negative', label_z='AP$_{75}$', key_col='Setting')
+inverted_view=True
 plot(file_path='./results_csv/validation_backward.csv', file_name='validation_msssim', metric='MS-SSIM', label_x='Positive', label_y='Negative', label_z='MS-SSIM', key_col='Setting')
-
+inverted_view=False
 plot(file_path='./results_csv/testing_ap.csv', file_name='ap_test', metric='AP',label_x='Positive', label_y='Negative', label_z='AP', key_col='Setting')
 
 plot(file_path='./results_csv/testing_ap.csv', file_name='ap_test_50', metric='AP$_{50}$',label_x='Positive', label_y='Negative', label_z='AP$_{50}$', key_col='Setting')
 plot(file_path='./results_csv/testing_ap.csv', file_name='ap_test_75', metric='AP$_{75}$', label_x='Positive', label_y='Negative', label_z='AP$_{75}$', key_col='Setting')
+inverted_view=True
 plot(file_path='./results_csv/testing_backward.csv', file_name='testing_msssim', metric='MS-SSIM', label_x='Positive', label_y='Negative', label_z='MS-SSIM', key_col='Setting')

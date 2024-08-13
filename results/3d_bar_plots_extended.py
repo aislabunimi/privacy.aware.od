@@ -78,7 +78,7 @@ def plot(file_path, label_x, label_y, label_z, key_col, metric, file_name):
 
     z_norm = (z - np.min(z)) / (np.max(z) - np.min(z)) #reduce max z for better scale
     #z_norm = [((val - min(dz)) / (max(z) - min(dz)))*max(z) for val in dz]
-
+    ax.zaxis.labelpad=2
     if inverted_view:
        light = LightSource(azdeg=180, altdeg=45)
     else:
@@ -119,8 +119,9 @@ def plot(file_path, label_x, label_y, label_z, key_col, metric, file_name):
     # labels, ticks and fontsize
     ax.set_xlabel(label_x, fontsize=12)
     ax.set_ylabel(label_y, fontsize=12)
+    ax.set_zlabel('%', fontsize=16)
     ax.zaxis.set_rotate_label(False) #removing default orientation
-    ax.set_zlabel(label_z, fontsize=12, rotation=90)
+
     ax.set_xticks([1.3, 2.3, 3.3, 4.4])
     ax.set_yticks([0.3, 1.3, 2.3, 3.3, 4.3])
     if metric == 'FPiou_1':
@@ -175,8 +176,9 @@ def plot(file_path, label_x, label_y, label_z, key_col, metric, file_name):
        fig.subplots_adjust(left=-0.11)
     fig.tight_layout()
     #format for paper:pdf
-    fig.savefig(f'plots/{file_name}.png', format='png', bbox_inches='tight')
     plt.show()
+    fig.savefig(f'plots/{file_name}.png', format='png', pad_inches=0.1)
+
 
 
 inverted_view = True
