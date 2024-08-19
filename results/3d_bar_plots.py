@@ -182,12 +182,12 @@ plot(file_path='./results_csv/validation_ap.csv', file_name='ap_validation', met
 
 plot(file_path='./results_csv/validation_ap.csv', file_name='ap_validation_50', metric='AP$_{50}$', label_x='Positive', label_y='Negative', label_z='AP$_{50}$', key_col='Setting')
 plot(file_path='./results_csv/validation_ap.csv', file_name='ap_validation_75', metric='AP$_{75}$', label_x='Positive', label_y='Negative', label_z='AP$_{75}$', key_col='Setting')
-inverted_view=True
+inverted_view=False
 plot(file_path='./results_csv/validation_backward.csv', file_name='validation_msssim', metric='MS-SSIM', label_x='Positive', label_y='Negative', label_z='MS-SSIM', key_col='Setting')
 inverted_view=False
 plot(file_path='./results_csv/testing_ap.csv', file_name='ap_test', metric='AP',label_x='Positive', label_y='Negative', label_z='AP', key_col='Setting')
 
 plot(file_path='./results_csv/testing_ap.csv', file_name='ap_test_50', metric='AP$_{50}$',label_x='Positive', label_y='Negative', label_z='AP$_{50}$', key_col='Setting')
 plot(file_path='./results_csv/testing_ap.csv', file_name='ap_test_75', metric='AP$_{75}$', label_x='Positive', label_y='Negative', label_z='AP$_{75}$', key_col='Setting')
-inverted_view=True
+inverted_view=False
 plot(file_path='./results_csv/testing_backward.csv', file_name='testing_msssim', metric='MS-SSIM', label_x='Positive', label_y='Negative', label_z='MS-SSIM', key_col='Setting')
