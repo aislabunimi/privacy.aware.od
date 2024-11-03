@@ -1,0 +1,7 @@
+file_name,TP_1,TPm_1,FPiou_1
+tasknet,95.31,0.00,18.75
+all_proposals,85.94,0.00,15.62
+1pos1neg,58.33,0.52,7.81
+2pos2neg,67.19,0.00,4.69
+3pos3neg,77.08,0.52,9.90
+4pos4neg,79.69,0.52,10.94
