@@ -1,6 +1,6 @@
 # Privacy-oriented deep learning for object detection in curious cloud-based robot ecosystems
 
-This repository contains the code for my master thesis (and future paper).
+You can find the trained models and the datasets [here](https://unimi2013-my.sharepoint.com/:f:/g/personal/michele_antonazzi_unimi_it/EgjICi79H7tBkuudEjBesLMB8Hf8uR9u3wr33xlWcmCkaA?e=3do9Qx).
 
 ## Installation
 ### Packages
