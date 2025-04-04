@@ -1,16 +1,16 @@
 import pandas as pd
 
-validation_ap = pd.read_csv('./results_csv_5classes/validation_ap.csv')
+validation_ap = pd.read_csv('results_csv_5classes/validation_ap.csv')
 
-test_ap = pd.read_csv('./results_csv_5classes/testing_ap.csv')
-validation_msssim = pd.read_csv('./results_csv_5classes/validation_backward.csv')
-testing_msssim = pd.read_csv('./results_csv_5classes/testing_backward.csv')
+test_ap = pd.read_csv('results_csv_5classes/testing_ap.csv')
+validation_msssim = pd.read_csv('results_csv_5classes/validation_backward.csv')
+testing_msssim = pd.read_csv('results_csv_5classes/testing_backward.csv')
 
-validation_extended_50 = pd.read_csv('./results_csv_5classes/validation_iou50_custom_metric.csv')
-validation_extended_75 = pd.read_csv('./results_csv_5classes/validation_iou75_custom_metric.csv')
+validation_extended_50 = pd.read_csv('results_csv_5classes/validation_iou50_custom_metric.csv')
+validation_extended_75 = pd.read_csv('results_csv_5classes/validation_iou75_custom_metric.csv')
 
-testing_extended_50 = pd.read_csv('./results_csv_5classes/testing_iou50_custom_metric.csv')
-testing_extended_75 = pd.read_csv('./results_csv_5classes/testing_iou75_custom_metric.csv')
+testing_extended_50 = pd.read_csv('results_csv_5classes/testing_iou50_custom_metric.csv')
+testing_extended_75 = pd.read_csv('results_csv_5classes/testing_iou75_custom_metric.csv')
 
 #print(type(validation_ap.loc[validation_ap["Setting"] == '1pos1neg', 'AP$_{50}$'].iloc[0]))
 

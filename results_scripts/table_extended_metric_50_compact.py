@@ -1,8 +1,8 @@
 import pandas as pd
 
-validation_data = pd.read_csv('./results_csv/validation_iou50_custom_metric.csv')
+validation_data = pd.read_csv('results_csv/validation_iou50_custom_metric.csv')
 
-test_data = pd.read_csv('./results_csv/testing_iou50_custom_metric.csv')
+test_data = pd.read_csv('results_csv/testing_iou50_custom_metric.csv')
 
 #print(type(validation_ap.loc[validation_ap["Setting"] == '1pos1neg', 'AP$_{50}$'].iloc[0]))
 

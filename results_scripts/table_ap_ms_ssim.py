@@ -1,10 +1,10 @@
 import pandas as pd
 
-validation_ap = pd.read_csv('./results_csv/validation_ap.csv')
+validation_ap = pd.read_csv('results_csv/validation_ap.csv')
 
-test_ap = pd.read_csv('./results_csv/testing_ap.csv')
-validation_msssim = pd.read_csv('./results_csv/validation_backward.csv')
-testing_msssim = pd.read_csv('./results_csv/testing_backward.csv')
+test_ap = pd.read_csv('results_csv/testing_ap.csv')
+validation_msssim = pd.read_csv('results_csv/validation_backward.csv')
+testing_msssim = pd.read_csv('results_csv/testing_backward.csv')
 
 #print(type(validation_ap.loc[validation_ap["Setting"] == '1pos1neg', 'AP$_{50}$'].iloc[0]))
 

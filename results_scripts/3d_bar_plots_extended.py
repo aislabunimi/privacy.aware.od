@@ -182,12 +182,12 @@ def plot(file_path, label_x, label_y, label_z, key_col, metric, file_name):
 
 
 inverted_view = True
-plot(file_path='./results_csv/validation_iou50_custom_metric.csv', file_name='tp_validation_50', metric='TP_1', label_x='Positive', label_y='Negative', label_z='', key_col='Setting')
-plot(file_path='./results_csv/validation_iou75_custom_metric.csv', file_name='tp_validation_75', metric='TP_1', label_x='Positive', label_y='Negative', label_z='', key_col='Setting')
-plot(file_path='./results_csv/testing_iou50_custom_metric.csv', file_name='tp_testing_50', metric='TP_1', label_x='Positive', label_y='Negative', label_z='', key_col='Setting')
-plot(file_path='./results_csv/testing_iou75_custom_metric.csv', file_name='tp_testing_75', metric='TP_1', label_x='Positive', label_y='Negative', label_z='', key_col='Setting')
+plot(file_path='results_csv/validation_iou50_custom_metric.csv', file_name='tp_validation_50', metric='TP_1', label_x='Positive', label_y='Negative', label_z='', key_col='Setting')
+plot(file_path='results_csv/validation_iou75_custom_metric.csv', file_name='tp_validation_75', metric='TP_1', label_x='Positive', label_y='Negative', label_z='', key_col='Setting')
+plot(file_path='results_csv/testing_iou50_custom_metric.csv', file_name='tp_testing_50', metric='TP_1', label_x='Positive', label_y='Negative', label_z='', key_col='Setting')
+plot(file_path='results_csv/testing_iou75_custom_metric.csv', file_name='tp_testing_75', metric='TP_1', label_x='Positive', label_y='Negative', label_z='', key_col='Setting')
 BFD=True
-plot(file_path='./results_csv/validation_iou50_custom_metric.csv', file_name='bfd_validation_50', metric='FPiou_1', label_x='Positive', label_y='Negative', label_z='', key_col='Setting')
-plot(file_path='./results_csv/validation_iou75_custom_metric.csv', file_name='bfd_validation_75', metric='FPiou_1', label_x='Positive', label_y='Negative', label_z='', key_col='Setting')
-plot(file_path='./results_csv/testing_iou50_custom_metric.csv', file_name='bfd_testing_50', metric='FPiou_1', label_x='Positive', label_y='Negative', label_z='', key_col='Setting')
-plot(file_path='./results_csv/testing_iou75_custom_metric.csv', file_name='bfd_testing_75', metric='FPiou_1', label_x='Positive', label_y='Negative', label_z='', key_col='Setting')
+plot(file_path='results_csv/validation_iou50_custom_metric.csv', file_name='bfd_validation_50', metric='FPiou_1', label_x='Positive', label_y='Negative', label_z='', key_col='Setting')
+plot(file_path='results_csv/validation_iou75_custom_metric.csv', file_name='bfd_validation_75', metric='FPiou_1', label_x='Positive', label_y='Negative', label_z='', key_col='Setting')
+plot(file_path='results_csv/testing_iou50_custom_metric.csv', file_name='bfd_testing_50', metric='FPiou_1', label_x='Positive', label_y='Negative', label_z='', key_col='Setting')
+plot(file_path='results_csv/testing_iou75_custom_metric.csv', file_name='bfd_testing_75', metric='FPiou_1', label_x='Positive', label_y='Negative', label_z='', key_col='Setting')
