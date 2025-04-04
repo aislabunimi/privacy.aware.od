@@ -1,5 +1,7 @@
 import torch
 from tqdm import tqdm
+
+from mia import ComputeRecLoss
 from model_utils_and_functions import create_checkpoint, compute_ap, apply_nms, compute_custom_metric
 import numpy as np
 from custom_metric.my_evaluators_complete_metric import MyEvaluatorCompleteMetric
@@ -325,11 +327,16 @@ def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_ge
       json.dump(disturbed_list, json_file, indent=2)
    return
 
-def train_model_bw(train_dataloader, epoch, device, model, model_optimizer): #train model backward
+def train_model_bw(train_dataloader, epoch, device, model, model_optimizer, mia=False): #train model backward
    model.train()
    batch_size = len(train_dataloader)
    running_loss = 0
    loss = torch.nn.L1Loss()
+
+   if mia:
+      loss = ComputeRecLoss(MAX=1.0, w_grad=5)
+      print('USE MIA LOSS')
+
    for disturbed_imgs, orig_imgs in tqdm(train_dataloader, desc=f'Epoch {epoch} - Train model'):
       disturbed_imgs, _ = disturbed_imgs.decompose()
       disturbed_imgs = disturbed_imgs.to(device)
@@ -366,7 +373,7 @@ def train_model_bw(train_dataloader, epoch, device, model, model_optimizer): #tr
    running_loss /= batch_size
    return running_loss
 
-def val_model_bw(val_dataloader, epoch, device, model, model_save_path, model_optimizer, model_scheduler, results_dir, tot_epochs, save_all_weights, lpips_model, ms_ssim_module, example_dataloader, compute_right_similarity_metrics=False):
+def val_model_bw(val_dataloader, epoch, device, model, model_save_path, model_optimizer, model_scheduler, results_dir, tot_epochs, save_all_weights, lpips_model, ms_ssim_module, example_dataloader, compute_right_similarity_metrics=False, mia=False):
    model.eval()
    batch_size = len(val_dataloader)
    mean = torch.tensor([0.485, 0.456, 0.406]).to(device)
@@ -375,6 +382,11 @@ def val_model_bw(val_dataloader, epoch, device, model, model_save_path, model_op
    ms_ssim_score = lpips_score = running_loss = mse_score = 0
    mse_as_metric = torch.nn.MSELoss()
    loss = torch.nn.L1Loss()
+
+   if mia:
+      loss = ComputeRecLoss(MAX=1.0, w_grad=5)
+      print('USE MIA LOSS')
+
    with torch.no_grad():
       for disturbed_imgs, orig_imgs in tqdm(val_dataloader, desc=f'Epoch {epoch} - Validating model'):
          disturbed_imgs, _ = disturbed_imgs.decompose()

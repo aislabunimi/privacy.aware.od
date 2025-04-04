@@ -16,6 +16,7 @@ def get_args_parser():
    parser = argparse.ArgumentParser('Set parameters and config', add_help=False)
    parser.add_argument('--seed', default=0, type=int, help='Seed for experiments')
    parser.add_argument('--device', default='cuda', type=str, help='Device to use for experiments')
+   parser.add_argument('--mia', action='store_true', default=False, help='Use MIA as attacker')
    
    #Config Plotting, Save files, Model Weights.
    parser.add_argument('--results_dir', default='results', type=str, help='Directory root for storing the results, logs and so on. WARNING: this folder and its contents will be deleted before starting next experiment, remember to backup the results! Also, be aware of the folder you choose: you may delete your whole system!')
@@ -409,13 +410,13 @@ def main(args):
    #TRAINING BACKWARD BLOCK 			
    else:
       for epoch in range(starting_epoch, args.num_epochs_unet_backward+1):
-         train_temp_loss = train_model_bw(disturbed_train_dataloader, epoch, args.device, unet, unet_optimizer)
+         train_temp_loss = train_model_bw(disturbed_train_dataloader, epoch, args.device, unet, unet_optimizer, args.mia)
          val_temp_loss = val_model_bw(disturbed_val_dataloader, epoch, args.device, unet, args.unet_save_path,
-            unet_optimizer, unet_scheduler, args.results_dir, args.num_epochs_unet_backward, args.save_all_weights, lpips_model, ms_ssim_module, example_dataloader)
+            unet_optimizer, unet_scheduler, args.results_dir, args.num_epochs_unet_backward, args.save_all_weights, lpips_model, ms_ssim_module, example_dataloader, mia=args.mia)
          #unet_scheduler.step()
          unet_scheduler.step(val_temp_loss)
          _ = val_model_bw(disturbed_val_batch1, epoch, args.device, unet, args.unet_save_path,
-            unet_optimizer, unet_scheduler, args.results_dir, args.num_epochs_unet_backward, args.save_all_weights, lpips_model, ms_ssim_module, example_dataloader, compute_right_similarity_metrics=True) #This is done to grab the real similarity metrics without the added padding for batch size > 1: otherwise I get higher similarity score just because of the black padding
+            unet_optimizer, unet_scheduler, args.results_dir, args.num_epochs_unet_backward, args.save_all_weights, lpips_model, ms_ssim_module, example_dataloader, compute_right_similarity_metrics=True, mia=args.mia) #This is done to grab the real similarity metrics without the added padding for batch size > 1: otherwise I get higher similarity score just because of the black padding
          print(f'EPOCH {epoch} SUMMARY: Train loss {train_temp_loss}, Val loss {val_temp_loss}')
          with open(f'{args.results_dir}/loss_log.txt', 'a') as file:
             loss_log_append = f"{epoch} {train_temp_loss} {val_temp_loss}\n"

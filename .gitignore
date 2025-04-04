@@ -1,3 +1,9 @@
+dataset/coco2017/*
+dataset/pascalVOC2012/*
+disturbed_dataset/*
+experiments/*
+mia_results/*
+results/*
 .idea/*
 # Byte-compiled / optimized / DLL files
 __pycache__/
