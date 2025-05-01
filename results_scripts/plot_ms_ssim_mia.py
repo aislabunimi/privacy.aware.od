@@ -1,6 +1,6 @@
 from matplotlib import pyplot as plt
 
-files = ['all_proposals.txt', '4pos4neg.txt']
+files = ['all_proposals.txt', '4pos4neg.txt', '3pos3neg.txt']
 
 base_path = 'mia_results/'
 for file_name in files:
