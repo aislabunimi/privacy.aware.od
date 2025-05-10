@@ -274,7 +274,7 @@ def save_image_examples(example_dataloader, results_dir, model, epoch, device):
             os.makedirs(save_dir_path)
          save_image(reconstructed, os.path.join(save_dir_path, path))
 
-def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, device, model, train_img_folder, train_ann, val_img_folder, val_ann, keep_original_size): #for generating disturbed set
+def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, device, model, train_img_folder, train_ann, val_img_folder, val_ann, keep_original_size, skip_train=False): #for generating disturbed set
    model.eval()
    mean = torch.tensor([0.485, 0.456, 0.406]).to(device)
    std = torch.tensor([0.229, 0.224, 0.225]).to(device)
@@ -302,6 +302,8 @@ def generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_ge
          disturbed_list.append({"image_path": path, "coco_image_id": coco_image_id})
    with open(val_ann, 'w') as json_file:
       json.dump(disturbed_list, json_file, indent=2)
+   if skip_train:
+      return
    #Then training set
    batch_size = len(train_dataloader_gen_disturbed)
    coco = get_coco_api_from_dataset(train_dataloader_gen_disturbed.dataset)
