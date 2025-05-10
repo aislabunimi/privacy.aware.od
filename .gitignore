@@ -1,7 +1,9 @@
 dataset/coco2017/*
 dataset/pascalVOC2012/*
+dataset/annotations/*
+dataset/*
 disturbed_dataset/*
-experiments/*
+experiments*/*
 mia_results/*
 results/*
 .idea/*

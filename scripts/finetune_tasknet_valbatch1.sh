@@ -26,7 +26,7 @@ TASKNET_WEIGHTS_FW_TO_SAVE2="${TASKNET_SAVE_PATH}_finetuned_${HALF_WAY}.pt"
 
 #Need to cp tasknet weights to keep them as initial weights for finetuning
 #if you have trained it yourself
-#[[ -e "tasknet_weights/tasknet_10.pt" ]] && cp "tasknet_weights/tasknet_10.pt" "${EXPERIMENT_DIR}/tasknet/tasknet_1class.pt"
+#[[ -e "tasknet_weights/tasknet.pt" ]] && cp "tasknet_weights/tasknet.pt" "${EXPERIMENT_DIR}/tasknet/tasknet_1class.pt"
 #or you have download it
 #[[ -e "tasknet_weights/tasknet_1class.pt" ]] && cp "tasknet_weights/tasknet_1class.pt" "${EXPERIMENT_DIR}/tasknet/tasknet_1class.pt"
 

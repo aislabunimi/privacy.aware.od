@@ -83,16 +83,19 @@ def get_args_parser():
    parser.add_argument('--finetune_tasknet', action='store_true', default=False, help='If you want to finetune the Tasknet on disturbed images. Remember to run first main.py with flags --save_disturbed_dataset and --keep_original_size for generating the disturbed dataset')
    parser.add_argument('--tasknet_get_indoor_AP', action='store_true', default=False, help='Needed for getting the AP for comparison with UNet')
    parser.add_argument('--save_disturbed_dataset', action='store_true', default=False, help='To use for creating the disturbed dataset for Backward training')
+   parser.add_argument('--skip_train', action='store_true', default=False, help='Skip the generation of disturbed dataset for train set')
    parser.add_argument('--keep_original_size', action='store_true', default=False, help='Must be True if you want to fine tune the Tasknet on the disturbed COCO set; can be false for Backward training. This is done to enforce the disturbed images to have exact same size of original ones')
    parser.add_argument('--weight', default=0.0, type=float, help='Weight for affecting the MAE loss as dissimilarity during forward. A value above 0.5 means that you weight more the MAE loss than the Faster one; viceversa, a value below 0.5 means you weight more the Faster loss than the MAE one. Default is 0, meaning that MAE loss is not used. Valid values should be between (0.0, 1.0)')
    parser.add_argument('--train_model_backward', action='store_true', default=False, help='For executing Backward training on disturbed dataset')
    parser.add_argument('--compute_similarity_metrics', action='store_true', default=False, help='Needed for getting the right similarities metrics')
-   parser.add_argument('--val_forward_batch1', action='store_true', default=False, help='Needed for getting the performance metrics with batch 1')
+   parser.add_argument('--val_forward_batch1', action='store_true', default=False, help='Needed for getting the performance metrics with batch 1 on COCO dataset')
+   parser.add_argument('--test_forward_batch1', action='store_true', default=False, help='Needed for getting the performance metrics with batch 1 on Pascal VOC dataset')
    parser.add_argument('--resume_training', action='store_true', default=False, help='For resuming training by restoring the specified weights from "unet_weights_load" or "tasknet_weights_load" variable')
    parser.add_argument('--five_classes', action='store_true', default=False, help='For executing the experiments using "cat dog horse sheep cow" as classes. Default is False, meaning the experiments are made with only the Person class')
    parser.add_argument('--all_classes', action='store_true', default=False, help='For executing the experiments using all COCO classes. Default is False, meaning the experiments are made with only the Person class. If set to True, standard Tasknet with pretrained weights is loaded.')
    parser.add_argument('--test_tasknet', action='store_true', default=False, help='If you want to test Tasknet on the Test set')
-   parser.add_argument('--test_model', action='store_true', default=False, help='If you want to test the UNet on the Test set, both forward and backward (uses weights from ')
+   parser.add_argument('--test_model', action='store_true', default=False, help='If you want to test the UNet on the Test set')
+   parser.add_argument('--test_model_backward', action='store_true', default=False, help='If you want to test the attacker similarity metrics on test set (Pascal VOC)')
    
    return parser
 
@@ -151,7 +154,7 @@ def main(args):
       load_checkpoint(unet, args.unet_fw_weights_load, unet_optimizer, unet_scheduler)
       generate_disturbed_dataset(train_dataloader_gen_disturbed, val_dataloader_gen_disturbed, args.device, unet,
          disturbed_train_img_folder, disturbed_train_ann, disturbed_val_img_folder, disturbed_val_ann, 
-         args.keep_original_size)
+         args.keep_original_size, skip_train=args.skip_train)
       print("Generated disturbed dataset")
       sys.exit()
          
@@ -263,6 +266,20 @@ def main(args):
                unet_scheduler, args.ap_score_thresh, args.results_dir, args.num_epochs_unet_forward, args.save_all_weights, example_dataloader)
       print("Val with batch size 1 completed")
       sys.exit()
+
+   if args.test_forward_batch1:
+      if os.path.exists(args.results_dir):
+         shutil.rmtree(args.results_dir)
+      os.makedirs(args.results_dir)
+      test_dataloader = load_test_set(test_img_folder, test_ann_file, resize_scales_transform, args.use_dataset_subset, args.test_tasknet)
+      load_checkpoint(tasknet, args.tasknet_weights_load, tasknet_optimizer, tasknet_scheduler)
+      tasknet.eval()
+      load_checkpoint(unet, args.unet_fw_weights_load, unet_optimizer, unet_scheduler)
+      unet.eval()
+
+      test_model(test_dataloader, args.device, tasknet, unet, args.ap_score_thresh, args.results_dir)
+      print("Val with batch size 1 completed")
+      sys.exit()
    
    if args.test_tasknet:
       if os.path.exists(args.results_dir):
@@ -281,7 +298,37 @@ def main(args):
          test_tasknet(test_dataloader, args.device, tasknet, args.ap_score_thresh, args.results_dir)
       print("Testing completed")
       sys.exit()
-   
+
+   if args.test_model_backward:
+      test_dataloader_gen_disturbed = load_dataset_for_generating_disturbed_test_set(test_img_folder, test_ann_file, args.use_dataset_subset, resize_scales_transform)
+      if os.path.exists(args.disturbed_dataset_path):
+         shutil.rmtree(args.disturbed_dataset_path)
+      os.makedirs(disturbed_test_img_folder)
+      generate_disturbed_testset(test_dataloader_gen_disturbed, args.device, unet, disturbed_test_img_folder, disturbed_test_ann, args.keep_original_size)
+      load_checkpoint(unet, args.unet_bw_weights_load, unet_optimizer, unet_scheduler)
+      unet.eval()
+      test_disturbed_dataloader = load_disturbed_test_set(disturbed_test_img_folder, disturbed_test_ann, test_img_folder, resize_scales_transform, args.use_dataset_subset)
+      test_model_bw(test_disturbed_dataloader, args.device, unet, args.results_dir)
+      print("Testing backward completed")
+      test_similarity_gen_dataloader = load_similarity_dataset(
+         disturbed_test_img_folder, disturbed_test_ann, None, resize_scales_transform, args.use_dataset_subset, generate_similarity_dataset=True)
+      disturbed_test_img_folder = f'temp_dir/val'
+      disturbed_test_ann = f'temp_dir/val.json'
+      if os.path.exists('temp_dir'):
+         shutil.rmtree('temp_dir')
+      os.makedirs(disturbed_test_img_folder)
+      load_checkpoint(unet, args.unet_bw_weights_load, unet_optimizer, unet_scheduler) #load unet backward weights
+      unet.eval()
+      generate_similarity_dataset(test_similarity_gen_dataloader, args.device, unet, disturbed_test_img_folder, disturbed_test_ann)
+      print("Generated similarity test set")
+      test_similarity_dataloader = load_similarity_dataset(
+         disturbed_test_img_folder, disturbed_test_ann, test_img_folder, resize_scales_transform, args.use_dataset_subset, generate_similarity_dataset=False)
+      val_similarity_disturbed_images(test_similarity_dataloader, args.device, args.results_dir, lpips_model, ms_ssim_module) #same function but with test set, works the same
+      print("Computed similarity metrics on test set")
+      shutil.rmtree('temp_dir')
+      shutil.rmtree(args.disturbed_dataset_path)
+      sys.exit()
+
    if args.test_model:
       if os.path.exists(args.results_dir):
          shutil.rmtree(args.results_dir)
@@ -291,6 +338,7 @@ def main(args):
       tasknet.eval()
       load_checkpoint(unet, args.unet_fw_weights_load, unet_optimizer, unet_scheduler)
       unet.eval()
+
       test_model(test_dataloader, args.device, tasknet, unet, args.ap_score_thresh, args.results_dir)
       print("Testing forward completed")
       test_dataloader_gen_disturbed = load_dataset_for_generating_disturbed_test_set(test_img_folder, test_ann_file, args.use_dataset_subset, resize_scales_transform)

@@ -5,7 +5,7 @@ cd ..
 RESULTS_DIR='results'
 UNET_SAVE_PATH='model_weights/model'
 UNET_NAME='model' #must be only the last part of the variable above
-TASKNET_WEIGHTS_LOAD='tasknet_weights/tasknet_5classes.pt'
+TASKNET_WEIGHTS_LOAD='tasknet_weights/tasknet.pt'
 
 NUM_EPOCHS_UNET_FORWARD=50
 UNET_WEIGHTS_LOAD_FW="${UNET_SAVE_PATH}_fw_${NUM_EPOCHS_UNET_FORWARD}.pt"
