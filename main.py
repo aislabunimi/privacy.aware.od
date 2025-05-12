@@ -96,7 +96,7 @@ def get_args_parser():
    parser.add_argument('--test_tasknet', action='store_true', default=False, help='If you want to test Tasknet on the Test set')
    parser.add_argument('--test_model', action='store_true', default=False, help='If you want to test the UNet on the Test set')
    parser.add_argument('--test_model_backward', action='store_true', default=False, help='If you want to test the attacker similarity metrics on test set (Pascal VOC)')
-   
+
    return parser
 
 def main(args):
@@ -159,18 +159,29 @@ def main(args):
       sys.exit()
          
    if not args.train_model_backward: #Modified Tasknet with custom proposal method
+
       from faster_custom.faster_rcnn import fasterrcnn_resnet50_fpn_custom, FasterRCNN_ResNet50_FPN_Weights, FastRCNNPredictor
       weights = FasterRCNN_ResNet50_FPN_Weights.DEFAULT  
       if args.train_tasknet or args.tasknet_get_indoor_AP or args.not_use_custom_filter_prop or args.finetune_tasknet:
-         tasknet = fasterrcnn_resnet50_fpn_custom(weights=weights, progress=False, use_resize=args.all_classes) #Default Tasknet. If all classes are used, then resize is done
+         if args.five_classes:
+            use_resize = True
+         else:
+            use_resize = args.all_classes
+
+         tasknet = fasterrcnn_resnet50_fpn_custom(weights=weights, progress=False, use_resize=use_resize) #Default Tasknet. If all classes are used, then resize is done
       else:
          if args.filter_prop_objectness:
-            tasknet = fasterrcnn_resnet50_fpn_custom(weights=weights, progress=False, use_resize=args.all_classes, 
+            if args.five_classes:
+               use_resize = True
+            else:
+               use_resize = args.all_classes
+            tasknet = fasterrcnn_resnet50_fpn_custom(weights=weights, progress=False, use_resize=use_resize,
                rpn_use_custom_filter_anchors=args.filter_anchors, rpn_n_top_pos_to_keep=args.anc_pos, rpn_n_top_neg_to_keep=args.anc_neg,
                rpn_n_top_bg_to_keep=args.anc_bg, rpn_objectness_bg_thresh=args.anc_bg_thresh, box_use_custom_filter_proposals_objectness=True, 
                box_n_top_pos_to_keep=args.prop_pos, box_n_top_neg_to_keep=args.prop_neg, box_n_top_bg_to_keep=args.prop_bg, box_obj_bg_score_thresh=args.prop_bg_thresh, box_batch_size_per_image=100000) #100000 for be sure that sampler keep all proposals, as we want to use all of them in custom filtering selection
                #rpn_objectness_bg_thresh is set to 0, as it's objectness score (so 0 is already a decent high confidence that the anchor contains an object.
          else: #Based on score, slower and not necessarily better resutls
+
             tasknet = fasterrcnn_resnet50_fpn_custom(weights=weights, progress=False, use_resize=args.all_classes,
                rpn_post_nms_top_n_train=args.n_prop_class_method,
                rpn_use_custom_filter_anchors=args.filter_anchors, rpn_n_top_pos_to_keep=args.anc_pos, rpn_n_top_neg_to_keep=args.anc_neg,
