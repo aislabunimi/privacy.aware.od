@@ -39,23 +39,23 @@ UNET_WEIGHTS_BW_TO_SAVE2="${UNET_SAVE_PATH}_bw_${HALF_WAY}.pt"
 #If you want to use five classes, add flag --five_classes to all commands
 
 # Test all proposals on COCO
-#python3 main.py --val_forward_batch1 --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --num_epochs_unet_forward $NUM_EPOCHS_UNET_FORWARD --unet_save_path $UNET_SAVE_PATH --results_dir $RESULTS_DIR --tasknet_weights_load $TASKNET_WEIGHTS_LOAD --not_use_custom_filter_prop --unet_fw_weights_load "${EXPERIMENT_DIR}/allprop/forward/${UNET_FW}"
-#mv -f $RESULTS_DIR "${EXPERIMENT_DIR}/allprop/forward/validation_coco"
-#echo "Completed all_proposals Validation with Batch Size 1"
+python3 main.py --val_forward_batch1 --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --num_epochs_unet_forward $NUM_EPOCHS_UNET_FORWARD --unet_save_path $UNET_SAVE_PATH --results_dir $RESULTS_DIR --tasknet_weights_load $TASKNET_WEIGHTS_LOAD --not_use_custom_filter_prop --unet_fw_weights_load "${EXPERIMENT_DIR}/allprop/forward/${UNET_FW}"
+mv -f $RESULTS_DIR "${EXPERIMENT_DIR}/allprop/forward/validation_coco"
+echo "Completed all_proposals Validation with Batch Size 1"
 
 # Generate obfuscated dataset
-#python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --save_disturbed_dataset --skip_train --unet_fw_weights_load "${EXPERIMENT_DIR}/allprop/forward/${UNET_FW}"
+python3 main.py --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --save_disturbed_dataset --skip_train --unet_fw_weights_load "${EXPERIMENT_DIR}/allprop/forward/${UNET_FW}"
 
 # Calculate similarity metrics attacker
-#python3 main.py --compute_similarity_metrics --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet 1 --results_dir $RESULTS_DIR  --unet_bw_weights_load "${EXPERIMENT_DIR}/allprop/backward/${UNET_BW}"
-#mv -f $RESULTS_DIR "${EXPERIMENT_DIR}/allprop/backward/validation_coco"
-#echo "Complete similarity metric calculation of the attacker using COCO"
+python3 main.py --compute_similarity_metrics --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet 1 --results_dir $RESULTS_DIR  --unet_bw_weights_load "${EXPERIMENT_DIR}/allprop/backward/${UNET_BW}"
+mv -f $RESULTS_DIR "${EXPERIMENT_DIR}/allprop/backward/validation_coco"
+echo "Complete similarity metric calculation of the attacker using COCO"
 
 # Calculate detection and similarity metrics on test set (Pascal VOC)
-#python3 main.py --test_model --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --num_epochs_unet_forward $NUM_EPOCHS_UNET_FORWARD --unet_save_path $UNET_SAVE_PATH --results_dir $RESULTS_DIR --tasknet_weights_load $TASKNET_WEIGHTS_LOAD --not_use_custom_filter_prop --unet_fw_weights_load "${EXPERIMENT_DIR}/allprop/forward/${UNET_FW}" --unet_bw_weights_load "${EXPERIMENT_DIR}/allprop/backward/${UNET_BW}"
-#mv -f "${RESULTS_DIR}/similarity_log.txt" "${EXPERIMENT_DIR}/allprop/backward/validation_pascalvoc.txt"
-#mv -f $RESULTS_DIR "${EXPERIMENT_DIR}/allprop/forward/validation_pascalvoc"
-#echo "Completed all_proposals test with Batch Size 1"
+python3 main.py --test_model --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet $BATCH_SIZE_UNET --num_epochs_unet_forward $NUM_EPOCHS_UNET_FORWARD --unet_save_path $UNET_SAVE_PATH --results_dir $RESULTS_DIR --tasknet_weights_load $TASKNET_WEIGHTS_LOAD --not_use_custom_filter_prop --unet_fw_weights_load "${EXPERIMENT_DIR}/allprop/forward/${UNET_FW}" --unet_bw_weights_load "${EXPERIMENT_DIR}/allprop/backward/${UNET_BW}"
+mv -f "${RESULTS_DIR}/similarity_log.txt" "${EXPERIMENT_DIR}/allprop/backward/validation_pascalvoc.txt"
+mv -f $RESULTS_DIR "${EXPERIMENT_DIR}/allprop/forward/validation_pascalvoc"
+echo "Completed all_proposals test with Batch Size 1"
 
 for i in "4 4" "3 3" "2 2" "1 1" "4 3" "4 2" "4 1" "3 4" "3 2" "3 1" "2 4" "2 3" "2 1" "1 4" "1 3" "1 2" "1 0" "2 0" "3 0" "4 0"; do
    a=( $i )
