@@ -30,8 +30,12 @@ Manually download additional files from OneDrive:
 
 ## Usage
 You can run the code used in the paper using the files contained in [scripts](./scripts).
-* **Training the tasknet:** use [tasknet_training.sh](scripts/training/tasknet_finetune_people.sh) and [tasknet_train_fiveclasses.sh](scripts/training/tasknet_finetune_vehicles.sh) to train the Faster R-CNN using the people and vehicle dataset
-
+* **Training**
+  * Training the tasknet: use [tasknet_training.sh](scripts/training/tasknet_finetune_people.sh) and [tasknet_train_fiveclasses.sh](scripts/training/tasknet_finetune_vehicles.sh) to train the Faster R-CNN using the people and vehicle dataset
+  * Training the obfuscator and the attacker with the proposals configurations: use [training_fw_bw_proposals_people.sh](scripts/training/training_fw_bw_proposals_people.sh) and  [training_fw_bw_proposals_vehicles.sh](scripts/training/training_fw_bw_proposals_vehicles.sh)
+* **Testing:**
+  * Test the tasknet alone: use [tasknet_test_people.sh](scripts/test/tasknet_test_people.sh) and [tasknet_test_vehicles.sh](scripts/test/tasknet_test_vehicles.sh) to test the Faster R-CNN using the people and vehicle dataset
+  * Test obfuscator and attacker with different proposals configurations: use [test_proposals_people.sh](scripts/test/test_proposals_people.sh) and [test_proposals_vehicles.sh](scripts/test/test_proposals_vehicles.sh) for testing with people and vehicle datasets
 
 
 ## Using the project
