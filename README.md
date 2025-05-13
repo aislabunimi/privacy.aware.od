@@ -26,6 +26,8 @@ scripts/download_datasets.sh
 Manually download additional files from OneDrive:
 * Annotations: download from this [link](https://unimi2013-my.sharepoint.com/:u:/g/personal/michele_antonazzi_unimi_it/ETBSSzNN_-lGk2gLD37elNQBKVHg9KqfoXgQL7GJRCdIbA?e=wGgVuz) and extract it inside the folder [dataset](./dataset)
 * Robot dataset: download from this [link](https://unimi2013-my.sharepoint.com/:u:/g/personal/michele_antonazzi_unimi_it/ETR0ryc4_35BsWtrbMLRk6wBnciDHdiooDssGCAlWZeLEQ?e=eQacRL) and extract it inside the folder [dataset](./dataset)
+* Models for the people experiments: donwload from [here](https://unimi2013-my.sharepoint.com/:u:/g/personal/michele_antonazzi_unimi_it/EQ5N8j82LpFCgqLHmfxrG2ABSU7A0QPh-uQaBb3i_BY9Ug?e=wSGPy5)
+* Models trained for the vehicles experiments: download from [here](https://unimi2013-my.sharepoint.com/:u:/g/personal/michele_antonazzi_unimi_it/Ea1QEFWjA-hKuExp1OGUyaMBJZgTnhjUh1ykPX6mqaNsSQ?e=rEH8uj)
 
 
 ## Usage
