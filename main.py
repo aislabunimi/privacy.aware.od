@@ -35,6 +35,8 @@ def get_args_parser():
    parser.add_argument('--coco_fiveclasses_path', default='dataset/annotations/coco_vehicles_5classes', type=str, help='Path of the annotations files containing "train.json" and "val.json" for experiments with the coco vehicles. It is expected to also have the file "val_pascal2012_vehicles.json" for testing.')
    parser.add_argument('--disturbed_dataset_path', default='disturbed_dataset', type=str, help='Path of the folder used for containing the generated disturbed dataset. WARNING: this folder and its contents will be deleted before starting next backward training experiment, be aware of the folder you choose: you may delete your whole system!')
    parser.add_argument('--pascal_img_path', default='dataset/pascalVOC2012/images', type=str, help='Path of the folder containing the PascalVal2012 images')
+   parser.add_argument('--pascal_ann_path', default='dataset/annotations/coco_people_indoor/val_pascal2012.json', type=str, help='Path of the folder containing the PascalVal2012 images')
+
    parser.add_argument('--use_dataset_subset', default=0, type=int, help='If you want to use a subset of data (0 is the default, whole dataset; n!=0 means you use n images)')
    
    #HYPERPARAMETERS
@@ -123,7 +125,8 @@ def main(args):
       train_batch_size = val_batch_size = args.batch_size_unet
       train_ann_file = f'{args.coco_indoor_path}/train.json'
       val_ann_file = f'{args.coco_indoor_path}/val.json'
-      test_ann_file = f'{args.coco_indoor_path}/val_pascal2012.json'
+      test_ann_file = f'{args.pascal_ann_path}'
+
    if args.all_classes: #use whole COCO dataset
       train_ann_file = f'{args.coco_allclasses_path}/annotations/instances_train2017.json'
       val_ann_file = f'{args.coco_allclasses_path}/annotations/instances_val2017.json'
