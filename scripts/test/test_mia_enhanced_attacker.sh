@@ -35,7 +35,7 @@ python3 main.py --skip_train --use_dataset_subset $USE_DATASET_SUBSET --batch_si
 # Test backward with mia
 python3 main.py --mia --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet 1 --results_dir $RESULTS_DIR --compute_similarity_metrics --unet_bw_weights_load ${EXPERIMENT_DIR}/allprop/backward_mia/model_bw_${NUM_EPOCHS_UNET_BACKWARD}.pt
 mkdir -p "${EXPERIMENT_DIR}/allprop/backward_mia"
-mv $RESULTS_DIR "${EXPERIMENT_DIR}/allprop/backward_mia/validation_coco"
+mv $RESULTS_DIR/simlarity_log.txt "${EXPERIMENT_DIR}/allprop/backward_mia/validation_coco.txt"
 echo "Completed all_proposals backward experiment"
 
 python3 main.py --mia --test_model --tasknet_weights_load $TASKNET_WEIGHTS_LOAD --unet_fw_weights_load "${EXPERIMENT_DIR}/allprop/forward/model_fw_50.pt" --unet_bw_weights_load "${EXPERIMENT_DIR}/allprop/backward_mia/model_bw_${NUM_EPOCHS_UNET_BACKWARD}.pt" --results_dir $RESULTS_DIR
@@ -51,7 +51,7 @@ for i in "4 4" "3 3" "2 2" "1 1"; do
 
    python3 main.py --mia --use_dataset_subset $USE_DATASET_SUBSET --batch_size_unet 1 --results_dir $RESULTS_DIR --compute_similarity_metrics --unet_bw_weights_load ${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg/backward_mia/model_bw_${NUM_EPOCHS_UNET_BACKWARD}.pt
    mkdir -p "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg/backward_mia"
-   mv $RESULTS_DIR "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg/backward_mia/validation_coco"
+   mv $RESULTS_DIR/simlarity_log.txt "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg/backward_mia/validation_coco.txt"
    echo "Completed ${PROP_POS}pos${PROP_NEG}neg backward experiment and copied results to ${EXPERIMENT_DIR} folder"
    
    python3 main.py --mia --test_model --tasknet_weights_load $TASKNET_WEIGHTS_LOAD --unet_fw_weights_load "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg/forward/model_fw_50.pt" --unet_bw_weights_load "${EXPERIMENT_DIR}/${PROP_POS}pos${PROP_NEG}neg/backward_mia/model_bw_${NUM_EPOCHS_UNET_BACKWARD}.pt" --results_dir $RESULTS_DIR
