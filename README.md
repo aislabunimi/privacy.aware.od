@@ -36,7 +36,7 @@ You can run the code used in the paper using the files contained in [scripts](./
 * **Testing:**
   * Test the tasknet alone: use [tasknet_test_people.sh](scripts/test/tasknet_test_people.sh) and [tasknet_test_vehicles.sh](scripts/test/tasknet_test_vehicles.sh) to test the Faster R-CNN using the people and vehicle dataset
   * Test obfuscator and attacker with different proposals configurations: use [test_proposals_people.sh](scripts/test/test_proposals_people.sh) and [test_proposals_vehicles.sh](scripts/test/test_proposals_vehicles.sh) for testing with people and vehicle datasets
-
+  * Plot scripts: some plotting scripts are in this [folder](scripts/plot)
 
 ## Using the project
 It's suggested to use the helper scripts in the scripts folder for this project, as it uses a particular training pipeline.
