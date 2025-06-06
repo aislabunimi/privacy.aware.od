@@ -5,6 +5,7 @@ You can find the trained models and the datasets [here](https://mega.nz/folder/Q
 ## Installation and Setup
 
 Simply run the scripts called `install.sh` under the folder scripts:
+
 ```bash
 scripts/install.sh
 ```
