@@ -1,7 +1,5 @@
 # Privacy-oriented deep learning for object detection in curious cloud-based robot ecosystems
 
-You can find the trained models and the datasets [here](https://mega.nz/folder/QXYwyawI#h0xKjDmgAUamI61ekhmyMg).
-
 ## Installation and Setup
 
 Simply run the scripts called `install.sh` under the folder scripts:
