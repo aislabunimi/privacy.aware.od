@@ -1,5 +1,20 @@
 # Privacy-oriented deep learning for object detection in curious cloud-based robot ecosystems
 
+Official implementation for the paper Privacy-Preserving Robotic Perception for Object Detection in Curious Cloud Robotics, in IEEE Transactions on Robotics, 2025, [doi](https://doi.org/10.1109/TRO.2025.3613551)
+
+For reference, please use the following
+```
+@ARTICLE{11176813,
+  author={Antonazzi, Michele and Alberti, Matteo and Bassot, Alex and Luperto, Matteo and Basilico, Nicola},
+  journal={IEEE Transactions on Robotics}, 
+  title={Privacy-Preserving Robotic Perception for Object Detection in Curious Cloud Robotics}, 
+  year={2025},
+  volume={41},
+  number={},
+  pages={5781-5799},
+  doi={10.1109/TRO.2025.3613551}}
+```
+
 ## Installation and Setup
 
 Simply run the scripts called `install.sh` under the folder scripts:
